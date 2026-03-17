@@ -168,13 +168,40 @@ export default function ProfileTabScreen() {
 
   // ✅ Přátelé: live list z Firestore
   useEffect(() => {
-    if (!auth.currentUser?.uid) return;
-    const unsub = subscribeFriends(
-      (edges) => setFriendEdges(edges),
+  let unsub: (() => void) | undefined;
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const startSubscribe = () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || cancelled) return;
+
+    unsub?.();
+
+    unsub = subscribeFriends(
+      (edges) => {
+        if (!cancelled) {
+          setFriendEdges(edges);
+        }
+      },
       (e) => console.log("friends subscribe error", e)
     );
-    return () => unsub?.();
-  }, [auth.currentUser?.uid]);
+  };
+
+  startSubscribe();
+
+  if (!auth.currentUser?.uid) {
+    timer = setTimeout(() => {
+      startSubscribe();
+    }, 400);
+  }
+
+  return () => {
+    cancelled = true;
+    if (timer) clearTimeout(timer);
+    unsub?.();
+  };
+}, [friendsOpen]);
 
   // ✅ dočíst jména přátel (z users/{uid}.profile)
   useEffect(() => {
