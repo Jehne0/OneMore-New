@@ -167,7 +167,7 @@ export default function ProfileTabScreen() {
   }, [auth.currentUser?.uid]);
 
   // ✅ Přátelé: live list z Firestore
-  useEffect(() => {
+useEffect(() => {
   let unsub: (() => void) | undefined;
   let cancelled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1378,146 +1378,251 @@ const sendSupport = async () => {
           </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
-            {(() => {
-              const me = auth.currentUser?.uid ?? "";
-              const incoming = friendEdges.filter((e) => e.status === "pending" && e.initiatedBy !== me);
-              const outgoing = friendEdges.filter((e) => e.status === "pending" && e.initiatedBy === me);
-              const accepted = friendEdges.filter((e) => e.status === "accepted");
-              const blocked = friendEdges.filter((e) => e.status === "blocked");
+  {(() => {
+    const me = auth.currentUser?.uid ?? "";
 
-              return (
-                <View style={{ gap: 12 }}>
-                  <View style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
-                    <Text style={[styles.infoTitle, { color: UI.text }]}>Moji přátelé</Text>
-                    {!accepted.length ? (
-                      <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>Zatím žádní přátelé.</Text>
-                    ) : (
-                      accepted.map((e) => (
-                        <View
-                          key={"acc_" + e.otherUid}
-                          style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}
-                        >
-                          <Text style={{ color: UI.text, fontWeight: "900", flex: 1 }} numberOfLines={1}>
-                            {friendNames[e.otherUid] ?? e.otherUid}
-                          </Text>
-                          <Pressable
-                            onPress={async () => {
-                              try {
-                                setFriendsBusy(true);
-                                await removeFriend(e.otherUid);
-                              } catch (err: any) {
-                                Alert.alert("Přátelé", err?.message ?? "Nepodařilo se odebrat.");
-                              } finally {
-                                setFriendsBusy(false);
-                              }
-                            }}
-                            style={({ pressed }) => [styles.smallBtnGhost, pressed && { opacity: 0.9 }]}
-                          >
-                            <Text style={styles.smallBtnGhostText}>Odebrat</Text>
-                          </Pressable>
-                        </View>
-                      ))
-                    )}
-                  </View>
+    const pending = friendEdges.filter((e) => e.status === "pending");
 
-                  {!!incoming.length && (
-                    <View style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
-                      <Text style={[styles.infoTitle, { color: UI.text }]}>Příchozí žádosti</Text>
-                      {incoming.map((e) => (
-                        <View
-                          key={"in_" + e.otherUid}
-                          style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}
-                        >
-                          <Text style={{ color: UI.text, fontWeight: "900", flex: 1 }} numberOfLines={1}>
-                            {friendNames[e.otherUid] ?? e.otherUid}
-                          </Text>
-                          <View style={{ flexDirection: "row", gap: 10 }}>
-                            <Pressable
-                              onPress={async () => {
-                                try {
-                                  const acceptedCount = friendEdges.filter((x) => x.status === "accepted").length;
-                                  if (!premium && acceptedCount >= 1) {
-                                    Alert.alert("Přátelé", "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium.");
-                                    return;
-                                  }
-                                  setFriendsBusy(true);
-                                  await acceptFriend(e.otherUid);
-                                } catch (err: any) {
-                                  Alert.alert("Přátelé", err?.message ?? "Nepodařilo se přijmout.");
-                                } finally {
-                                  setFriendsBusy(false);
-                                }
-                              }}
-                              style={({ pressed }) => [styles.smallBtn, pressed && { opacity: 0.9 }]}
-                            >
-                              <Text style={styles.smallBtnText}>Přijmout</Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={async () => {
-                                try {
-                                  setFriendsBusy(true);
-                                  await declineFriend(e.otherUid);
-                                } catch (err: any) {
-                                  Alert.alert("Přátelé", err?.message ?? "Nepodařilo se odmítnout.");
-                                } finally {
-                                  setFriendsBusy(false);
-                                }
-                              }}
-                              style={({ pressed }) => [styles.smallBtnGhost, pressed && { opacity: 0.9 }]}
-                            >
-                              <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+    const incoming = pending.filter((e) => {
+      if (!me) return true;
+      return String(e.initiatedBy) !== String(me);
+    });
 
-                  {!!outgoing.length && (
-                    <View style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
-                      <Text style={[styles.infoTitle, { color: UI.text }]}>Odeslané žádosti</Text>
-                      {outgoing.map((e) => (
-                        <View
-                          key={"out_" + e.otherUid}
-                          style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}
-                        >
-                          <Text style={{ color: UI.sub, fontWeight: "900", flex: 1 }} numberOfLines={1}>
-                            {friendNames[e.otherUid] ?? e.otherUid}
-                          </Text>
-                          <Pressable
-                            onPress={async () => {
-                              try {
-                                setFriendsBusy(true);
-                                await declineFriend(e.otherUid);
-                              } catch (err: any) {
-                                Alert.alert("Přátelé", err?.message ?? "Nepodařilo se zrušit.");
-                              } finally {
-                                setFriendsBusy(false);
-                              }
-                            }}
-                            style={({ pressed }) => [styles.smallBtnGhost, pressed && { opacity: 0.9 }]}
-                          >
-                            <Text style={styles.smallBtnGhostText}>Zrušit</Text>
-                          </Pressable>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+    const outgoing = pending.filter((e) => {
+      if (!me) return false;
+      return String(e.initiatedBy) === String(me);
+    });
 
-                  {!!blocked.length && (
-                    <View style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
-                      <Text style={[styles.infoTitle, { color: UI.text }]}>Blokovaní</Text>
-                      {blocked.map((e) => (
-                        <Text key={"blk_" + e.otherUid} style={{ color: UI.sub, fontWeight: "900", marginTop: 8 }} numberOfLines={1}>
-                          {friendNames[e.otherUid] ?? e.otherUid}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
+    const accepted = friendEdges.filter((e) => e.status === "accepted");
+    const blocked = friendEdges.filter((e) => e.status === "blocked");
+
+    return (
+      <View style={{ gap: 12 }}>
+        <Text style={{ color: UI.sub, fontWeight: "700", marginBottom: 10 }}>
+          pending: {pending.length} | incoming: {incoming.length} | outgoing: {outgoing.length} | me: {me || "EMPTY"}
+        </Text>
+
+        <View
+          style={[
+            styles.infoCard,
+            { borderColor: UI.stroke, backgroundColor: UI.card },
+          ]}
+        >
+          <Text style={[styles.infoTitle, { color: UI.text }]}>
+            Moji přátelé
+          </Text>
+
+          {!accepted.length ? (
+            <Text
+              style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}
+            >
+              Zatím žádní přátelé.
+            </Text>
+          ) : (
+            accepted.map((e) => (
+              <View
+                key={"acc_" + e.otherUid}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginTop: 10,
+                }}
+              >
+                <Text
+                  style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+                  numberOfLines={1}
+                >
+                  {friendNames[e.otherUid] ?? e.otherUid}
+                </Text>
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      setFriendsBusy(true);
+                      await removeFriend(e.otherUid);
+                    } catch (err: any) {
+                      Alert.alert(
+                        "Přátelé",
+                        err?.message ?? "Nepodařilo se odebrat."
+                      );
+                    } finally {
+                      setFriendsBusy(false);
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.smallBtnGhost,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={styles.smallBtnGhostText}>Odebrat</Text>
+                </Pressable>
+              </View>
+            ))
+          )}
+        </View>
+
+        {!!incoming.length && (
+          <View
+            style={[
+              styles.infoCard,
+              { borderColor: UI.stroke, backgroundColor: UI.card },
+            ]}
+          >
+            <Text style={[styles.infoTitle, { color: UI.text }]}>
+              Příchozí žádosti
+            </Text>
+            {incoming.map((e) => (
+              <View
+                key={"in_" + e.otherUid}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginTop: 10,
+                }}
+              >
+                <Text
+                  style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+                  numberOfLines={1}
+                >
+                  {friendNames[e.otherUid] ?? e.otherUid}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable
+                    onPress={async () => {
+                      try {
+                        const acceptedCount = friendEdges.filter(
+                          (x) => x.status === "accepted"
+                        ).length;
+                        if (!premium && acceptedCount >= 1) {
+                          Alert.alert(
+                            "Přátelé",
+                            "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium."
+                          );
+                          return;
+                        }
+                        setFriendsBusy(true);
+                        await acceptFriend(e.otherUid);
+                      } catch (err: any) {
+                        Alert.alert(
+                          "Přátelé",
+                          err?.message ?? "Nepodařilo se přijmout."
+                        );
+                      } finally {
+                        setFriendsBusy(false);
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      styles.smallBtn,
+                      pressed && { opacity: 0.9 },
+                    ]}
+                  >
+                    <Text style={styles.smallBtnText}>Přijmout</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={async () => {
+                      try {
+                        setFriendsBusy(true);
+                        await declineFriend(e.otherUid);
+                      } catch (err: any) {
+                        Alert.alert(
+                          "Přátelé",
+                          err?.message ?? "Nepodařilo se odmítnout."
+                        );
+                      } finally {
+                        setFriendsBusy(false);
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      styles.smallBtnGhost,
+                      pressed && { opacity: 0.9 },
+                    ]}
+                  >
+                    <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
+                  </Pressable>
                 </View>
-              );
-            })()}
-          </ScrollView>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {!!outgoing.length && (
+          <View
+            style={[
+              styles.infoCard,
+              { borderColor: UI.stroke, backgroundColor: UI.card },
+            ]}
+          >
+            <Text style={[styles.infoTitle, { color: UI.text }]}>
+              Odeslané žádosti
+            </Text>
+            {outgoing.map((e) => (
+              <View
+                key={"out_" + e.otherUid}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginTop: 10,
+                }}
+              >
+                <Text
+                  style={{ color: UI.sub, fontWeight: "900", flex: 1 }}
+                  numberOfLines={1}
+                >
+                  {friendNames[e.otherUid] ?? e.otherUid}
+                </Text>
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      setFriendsBusy(true);
+                      await declineFriend(e.otherUid);
+                    } catch (err: any) {
+                      Alert.alert(
+                        "Přátelé",
+                        err?.message ?? "Nepodařilo se zrušit."
+                      );
+                    } finally {
+                      setFriendsBusy(false);
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.smallBtnGhost,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={styles.smallBtnGhostText}>Zrušit</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {!!blocked.length && (
+          <View
+            style={[
+              styles.infoCard,
+              { borderColor: UI.stroke, backgroundColor: UI.card },
+            ]}
+          >
+            <Text style={[styles.infoTitle, { color: UI.text }]}>
+              Blokovaní
+            </Text>
+            {blocked.map((e) => (
+              <Text
+                key={"blk_" + e.otherUid}
+                style={{ color: UI.sub, fontWeight: "900", marginTop: 8 }}
+                numberOfLines={1}
+              >
+                {friendNames[e.otherUid] ?? e.otherUid}
+              </Text>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  })()}
+</ScrollView>
         </View>
       </Modal>
 
