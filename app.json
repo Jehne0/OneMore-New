@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "OneMore",
+    "slug": "OneMore",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B1220",
+          "dark": {
+            "backgroundColor": "#0B1220"
+          }
+        }
+      ],
+      "expo-font"
+    ],
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon/icon.png",
+    "scheme": "onemore",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/icon/icon.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.OneMore"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "splash": {
+      "backgroundColor": "#0B1220"
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#0B1220",
+      "barStyle": "light-content"
+    }
+  }
+}
