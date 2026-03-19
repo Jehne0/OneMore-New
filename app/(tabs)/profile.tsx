@@ -183,7 +183,7 @@ export default function ProfileTabScreen() {
     };
   }, [auth.currentUser?.uid]);
 
-  // ✅ Přátelé: live list z Firestore + debug
+// ✅ Přátelé: live list z Firestore + rovnou jména
 useEffect(() => {
   if (!friendsOpen) return;
 
@@ -208,24 +208,24 @@ useEffect(() => {
         return;
       }
 
-      const pairs = await Promise.all(
-        uids.map(async (otherUid) => {
-          try {
-            const p = await getProfile(otherUid);
-            const shownName =
-              typeof p?.username === "string" && p.username.trim()
-                ? p.username.trim()
-                : otherUid;
+      const next: Record<string, string> = {};
 
-            return [otherUid, shownName] as const;
-          } catch {
-            return [otherUid, otherUid] as const;
-          }
-        })
-      );
+      for (const otherUid of uids) {
+        try {
+          const p = await getProfile(otherUid);
+          const shownName =
+            typeof p?.username === "string" && p.username.trim()
+              ? p.username.trim()
+              : otherUid;
+
+          next[otherUid] = shownName;
+        } catch {
+          next[otherUid] = otherUid;
+        }
+      }
 
       if (!cancelled) {
-        setFriendNames(Object.fromEntries(pairs));
+        setFriendNames(next);
       }
     },
     (e) => {
@@ -1789,7 +1789,7 @@ useEffect(() => {
                             style={{ color: UI.text, fontWeight: "900", flex: 1 }}
                             numberOfLines={1}
                           >
-                            {friendNames[e.otherUid] ?? e.otherUid}
+                            {friendNames[e.otherUid] || e.otherUid}
                           </Text>
                           <View style={{ flexDirection: "row", gap: 10 }}>
                             <Pressable
@@ -1874,7 +1874,7 @@ useEffect(() => {
                             style={{ color: UI.sub, fontWeight: "900", flex: 1 }}
                             numberOfLines={1}
                           >
-                            {friendNames[e.otherUid] ?? e.otherUid}
+                            {friendNames[e.otherUid] || e.otherUid}
                           </Text>
                           <Pressable
                             onPress={async () => {
