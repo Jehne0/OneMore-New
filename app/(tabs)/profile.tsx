@@ -107,7 +107,6 @@ export default function ProfileTabScreen() {
   const [friendNames, setFriendNames] = useState<Record<string, string>>({});
   const [addUsername, setAddUsername] = useState("");
   const [friendsBusy, setFriendsBusy] = useState(false);
-  const [friendsDebug, setFriendsDebug] = useState("friends: idle");
 
   // ✅ delete účet modal (oranžové okno)
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -190,12 +189,12 @@ export default function ProfileTabScreen() {
 
     const uid = auth.currentUser?.uid;
     if (!uid) {
-      setFriendsDebug("friends: no auth uid");
+    
       setFriendEdges([]);
       return;
     }
 
-    setFriendsDebug(`friends: subscribing uid=${uid}`);
+  
 
     const unsub = subscribeFriends(
       (edges) => {
@@ -210,7 +209,7 @@ export default function ProfileTabScreen() {
     );
 
     return () => {
-      setFriendsDebug(`friends: unsub uid=${uid}`);
+      
       unsub?.();
     };
   }, [friendsOpen]);
