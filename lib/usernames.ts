@@ -88,13 +88,17 @@ export async function getProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return null;
 
-  const p = snap.data()?.profile;
-  if (!p?.username || !p?.usernameLower) return null;
+  const data = snap.data();
+  const p = data?.profile;
+
+  console.log("GET PROFILE RAW", uid, data);
+
+  if (!p) return null;
 
   return {
     uid,
-    username: p.username,
-    usernameLower: p.usernameLower,
+    username: p.username ?? uid,
+    usernameLower: p.usernameLower ?? "",
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -161,6 +165,8 @@ export async function changeUsername(uid: string, newUsername: string) {
         },
       },
       { merge: true }
+      
     );
   });
+  
 }
