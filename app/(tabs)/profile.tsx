@@ -231,23 +231,17 @@ useEffect(() => {
     const next: Record<string, string> = {};
 
     for (const uid of uids) {
-      try {
-        const snap = await getDoc(doc(db, "users", uid));
-        const data = snap.data() as any;
-      const shownName =
-  data?.profile?.displayName ||
-  data?.profile?.username ||
-  data?.displayName ||
-  data?.username ||
-  uid;
+  try {
+  const p = await getProfile(uid);
+  const shownName = p?.username || uid;
 
-        next[uid] =
-  typeof shownName === "string" && shownName.trim()
-    ? shownName.trim()
-    : uid;
-      } catch {
-        next[uid] = uid;
-      }
+  next[uid] =
+    typeof shownName === "string" && shownName.trim()
+      ? shownName.trim()
+      : uid;
+} catch {
+  next[uid] = uid;
+}
     }
 
     if (!cancelled) {
