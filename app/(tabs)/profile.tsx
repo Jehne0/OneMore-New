@@ -184,73 +184,65 @@ export default function ProfileTabScreen() {
   }, [auth.currentUser?.uid]);
 
   // ✅ Přátelé: live list z Firestore + debug
-  useEffect(() => {
-    if (!friendsOpen) return;
-
-    const uid = auth.currentUser?.uid;
-    if (!uid) {
-    
-      setFriendEdges([]);
-      return;
-    }
-
-  
-
-    const unsub = subscribeFriends(
-      (edges) => {
-        setFriendEdges(edges);
-      },
-      (e) => {
-        const msg =
-          typeof e?.message === "string" ? e.message : JSON.stringify(e ?? {});
-        console.log("friends subscribe error", e);
-        setFriendEdges([]);
-      }
-    );
-
-    return () => {
-      
-      unsub?.();
-    };
-  }, [friendsOpen]);
-
-  // ✅ dočíst jména přátel (z users/{uid}.profile)
-// ✅ dočíst jména přátel
 useEffect(() => {
+  if (!friendsOpen) return;
+
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    setFriendEdges([]);
+    setFriendNames({});
+    return;
+  }
+
   let cancelled = false;
 
-  (async () => {
-    const uids = friendEdges.map((e) => e.otherUid);
-    if (!uids.length) {
-      if (!cancelled) setFriendNames({});
-      return;
-    }
+  const unsub = subscribeFriends(
+    async (edges) => {
+      if (cancelled) return;
 
-    const next: Record<string, string> = {};
+      setFriendEdges(edges);
 
-    for (const uid of uids) {
-      try {
-        const p = await getProfile(uid);
-        const shownName = p?.username || uid;
+      const uids = [...new Set(edges.map((e) => e.otherUid))];
+      if (!uids.length) {
+        setFriendNames({});
+        return;
+      }
 
-        next[uid] =
-          typeof shownName === "string" && shownName.trim()
-            ? shownName.trim()
-            : uid;
-      } catch {
-        next[uid] = uid;
+      const pairs = await Promise.all(
+        uids.map(async (otherUid) => {
+          try {
+            const p = await getProfile(otherUid);
+            const shownName =
+              typeof p?.username === "string" && p.username.trim()
+                ? p.username.trim()
+                : otherUid;
+
+            return [otherUid, shownName] as const;
+          } catch {
+            return [otherUid, otherUid] as const;
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setFriendNames(Object.fromEntries(pairs));
+      }
+    },
+    (e) => {
+      console.log("friends subscribe error", e);
+      if (!cancelled) {
+        setFriendEdges([]);
+        setFriendNames({});
       }
     }
-
-    if (!cancelled) {
-      setFriendNames(next);
-    }
-  })();
+  );
 
   return () => {
     cancelled = true;
+    unsub?.();
   };
-}, [friendEdges]);
+}, [friendsOpen]);
+
 
   const email = (auth.currentUser?.email ?? "").trim();
 
@@ -1742,11 +1734,11 @@ useEffect(() => {
                           }}
                         >
                           <Text
-                            style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-                            numberOfLines={1}
-                          >
-                           {friendNames[e.otherUid] || e.otherUid}
-                          </Text>
+  style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+  numberOfLines={1}
+>
+  {friendNames[e.otherUid] || e.otherUid}
+</Text>
                           <Pressable
                             onPress={async () => {
                               try {
