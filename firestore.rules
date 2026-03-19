@@ -7,8 +7,9 @@ service cloud.firestore {
 
     // User data
     match /users/{uid} {
-      allow read, write: if isMe(uid);
-    }
+  allow read: if signedIn();
+  allow write: if isMe(uid);
+}
 
     // Friends graph (read-only from client; writes only via Cloud Functions)
     match /friends/{uid}/list/{otherUid} {
