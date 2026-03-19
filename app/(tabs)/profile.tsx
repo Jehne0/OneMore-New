@@ -1746,7 +1746,7 @@ useEffect(() => {
                             style={{ color: UI.text, fontWeight: "900", flex: 1 }}
                             numberOfLines={1}
                           >
-                            {friendNames[e.otherUid] ?? "Načítám jméno..."}
+                           {friendNames[e.otherUid] || e.otherUid}
                           </Text>
                           <Pressable
                             onPress={async () => {
