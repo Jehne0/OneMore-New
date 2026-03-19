@@ -199,13 +199,11 @@ export default function ProfileTabScreen() {
 
     const unsub = subscribeFriends(
       (edges) => {
-        setFriendsDebug(`friends: snapshot ok, edges=${edges.length}, uid=${uid}`);
         setFriendEdges(edges);
       },
       (e) => {
         const msg =
           typeof e?.message === "string" ? e.message : JSON.stringify(e ?? {});
-        setFriendsDebug(`friends: ERROR uid=${uid} | ${msg}`);
         console.log("friends subscribe error", e);
         setFriendEdges([]);
       }
@@ -218,6 +216,7 @@ export default function ProfileTabScreen() {
   }, [friendsOpen]);
 
   // ✅ dočíst jména přátel (z users/{uid}.profile)
+// ✅ dočíst jména přátel
 useEffect(() => {
   let cancelled = false;
 
@@ -231,17 +230,17 @@ useEffect(() => {
     const next: Record<string, string> = {};
 
     for (const uid of uids) {
-  try {
-  const p = await getProfile(uid);
-  const shownName = p?.username || uid;
+      try {
+        const p = await getProfile(uid);
+        const shownName = p?.username || uid;
 
-  next[uid] =
-    typeof shownName === "string" && shownName.trim()
-      ? shownName.trim()
-      : uid;
-} catch {
-  next[uid] = uid;
-}
+        next[uid] =
+          typeof shownName === "string" && shownName.trim()
+            ? shownName.trim()
+            : uid;
+      } catch {
+        next[uid] = uid;
+      }
     }
 
     if (!cancelled) {
@@ -1696,9 +1695,7 @@ useEffect(() => {
           </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
-            <Text style={{ color: UI.sub, fontWeight: "700", marginBottom: 8 }}>
-  {friendsDebug}
-</Text>
+            
             {(() => {
               const me = auth.currentUser?.uid ?? "";
 
@@ -1719,17 +1716,6 @@ useEffect(() => {
 
               return (
                 <View style={{ gap: 12 }}>
-                  <Text style={{ color: UI.sub, fontWeight: "700", marginBottom: 8 }}>
-                    {friendsDebug}
-                  </Text>
-                  <Text style={{ color: UI.sub, fontWeight: "700", marginBottom: 8 }}>
-  friendNames: {JSON.stringify(friendNames)}
-</Text>
-
-                  <Text style={{ color: UI.sub, fontWeight: "700", marginBottom: 10 }}>
-                    pending: {pending.length} | incoming: {incoming.length} | outgoing:{" "}
-                    {outgoing.length} | me: {me || "EMPTY"}
-                  </Text>
 
                   <View
                     style={[
@@ -1936,13 +1922,12 @@ useEffect(() => {
                         Blokovaní
                       </Text>
                       {blocked.map((e) => (
-                        <Text
-                          key={"blk_" + e.otherUid}
-                          style={{ color: UI.sub, fontWeight: "900", marginTop: 8 }}
-                          numberOfLines={1}
-                        >
-                          {friendNames[e.otherUid] ?? e.otherUid}
-                        </Text>
+                       <Text
+  style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+  numberOfLines={1}
+>
+  {friendNames[e.otherUid] || e.otherUid}
+</Text>
                       ))}
                     </View>
                   )}
