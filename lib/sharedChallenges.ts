@@ -328,4 +328,44 @@ export async function setSharedChallengeEnabled(challengeId: string, enabled: bo
     enabled: !!enabled,
     updatedAt: serverTimestamp(),
   });
+  
+}
+export function subscribeSharedChallengeProgress(
+  challengeId: string,
+  onItems: (items: SharedChallengeDayProgress[]) => void,
+  onError?: (e: any) => void
+): Unsubscribe {
+  const col = collection(db, "sharedChallenges", String(challengeId), "progress");
+
+  return onSnapshot(
+    col,
+    (snap) => {
+      const items: SharedChallengeDayProgress[] = snap.docs.map((d) => {
+        const data = d.data() as any;
+        const usersRaw = (data?.users ?? {}) as Record<string, any>;
+        const users: Record<string, SharedChallengeUserDayProgress> = {};
+
+        for (const [uid, value] of Object.entries(usersRaw)) {
+          users[String(uid)] = {
+            completedCount: Math.max(
+              0,
+              Math.floor(Number((value as any)?.completedCount ?? 0) || 0)
+            ),
+            completed: !!(value as any)?.completed,
+            updatedAt: (value as any)?.updatedAt,
+          };
+        }
+
+        return {
+          date: String(data?.date ?? d.id),
+          users,
+          updatedAt: data?.updatedAt,
+        };
+      });
+
+      items.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      onItems(items);
+    },
+    (err) => onError?.(err)
+  );
 }

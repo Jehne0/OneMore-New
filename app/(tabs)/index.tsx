@@ -4,6 +4,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  completeSharedChallengeToday,
+  getTodayISO as getSharedTodayISO,
+  isSharedChallengeActiveOnDate,
+  subscribeSharedChallengeDay,
+  subscribeSharedChallengeProgress,
+  subscribeSharedChallenges,
+  type SharedChallenge,
+  type SharedChallengeDayProgress,
+} from "../../lib/sharedChallenges";
+import { getProfile } from "../../lib/usernames";
+import {
   Animated,
   FlatList,
   Image,
@@ -41,6 +52,7 @@ import {
 import { useTheme } from "../../lib/theme";
 import { medalCountsFromChallengeStats } from "../../lib/medals";
 import * as Haptics from "expo-haptics";
+
 
 const FLAME_IMG = require("../../assets/images/flame.png");
 
@@ -615,6 +627,125 @@ function makeStyles(UI: any) {
     historyStatus: { fontSize: 13, fontWeight: "900", color: UI.accent },
 
     streakNum: { fontSize: 17, fontWeight: "900", color: UI.text },
+        sharedWrap: {
+      paddingHorizontal: 18,
+      paddingTop: 2,
+      paddingBottom: 10,
+    },
+    sharedSectionTitle: {
+      fontSize: 18,
+      fontWeight: "900",
+      color: UI.text,
+      marginBottom: 10,
+    },
+    sharedCardOuter: {
+      width: "100%",
+      borderRadius: 18,
+      marginBottom: 10,
+      overflow: "visible",
+    },
+    sharedCardInner: {
+      borderRadius: 18,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: UI.stroke,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      backgroundColor: UI.card,
+      minHeight: 96,
+    },
+    sharedBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: UI.stroke,
+      backgroundColor: UI.card2,
+      marginBottom: 10,
+    },
+    sharedBadgeText: {
+      fontSize: 12,
+      fontWeight: "900",
+      color: UI.text,
+    },
+    sharedTitle: {
+      fontSize: 19,
+      fontWeight: "900",
+      color: UI.text,
+    },
+    sharedSubtitle: {
+      marginTop: 2,
+      fontSize: 12,
+      fontWeight: "800",
+      color: UI.sub,
+    },
+    sharedTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    sharedPlayersRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 16,
+      marginTop: 12,
+    },
+    sharedPlayerCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    sharedPlayerName: {
+      fontSize: 13,
+      fontWeight: "900",
+      color: UI.text,
+    },
+    sharedPlayerMeta: {
+      marginTop: 3,
+      fontSize: 12,
+      fontWeight: "800",
+      color: UI.sub,
+    },
+    sharedFlameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginTop: 4,
+    },
+    sharedFlameNum: {
+      fontSize: 18,
+      fontWeight: "900",
+      color: UI.text,
+      marginTop: 6,
+    },
+    sharedBarTrack: {
+      marginTop: 10,
+      height: 8,
+      borderRadius: 99,
+      backgroundColor: UI.stroke,
+      overflow: "hidden",
+    },
+    sharedBarFill: {
+      height: "100%",
+      borderRadius: 99,
+      backgroundColor: UI.accent,
+    },
+    sharedDoneBtn: {
+      paddingHorizontal: 14,
+      height: 40,
+      borderRadius: 999,
+      backgroundColor: UI.accent,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.18)",
+    },
+    sharedDoneBtnText: {
+      fontSize: 14,
+      fontWeight: "900",
+      color: UI.text,
+    },
   });
 }
 
@@ -661,11 +792,112 @@ export default function Index() {
 
   const [premium, setPremium] = useState(false);
   const [appState, setAppState] = useState<AppState | null>(null);
-
+  const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
+  const [sharedTodayMap, setSharedTodayMap] = useState<Record<string, SharedChallengeDayProgress | null>>({});
+  const [sharedFriendNames, setSharedFriendNames] = useState<Record<string, string>>({});
+  const [sharedProgressMap, setSharedProgressMap] = useState<Record<string, SharedChallengeDayProgress[]>>({});
   useEffect(() => {
     return subscribeState((next) => {
       setAppState(next);
     });
+  }, []);
+    useEffect(() => {
+    let mounted = true;
+
+  let unsubDays: Array<() => void> = [];
+let unsubProgress: Array<() => void> = [];
+
+    const unsubShared = subscribeSharedChallenges(
+      async (items) => {
+        if (!mounted) return;
+
+        setSharedChallenges(items);
+
+        unsubDays.forEach((u) => u());
+unsubDays = [];
+
+unsubProgress.forEach((u) => u());
+unsubProgress = [];
+
+unsubProgress.forEach((u) => u());
+unsubProgress = [];
+
+        const today = getSharedTodayISO();
+
+        items.forEach((item) => {
+          const unsub = subscribeSharedChallengeDay(
+            item.id,
+            today,
+            (data) => {
+              setSharedTodayMap((prev) => ({
+                ...prev,
+                [item.id]: data,
+              }));
+            },
+            () => {
+              setSharedTodayMap((prev) => ({
+                ...prev,
+                [item.id]: null,
+              }));
+            }
+          );
+          unsubDays.push(unsub);
+          const unsubAll = subscribeSharedChallengeProgress(
+  item.id,
+  (rows) => {
+    setSharedProgressMap((prev) => ({
+      ...prev,
+      [item.id]: rows,
+    }));
+  },
+  () => {
+    setSharedProgressMap((prev) => ({
+      ...prev,
+      [item.id]: [],
+    }));
+  }
+);
+unsubProgress.push(unsubAll);
+        });
+
+        const allOtherUids = Array.from(
+          new Set(
+            items.flatMap((x) => x.memberUids).filter((uid) => uid !== auth.currentUser?.uid)
+          )
+        );
+
+        const nextNames: Record<string, string> = {};
+        for (const uid of allOtherUids) {
+          try {
+            const p = await getProfile(uid);
+            nextNames[uid] =
+              typeof p?.username === "string" && p.username.trim()
+                ? p.username.trim()
+                : uid;
+          } catch {
+            nextNames[uid] = uid;
+          }
+        }
+
+        if (mounted) {
+          setSharedFriendNames(nextNames);
+        }
+      },
+      () => {
+        if (!mounted) return;
+       setSharedChallenges([]);
+setSharedTodayMap({});
+setSharedProgressMap({});
+setSharedFriendNames({});
+      }
+    );
+
+    return () => {
+      mounted = false;
+      unsubShared?.();
+unsubDays.forEach((u) => u());
+unsubProgress.forEach((u) => u());
+    };
   }, []);
 
   useEffect(() => {
@@ -1070,7 +1302,10 @@ export default function Index() {
 
   const count = visibleChallenges.length;
   const sidePadding = 18;
-
+  const visibleSharedChallenges = useMemo(() => {
+    return sharedChallenges.filter((x) => x.enabled !== false);
+  }, [sharedChallenges]);
+  
   const dayIndex = useMemo(() => {
     const byChallenge = new Map<string, Map<string, { completed: number; skipped: boolean; lastTime?: string }>>();
     const startDate = new Map<string, string>();
@@ -1129,6 +1364,54 @@ export default function Index() {
     const done = completedTodayCount(challengeId);
     const target = targetForChallenge(challengeId);
     return Math.max(0, Math.min(1, done / Math.max(1, target)));
+  }
+  function getSharedOtherUid(item: SharedChallenge): string | null {
+    const me = auth.currentUser?.uid ?? "";
+    const other = item.memberUids.find((uid) => String(uid) !== String(me));
+    return other ? String(other) : null;
+  }
+
+  function getSharedUserCompletedCount(item: SharedChallenge, uid: string): number {
+    const day = sharedTodayMap[item.id];
+    const raw = Number(day?.users?.[uid]?.completedCount ?? 0);
+    return Math.max(0, Math.min(item.targetPerDay, Math.floor(raw || 0)));
+  }
+
+  function getSharedUserDoneRatio(item: SharedChallenge, uid: string): number {
+    const done = getSharedUserCompletedCount(item, uid);
+    return Math.max(0, Math.min(1, done / Math.max(1, item.targetPerDay)));
+  }
+
+ function getSharedUserFlame(item: SharedChallenge, uid: string): number {
+  // 🔥 PROZATÍM: flame = počet splnění DNES (vizuální feedback)
+  // + připraveno na budoucí rozšíření
+
+  const today = sharedTodayMap[item.id];
+  const doneToday = Number(today?.users?.[uid]?.completedCount ?? 0);
+
+  const isDoneToday = doneToday >= item.targetPerDay;
+
+  // TODO (další krok): načíst historii a spočítat všechny splněné dny
+  return isDoneToday ? 1 : 0;
+}
+
+  async function markSharedDoneToday(item: SharedChallenge) {
+    const me = auth.currentUser?.uid;
+    if (!me) return;
+
+    if (!isSharedChallengeActiveOnDate(item, getSharedTodayISO())) {
+      Alert.alert("Volný den", "Dnes je podle periody volno. Relaxuj :)");
+      return;
+    }
+
+    const done = getSharedUserCompletedCount(item, me);
+    if (done >= item.targetPerDay) return;
+
+    try {
+      await completeSharedChallengeToday(item.id, getSharedTodayISO());
+    } catch (e: any) {
+      Alert.alert("Společná výzva", e?.message ?? "Nepodařilo se uložit splnění.");
+    }
   }
 
   function dayStatus(challengeId: string, date: string): DayStatus {
@@ -1897,6 +2180,134 @@ export default function Index() {
             keyExtractor={(item) => String((item as any).id)}
             contentContainerStyle={[styles.scroll, { paddingHorizontal: sidePadding, paddingBottom: 24 }]}
             removeClippedSubviews={false}
+            ListFooterComponent={
+              <>
+                {!!visibleSharedChallenges.length && (
+                  <View style={styles.sharedWrap}>
+                    <Text style={styles.sharedSectionTitle}>Společné výzvy</Text>
+
+                    {visibleSharedChallenges.map((item) => {
+                      const me = auth.currentUser?.uid ?? "";
+                      const otherUid = getSharedOtherUid(item);
+                      const otherName = otherUid ? sharedFriendNames[otherUid] || otherUid : "Kamarád";
+
+                      const myDone = getSharedUserCompletedCount(item, me);
+                      const otherDone = otherUid ? getSharedUserCompletedCount(item, otherUid) : 0;
+
+                      const myRatio = getSharedUserDoneRatio(item, me);
+                      const otherRatio = otherUid ? getSharedUserDoneRatio(item, otherUid) : 0;
+
+                      const activeToday = isSharedChallengeActiveOnDate(item, getSharedTodayISO());
+                      const myDoneToday = myDone >= item.targetPerDay;
+
+                      return (
+                        <View key={item.id} style={styles.sharedCardOuter}>
+                          <View style={styles.sharedCardInner}>
+                            <View style={styles.sharedBadge}>
+                              <Text style={styles.sharedBadgeText}>Společná výzva</Text>
+                            </View>
+
+                            <View style={styles.sharedTopRow}>
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text style={styles.sharedTitle} numberOfLines={1}>
+                                  {item.title}
+                                </Text>
+                                <Text style={styles.sharedSubtitle} numberOfLines={1}>
+                                  S kamarádem: {otherName}
+                                </Text>
+                              </View>
+
+                              <Pressable
+                                onPress={() => void markSharedDoneToday(item)}
+                                style={({ pressed }) => [
+                                  styles.sharedDoneBtn,
+                                  myDoneToday && {
+                                    backgroundColor: UI.card2,
+                                    borderColor: UI.stroke,
+                                    opacity: 0.78,
+                                  },
+                                  !activeToday && {
+                                    backgroundColor: UI.card2,
+                                    borderColor: UI.stroke,
+                                    opacity: 0.78,
+                                  },
+                                  pressed && !myDoneToday && activeToday && { opacity: 0.9 },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.sharedDoneBtnText,
+                                    (myDoneToday || !activeToday) && { color: UI.sub },
+                                  ]}
+                                >
+                                  {myDoneToday ? "Splněno" : !activeToday ? "Volný den" : "Splnit"}
+                                </Text>
+                              </Pressable>
+                            </View>
+
+                            <View style={styles.sharedPlayersRow}>
+                              <View style={styles.sharedPlayerCol}>
+                                <Text style={styles.sharedPlayerName}>Ty</Text>
+                                <View style={styles.sharedFlameRow}>
+                                  <Text style={styles.sharedFlameNum}>{getSharedUserFlame(item, me)}</Text>
+                                  <Image
+                                    source={FLAME_IMG}
+                                    style={{
+                                      width: 42,
+                                      height: 42,
+                                      marginLeft: -8,
+                                      marginTop: -2,
+                                      opacity: 1,
+                                    }}
+                                    resizeMode="contain"
+                                  />
+                                </View>
+                                <Text style={styles.sharedPlayerMeta}>
+                                  {activeToday
+                                    ? `Splněno ${myDone}/${item.targetPerDay}`
+                                    : "Volný den"}
+                                </Text>
+                                <View style={styles.sharedBarTrack}>
+                                  <View style={[styles.sharedBarFill, { width: `${Math.round(myRatio * 100)}%` }]} />
+                                </View>
+                              </View>
+
+                              <View style={styles.sharedPlayerCol}>
+                                <Text style={styles.sharedPlayerName}>{otherName}</Text>
+                                <View style={styles.sharedFlameRow}>
+                                  <Text style={styles.sharedFlameNum}>
+                                    {otherUid ? getSharedUserFlame(item, otherUid) : 0}
+                                  </Text>
+                                  <Image
+                                    source={FLAME_IMG}
+                                    style={{
+                                      width: 42,
+                                      height: 42,
+                                      marginLeft: -8,
+                                      marginTop: -2,
+                                      opacity: 1,
+                                    }}
+                                    resizeMode="contain"
+                                  />
+                                </View>
+                                <Text style={styles.sharedPlayerMeta}>
+                                  {activeToday
+                                    ? `Splněno ${otherDone}/${item.targetPerDay}`
+                                    : "Volný den"}
+                                </Text>
+                                <View style={styles.sharedBarTrack}>
+                                  <View style={[styles.sharedBarFill, { width: `${Math.round(otherRatio * 100)}%` }]} />
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </>
+            }
             renderItem={({ item, index }) => {
               const id = String(item.id);
               const ratio = progressRatioForCell(id);
@@ -2048,6 +2459,6 @@ export default function Index() {
           />
         </View>
       )}
-    </View>
+          </View>
   );
 }

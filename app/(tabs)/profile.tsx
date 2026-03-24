@@ -567,7 +567,7 @@ if (!cancelled) {
     setInfoScreen("menu");
   };
 
-    function resetChallengeInviteForm() {
+  function resetChallengeInviteForm() {
     setChallengeInviteFriendUid(null);
     setChallengeInviteFriendName("");
     setChallengeInviteTitle("");
@@ -578,6 +578,14 @@ if (!cancelled) {
   }
 
   function openChallengeInvite(friendUid: string, friendName: string) {
+    if (!premium) {
+      Alert.alert(
+        "Premium",
+        "Společné výzvy s přáteli jsou dostupné jen v Premium verzi."
+      );
+      return;
+    }
+
     setChallengeInviteFriendUid(String(friendUid));
     setChallengeInviteFriendName(String(friendName || ""));
     setChallengeInviteTitle("");
@@ -595,6 +603,15 @@ if (!cancelled) {
 
   async function submitChallengeInvite() {
     try {
+      if (!premium) {
+        showPwdPopup(
+          "error",
+          "Premium",
+          "Společné výzvy s přáteli jsou dostupné jen v Premium verzi."
+        );
+        return;
+      }
+
       const friendUid = String(challengeInviteFriendUid ?? "").trim();
       const title = challengeInviteTitle.trim();
 
@@ -624,9 +641,10 @@ if (!cancelled) {
           challengeInvitePeriod === "custom"
             ? [...challengeInviteCustomDays].sort((a, b) => a - b)
             : [],
-        periodAnchor: challengeInvitePeriod === "every2"
-          ? new Date().toISOString().slice(0, 10)
-          : null,
+        periodAnchor:
+          challengeInvitePeriod === "every2"
+            ? new Date().toISOString().slice(0, 10)
+            : null,
       });
 
       setChallengeInviteOpen(false);
@@ -1827,27 +1845,45 @@ if (!cancelled) {
 >
   {friendNames[e.otherUid] || e.otherUid}
 </Text>
-                          <Pressable
-                            onPress={async () => {
-                              try {
-                                setFriendsBusy(true);
-                                await removeFriend(e.otherUid);
-                              } catch (err: any) {
-                                Alert.alert(
-                                  "Přátelé",
-                                  err?.message ?? "Nepodařilo se odebrat."
-                                );
-                              } finally {
-                                setFriendsBusy(false);
+                                                    <View style={{ flexDirection: "row", gap: 10 }}>
+                            <Pressable
+                              onPress={() =>
+                                openChallengeInvite(
+                                  e.otherUid,
+                                  friendNames[e.otherUid] || e.otherUid
+                                )
                               }
-                            }}
-                            style={({ pressed }) => [
-                              styles.smallBtnGhost,
-                              pressed && { opacity: 0.9 },
-                            ]}
-                          >
-                            <Text style={styles.smallBtnGhostText}>Odebrat</Text>
-                          </Pressable>
+                              style={({ pressed }) => [
+                                styles.smallBtn,
+                                !premium && { opacity: 0.55 },
+                                pressed && { opacity: 0.9 },
+                              ]}
+                            >
+                              <Text style={styles.smallBtnText}>Vyzvat</Text>
+                            </Pressable>
+
+                            <Pressable
+                              onPress={async () => {
+                                try {
+                                  setFriendsBusy(true);
+                                  await removeFriend(e.otherUid);
+                                } catch (err: any) {
+                                  Alert.alert(
+                                    "Přátelé",
+                                    err?.message ?? "Nepodařilo se odebrat."
+                                  );
+                                } finally {
+                                  setFriendsBusy(false);
+                                }
+                              }}
+                              style={({ pressed }) => [
+                                styles.smallBtnGhost,
+                                pressed && { opacity: 0.9 },
+                              ]}
+                            >
+                              <Text style={styles.smallBtnGhostText}>Odebrat</Text>
+                            </Pressable>
+                          </View>
                         </View>
                       ))
                     )}
@@ -2151,6 +2187,231 @@ if (!cancelled) {
                   <Text style={styles.smallBtnText}>Přidat</Text>
                 </Pressable>
               </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ✅ MODAL – Nová společná výzva (Premium) */}
+      <Modal
+        visible={challengeInviteOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeChallengeInvite}
+      >
+        <Pressable
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          onPress={closeChallengeInvite}
+        />
+        <View
+          style={[
+            styles.sheet,
+            {
+              height: "74%",
+              backgroundColor: isDark ? UI.sheetBg : "#FFE0C2",
+              borderColor: isDark ? UI.sheetStroke : "#FF8A1F",
+            },
+          ]}
+        >
+          <View style={styles.sheetHeader}>
+            <Text style={[styles.sheetTitle, { color: UI.text }]}>
+              Nová společná výzva
+            </Text>
+
+            <Pressable
+              onPress={closeChallengeInvite}
+              style={({ pressed }) => [
+                styles.closeBtn,
+                { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 18 }}
+          >
+            <View
+              style={[
+                styles.infoCard,
+                { borderColor: UI.stroke, backgroundColor: UI.card },
+              ]}
+            >
+              <Text style={[styles.infoTitle, { color: UI.text }]}>
+                {challengeInviteFriendName
+                  ? `Vyzvat: ${challengeInviteFriendName}`
+                  : "Společná výzva"}
+              </Text>
+
+              <Text style={[styles.infoText, { color: UI.sub, marginTop: -2 }]}>
+                Tato funkce je dostupná v Premium verzi.
+              </Text>
+
+              <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
+                Název výzvy
+              </Text>
+              <TextInput
+                value={challengeInviteTitle}
+                onChangeText={setChallengeInviteTitle}
+                placeholder="Např. Kliky"
+                placeholderTextColor={UI.sub}
+                autoCapitalize="sentences"
+                style={[
+                  styles.input,
+                  {
+                    color: UI.text,
+                    borderColor: UI.stroke,
+                    backgroundColor: UI.card2,
+                  },
+                ]}
+              />
+
+              <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
+                Počet za den
+              </Text>
+              <View style={styles.challengePills}>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+                  const active = challengeInviteTarget === n;
+                  return (
+                    <Pressable
+                      key={n}
+                      onPress={() => setChallengeInviteTarget(n)}
+                      style={({ pressed }) => [
+                        styles.challengePill,
+                        {
+                          borderColor: active ? UI.accent : UI.stroke,
+                          backgroundColor: active ? UI.accent : UI.card2,
+                        },
+                        pressed && { opacity: 0.9 },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.challengePillText,
+                          { color: active ? "#0B1220" : UI.text },
+                        ]}
+                      >
+                        {n}×
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
+                Perioda
+              </Text>
+              <View style={styles.challengePills}>
+                {[
+                  { key: "daily", label: "Denně" },
+                  { key: "every2", label: "Obden" },
+                  { key: "custom", label: "Vlastní dny" },
+                ].map((opt) => {
+                  const active = challengeInvitePeriod === opt.key;
+                  return (
+                    <Pressable
+                      key={opt.key}
+                      onPress={() => {
+                        setChallengeInvitePeriod(opt.key as "daily" | "every2" | "custom");
+                        if (opt.key === "custom" && challengeInviteCustomDays.length === 0) {
+                          const todayIso = new Date().toISOString().slice(0, 10);
+                          setChallengeInviteCustomDays([dowMon0(todayIso)]);
+                        }
+                        if (opt.key !== "custom") {
+                          setChallengeInviteCustomDays([]);
+                        }
+                      }}
+                      style={({ pressed }) => [
+                        styles.challengePill,
+                        {
+                          borderColor: active ? UI.accent : UI.stroke,
+                          backgroundColor: active ? UI.accent : UI.card2,
+                        },
+                        pressed && { opacity: 0.9 },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.challengePillText,
+                          { color: active ? "#0B1220" : UI.text },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {challengeInvitePeriod === "custom" && (
+                <>
+                  <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
+                    Vyber dny
+                  </Text>
+                  <View style={styles.challengePills}>
+                    {[
+                      { k: 0, t: "Po" },
+                      { k: 1, t: "Út" },
+                      { k: 2, t: "St" },
+                      { k: 3, t: "Čt" },
+                      { k: 4, t: "Pá" },
+                      { k: 5, t: "So" },
+                      { k: 6, t: "Ne" },
+                    ].map((d) => {
+                      const active = challengeInviteCustomDays.includes(d.k);
+                      return (
+                        <Pressable
+                          key={d.k}
+                          onPress={() => {
+                            setChallengeInviteCustomDays((prev) => {
+                              const has = prev.includes(d.k);
+                              const next = has
+                                ? prev.filter((x) => x !== d.k)
+                                : [...prev, d.k];
+                              return [...next].sort((a, b) => a - b);
+                            });
+                          }}
+                          style={({ pressed }) => [
+                            styles.challengePill,
+                            {
+                              borderColor: active ? UI.accent : UI.stroke,
+                              backgroundColor: active ? UI.accent : UI.card2,
+                            },
+                            pressed && { opacity: 0.9 },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.challengePillText,
+                              { color: active ? "#0B1220" : UI.text },
+                            ]}
+                          >
+                            {d.t}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              <Pressable
+                disabled={challengeInviteBusy}
+                onPress={submitChallengeInvite}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  { marginTop: 16 },
+                  (pressed || challengeInviteBusy) && { opacity: 0.9 },
+                  challengeInviteBusy && { opacity: 0.65 },
+                ]}
+              >
+                <Text style={styles.primaryBtnText}>
+                  {challengeInviteBusy ? "Odesílám…" : "Odeslat"}
+                </Text>
+              </Pressable>
             </View>
           </ScrollView>
         </View>
@@ -2473,7 +2734,25 @@ function makeStyles(UI: any) {
       backgroundColor: UI.card2,
     },
     smallBtnGhostText: { color: UI.text, fontWeight: "900", fontSize: 14 },
-
+    challengePills: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 8,
+    },
+    challengePill: {
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      minWidth: 52,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    challengePillText: {
+      fontSize: 14,
+      fontWeight: "900",
+    },
     medalsGrid: { marginTop: 12, gap: 12 },
 
     medalRow: {
