@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createSharedChallenge, dowMon0 } from "../../lib/sharedChallenges";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getOfferingPackages,
@@ -124,10 +125,20 @@ export default function ProfileTabScreen() {
   const [supportMessage, setSupportMessage] = useState("");
   const [supportSending, setSupportSending] = useState(false);
 
+    // ✅ Shared challenge modal
+  const [challengeInviteOpen, setChallengeInviteOpen] = useState(false);
+  const [challengeInviteFriendUid, setChallengeInviteFriendUid] = useState<string | null>(null);
+  const [challengeInviteFriendName, setChallengeInviteFriendName] = useState("");
+  const [challengeInviteTitle, setChallengeInviteTitle] = useState("");
+  const [challengeInviteTarget, setChallengeInviteTarget] = useState(1);
+  const [challengeInvitePeriod, setChallengeInvitePeriod] = useState<"daily" | "every2" | "custom">("daily");
+  const [challengeInviteCustomDays, setChallengeInviteCustomDays] = useState<number[]>([]);
+  const [challengeInviteBusy, setChallengeInviteBusy] = useState(false);
+
   // ✅ změna hesla (v Účet)
   const [pwdOpen, setPwdOpen] = useState(false);
   const [pwdEmail, setPwdEmail] = useState(
-    (auth.currentUser?.email ?? "").trim()
+    (auth.currentUser?.email ?? "").trim()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
   );
   const [pwdSending, setPwdSending] = useState(false);
   const [pwdError, setPwdError] = useState<string | null>(null);
@@ -210,30 +221,27 @@ useEffect(() => {
 
       const next: Record<string, string> = {};
 
-      for (const otherUid of uids) {
-        try {
-          const p = await getProfile(otherUid);
-          const shownName =
-            typeof p?.username === "string" && p.username.trim()
-              ? p.username.trim()
-              : otherUid;
+   for (const otherUid of uids) {
+  try {
+    const p = await getProfile(otherUid);
+    console.log("PROFILE CHECK", otherUid, p);
 
-          next[otherUid] = shownName;
-        } catch {
-          next[otherUid] = otherUid;
-        }
-      }
+    const shownName =
+      typeof p?.username === "string" && p.username.trim()
+        ? p.username.trim()
+        : otherUid;
 
-      if (!cancelled) {
-        setFriendNames(next);
-      }
-    },
-    (e) => {
-      console.log("friends subscribe error", e);
-      if (!cancelled) {
-        setFriendEdges([]);
-        setFriendNames({});
-      }
+    next[otherUid] = shownName;
+  } catch (e) {
+    console.log("PROFILE CHECK ERROR", otherUid, e);
+    next[otherUid] = otherUid;
+  }
+}
+
+if (!cancelled) {
+  console.log("FRIEND NAMES MAP", next);
+  setFriendNames(next);
+}
     }
   );
 
@@ -559,6 +567,86 @@ useEffect(() => {
     setInfoScreen("menu");
   };
 
+    function resetChallengeInviteForm() {
+    setChallengeInviteFriendUid(null);
+    setChallengeInviteFriendName("");
+    setChallengeInviteTitle("");
+    setChallengeInviteTarget(1);
+    setChallengeInvitePeriod("daily");
+    setChallengeInviteCustomDays([]);
+    setChallengeInviteBusy(false);
+  }
+
+  function openChallengeInvite(friendUid: string, friendName: string) {
+    setChallengeInviteFriendUid(String(friendUid));
+    setChallengeInviteFriendName(String(friendName || ""));
+    setChallengeInviteTitle("");
+    setChallengeInviteTarget(1);
+    setChallengeInvitePeriod("daily");
+    setChallengeInviteCustomDays([]);
+    setChallengeInviteOpen(true);
+  }
+
+  function closeChallengeInvite() {
+    if (challengeInviteBusy) return;
+    setChallengeInviteOpen(false);
+    resetChallengeInviteForm();
+  }
+
+  async function submitChallengeInvite() {
+    try {
+      const friendUid = String(challengeInviteFriendUid ?? "").trim();
+      const title = challengeInviteTitle.trim();
+
+      if (!friendUid) {
+        showPwdPopup("error", "Společná výzva", "Chybí vybraný přítel.");
+        return;
+      }
+
+      if (!title) {
+        showPwdPopup("error", "Společná výzva", "Zadej název výzvy.");
+        return;
+      }
+
+      if (challengeInvitePeriod === "custom" && challengeInviteCustomDays.length === 0) {
+        showPwdPopup("error", "Společná výzva", "Vyber aspoň jeden den.");
+        return;
+      }
+
+      setChallengeInviteBusy(true);
+
+      await createSharedChallenge({
+        title,
+        friendUid,
+        targetPerDay: challengeInviteTarget,
+        period: challengeInvitePeriod,
+        customDays:
+          challengeInvitePeriod === "custom"
+            ? [...challengeInviteCustomDays].sort((a, b) => a - b)
+            : [],
+        periodAnchor: challengeInvitePeriod === "every2"
+          ? new Date().toISOString().slice(0, 10)
+          : null,
+      });
+
+      setChallengeInviteOpen(false);
+      resetChallengeInviteForm();
+
+      showPwdPopup(
+        "success",
+        "Společná výzva",
+        `Výzva byla vytvořena${challengeInviteFriendName ? ` pro ${challengeInviteFriendName}` : ""}.`
+      );
+    } catch (e: any) {
+      showPwdPopup(
+        "error",
+        "Společná výzva",
+        e?.message ?? "Nepodařilo se vytvořit společnou výzvu."
+      );
+    } finally {
+      setChallengeInviteBusy(false);
+    }
+  }
   const infoTitle = useMemo(() => {
     switch (infoScreen) {
       case "menu":
