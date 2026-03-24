@@ -819,9 +819,6 @@ unsubDays = [];
 unsubProgress.forEach((u) => u());
 unsubProgress = [];
 
-unsubProgress.forEach((u) => u());
-unsubProgress = [];
-
         const today = getSharedTodayISO();
 
         items.forEach((item) => {
@@ -1383,16 +1380,21 @@ unsubProgress.forEach((u) => u());
   }
 
  function getSharedUserFlame(item: SharedChallenge, uid: string): number {
-  // 🔥 PROZATÍM: flame = počet splnění DNES (vizuální feedback)
-  // + připraveno na budoucí rozšíření
+  const rows = sharedProgressMap[item.id] ?? [];
 
-  const today = sharedTodayMap[item.id];
-  const doneToday = Number(today?.users?.[uid]?.completedCount ?? 0);
+  let total = 0;
 
-  const isDoneToday = doneToday >= item.targetPerDay;
+  for (const row of rows) {
+    const user = row.users?.[uid];
+    const completedCount = Number(user?.completedCount ?? 0);
+    const completed = !!user?.completed;
 
-  // TODO (další krok): načíst historii a spočítat všechny splněné dny
-  return isDoneToday ? 1 : 0;
+    if (completed || completedCount >= item.targetPerDay) {
+      total += 1;
+    }
+  }
+
+  return total;
 }
 
   async function markSharedDoneToday(item: SharedChallenge) {
@@ -2158,7 +2160,7 @@ unsubProgress.forEach((u) => u());
       </Modal>
 
       {/* GRID */}
-      {count === 0 ? (
+      {count === 0 && visibleSharedChallenges.length === 0 ? (
         <View style={styles.center}>
           <View style={styles.searchIconWrap}>
             <LinearGradient
