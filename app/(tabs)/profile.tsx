@@ -219,9 +219,9 @@ useEffect(() => {
         return;
       }
 
-      const next: Record<string, string> = {};
+   const next: Record<string, string> = {};
 
-   for (const otherUid of uids) {
+for (const otherUid of uids) {
   try {
     const p = await getProfile(otherUid);
     console.log("PROFILE CHECK", otherUid, p);
@@ -229,12 +229,13 @@ useEffect(() => {
     const shownName =
       typeof p?.username === "string" && p.username.trim()
         ? p.username.trim()
-        : otherUid;
+        : "";
 
-    next[otherUid] = shownName;
+    if (shownName) {
+      next[otherUid] = shownName;
+    }
   } catch (e) {
     console.log("PROFILE CHECK ERROR", otherUid, e);
-    next[otherUid] = otherUid;
   }
 }
 
