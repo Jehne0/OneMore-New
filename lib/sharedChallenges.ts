@@ -13,6 +13,7 @@ import {
 import { auth, db } from "./firebase";
 
 export type SharedChallengePeriod = "daily" | "every2" | "custom";
+export type SharedChallengeStatus = "pending" | "active" | "declined";
 
 export type SharedChallenge = {
   id: string;
@@ -24,6 +25,8 @@ export type SharedChallenge = {
   customDays: number[];
   periodAnchor?: string | null;
   enabled: boolean;
+  status: SharedChallengeStatus;
+  acceptedBy: string[];
   createdAt?: any;
   updatedAt?: any;
 };
@@ -97,11 +100,12 @@ export function diffDaysISO(aISO: string, bISO: string): number {
 }
 
 export function isSharedChallengeActiveOnDate(
-  challenge: Pick<SharedChallenge, "enabled" | "period" | "customDays" | "periodAnchor">,
+  challenge: Pick<SharedChallenge, "enabled" | "period" | "customDays" | "periodAnchor" | "status">,
   dateISO: string
 ): boolean {
   if (!challenge) return false;
   if (challenge.enabled === false) return false;
+  if (challenge.status !== "active") return false;
 
   const period: SharedChallengePeriod =
     challenge.period === "every2" || challenge.period === "custom"
@@ -137,7 +141,11 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
     input.period === "every2" || input.period === "custom" ? input.period : "daily";
 
   const customDays =
-    period === "custom" ? dedupeDays(input.customDays).length ? dedupeDays(input.customDays) : [dowMon0(getTodayISO())] : [];
+    period === "custom"
+      ? dedupeDays(input.customDays).length
+        ? dedupeDays(input.customDays)
+        : [dowMon0(getTodayISO())]
+      : [];
 
   const periodAnchor =
     period === "every2" ? ensureISODate(input.periodAnchor) ?? getTodayISO() : null;
@@ -153,6 +161,8 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
     customDays,
     periodAnchor,
     enabled: true,
+    status: "pending",
+    acceptedBy: [uid],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -160,6 +170,25 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
   await setDoc(ref, payload);
 
   return ref.id;
+}
+
+export async function acceptSharedChallenge(challengeId: string) {
+  const uid = myUid();
+  const challenge = await getSharedChallenge(challengeId);
+
+  if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
+  if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
+
+  const acceptedBy = Array.from(new Set([...(challenge.acceptedBy ?? []), uid]));
+  const everyoneAccepted = challenge.memberUids.every((memberUid) =>
+    acceptedBy.includes(memberUid)
+  );
+
+  await updateDoc(doc(db, "sharedChallenges", String(challengeId)), {
+    acceptedBy,
+    status: everyoneAccepted ? "active" : "pending",
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export function subscribeSharedChallenges(
@@ -193,6 +222,13 @@ export function subscribeSharedChallenges(
           customDays: dedupeDays(data.customDays),
           periodAnchor: ensureISODate(data.periodAnchor),
           enabled: data.enabled !== false,
+          status:
+            data.status === "pending" || data.status === "declined"
+              ? data.status
+              : "active",
+          acceptedBy: Array.isArray(data.acceptedBy)
+            ? data.acceptedBy.map((x: any) => String(x))
+            : [],
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         };
@@ -270,6 +306,13 @@ export async function getSharedChallenge(challengeId: string): Promise<SharedCha
     customDays: dedupeDays(data.customDays),
     periodAnchor: ensureISODate(data.periodAnchor),
     enabled: data.enabled !== false,
+    status:
+      data.status === "pending" || data.status === "declined"
+        ? data.status
+        : "active",
+    acceptedBy: Array.isArray(data.acceptedBy)
+      ? data.acceptedBy.map((x: any) => String(x))
+      : [],
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
@@ -281,6 +324,9 @@ export async function completeSharedChallengeToday(challengeId: string, dateISO 
 
   if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
   if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
+  if (challenge.status !== "active") {
+    throw new Error("Tato společná výzva ještě nebyla přijata oběma stranami.");
+  }
   if (!isSharedChallengeActiveOnDate(challenge, dateISO)) {
     throw new Error("Dnes je podle periody volno.");
   }
@@ -328,8 +374,8 @@ export async function setSharedChallengeEnabled(challengeId: string, enabled: bo
     enabled: !!enabled,
     updatedAt: serverTimestamp(),
   });
-  
 }
+
 export function subscribeSharedChallengeProgress(
   challengeId: string,
   onItems: (items: SharedChallengeDayProgress[]) => void,

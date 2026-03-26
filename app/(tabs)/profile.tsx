@@ -37,7 +37,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { deleteDoc, doc, getDoc, onSnapshot } from "firebase/firestore";
+import { deleteDoc, doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { deleteCloudUserDoc } from "../../lib/cloud";
 import { auth, db, functions } from "../../lib/firebase";
@@ -106,6 +106,7 @@ export default function ProfileTabScreen() {
   // ✅ Přátelé (Firestore)
   const [friendEdges, setFriendEdges] = useState<FriendEdge[]>([]);
   const [friendNames, setFriendNames] = useState<Record<string, string>>({});
+  const [friendsLoading, setFriendsLoading] = useState(false);
   const [addUsername, setAddUsername] = useState("");
   const [friendsBusy, setFriendsBusy] = useState(false);
 
@@ -125,7 +126,7 @@ export default function ProfileTabScreen() {
   const [supportMessage, setSupportMessage] = useState("");
   const [supportSending, setSupportSending] = useState(false);
 
-    // ✅ Shared challenge modal
+  // ✅ Shared challenge modal
   const [challengeInviteOpen, setChallengeInviteOpen] = useState(false);
   const [challengeInviteFriendUid, setChallengeInviteFriendUid] = useState<string | null>(null);
   const [challengeInviteFriendName, setChallengeInviteFriendName] = useState("");
@@ -194,66 +195,69 @@ export default function ProfileTabScreen() {
     };
   }, [auth.currentUser?.uid]);
 
-// ✅ Přátelé: live list z Firestore + rovnou jména
-useEffect(() => {
-  if (!friendsOpen) return;
+  // ✅ Přátelé: live list z Firestore + rovnou jména bez preblikávání
+  useEffect(() => {
+    if (!friendsOpen) return;
 
-  const uid = auth.currentUser?.uid;
-  if (!uid) {
-    setFriendEdges([]);
-    setFriendNames({});
-    return;
-  }
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setFriendEdges([]);
+      setFriendNames({});
+      setFriendsLoading(false);
+      return;
+    }
 
-  let cancelled = false;
+    let cancelled = false;
+    setFriendsLoading(true);
 
-  const unsub = subscribeFriends(
-    async (edges) => {
+    const unsub = subscribeFriends(async (edges) => {
       if (cancelled) return;
 
-      setFriendEdges(edges);
-
       const uids = [...new Set(edges.map((e) => e.otherUid))];
-      if (!uids.length) {
-        setFriendNames({});
-        return;
+      const nextNames: Record<string, string> = {};
+
+      for (const otherUid of uids) {
+        try {
+          const p = await getProfile(otherUid);
+          console.log("PROFILE CHECK", otherUid, p);
+
+          const shownName =
+            typeof p?.username === "string" && p.username.trim()
+              ? p.username.trim()
+              : "";
+
+          if (shownName) {
+            nextNames[otherUid] = shownName;
+          }
+        } catch (e) {
+          console.log("PROFILE CHECK ERROR", otherUid, e);
+        }
       }
 
-   const next: Record<string, string> = {};
+      if (cancelled) return;
 
-for (const otherUid of uids) {
-  try {
-    const p = await getProfile(otherUid);
-    console.log("PROFILE CHECK", otherUid, p);
+      console.log("FRIEND NAMES MAP", nextNames);
+      setFriendNames((prev) => ({
+        ...prev,
+        ...nextNames,
+      }));
+      setFriendEdges(edges);
+      setFriendsLoading(false);
+    });
 
-    const shownName =
-      typeof p?.username === "string" && p.username.trim()
-        ? p.username.trim()
-        : "";
-
-    if (shownName) {
-      next[otherUid] = shownName;
-    }
-  } catch (e) {
-    console.log("PROFILE CHECK ERROR", otherUid, e);
-  }
-}
-
-if (!cancelled) {
-  console.log("FRIEND NAMES MAP", next);
-  setFriendNames(next);
-}
-    }
-  );
-
-  return () => {
-    cancelled = true;
-    unsub?.();
-  };
-}, [friendsOpen]);
-
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [friendsOpen]);
 
   const email = (auth.currentUser?.email ?? "").trim();
+
+  const getShownFriendName = (uid: string) => {
+    const v = friendNames[uid];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    return "Načítám...";
+  };
 
   const styles = useMemo(() => makeStyles(UI), [UI]);
 
@@ -1792,105 +1796,36 @@ if (!cancelled) {
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
-            
-            {(() => {
-              const me = auth.currentUser?.uid ?? "";
+          {friendsLoading ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <ActivityIndicator size="large" />
+              <Text style={{ marginTop: 12, color: UI.sub, fontWeight: "800" }}>
+                Načítám přátele...
+              </Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
+              {(() => {
+                const me = auth.currentUser?.uid ?? "";
 
-              const pending = friendEdges.filter((e) => e.status === "pending");
+                const pending = friendEdges.filter((e) => e.status === "pending");
 
-              const incoming = pending.filter((e) => {
-                if (!me) return true;
-                return String(e.initiatedBy) !== String(me);
-              });
+                const incoming = pending.filter((e) => {
+                  if (!me) return true;
+                  return String(e.initiatedBy) !== String(me);
+                });
 
-              const outgoing = pending.filter((e) => {
-                if (!me) return false;
-                return String(e.initiatedBy) === String(me);
-              });
+                const outgoing = pending.filter((e) => {
+                  if (!me) return false;
+                  return String(e.initiatedBy) === String(me);
+                });
 
-              const accepted = friendEdges.filter((e) => e.status === "accepted");
-              const blocked = friendEdges.filter((e) => e.status === "blocked");
+                const accepted = friendEdges.filter((e) => e.status === "accepted");
+                const blocked = friendEdges.filter((e) => e.status === "blocked");
 
-              return (
-                <View style={{ gap: 12 }}>
+                return (
+                  <View style={{ gap: 12 }}>
 
-                  <View
-                    style={[
-                      styles.infoCard,
-                      { borderColor: UI.stroke, backgroundColor: UI.card },
-                    ]}
-                  >
-                    <Text style={[styles.infoTitle, { color: UI.text }]}>
-                      Moji přátelé
-                    </Text>
-
-                    {!accepted.length ? (
-                      <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
-                        Zatím žádní přátelé.
-                      </Text>
-                    ) : (
-                      accepted.map((e) => (
-                        <View
-                          key={"acc_" + e.otherUid}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            marginTop: 10,
-                          }}
-                        >
-                          <Text
-  style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-  numberOfLines={1}
->
-  {friendNames[e.otherUid] || e.otherUid}
-</Text>
-                                                    <View style={{ flexDirection: "row", gap: 10 }}>
-                            <Pressable
-                              onPress={() =>
-                                openChallengeInvite(
-                                  e.otherUid,
-                                  friendNames[e.otherUid] || e.otherUid
-                                )
-                              }
-                              style={({ pressed }) => [
-                                styles.smallBtn,
-                                !premium && { opacity: 0.55 },
-                                pressed && { opacity: 0.9 },
-                              ]}
-                            >
-                              <Text style={styles.smallBtnText}>Vyzvat</Text>
-                            </Pressable>
-
-                            <Pressable
-                              onPress={async () => {
-                                try {
-                                  setFriendsBusy(true);
-                                  await removeFriend(e.otherUid);
-                                } catch (err: any) {
-                                  Alert.alert(
-                                    "Přátelé",
-                                    err?.message ?? "Nepodařilo se odebrat."
-                                  );
-                                } finally {
-                                  setFriendsBusy(false);
-                                }
-                              }}
-                              style={({ pressed }) => [
-                                styles.smallBtnGhost,
-                                pressed && { opacity: 0.9 },
-                              ]}
-                            >
-                              <Text style={styles.smallBtnGhostText}>Odebrat</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      ))
-                    )}
-                  </View>
-
-                  {!!incoming.length && (
                     <View
                       style={[
                         styles.infoCard,
@@ -1898,56 +1833,185 @@ if (!cancelled) {
                       ]}
                     >
                       <Text style={[styles.infoTitle, { color: UI.text }]}>
-                        Příchozí žádosti
+                        Moji přátelé
                       </Text>
-                      {incoming.map((e) => (
-                        <View
-                          key={"in_" + e.otherUid}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            marginTop: 10,
-                          }}
-                        >
-                          <Text
-                            style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-                            numberOfLines={1}
+
+                      {!accepted.length ? (
+                        <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
+                          Zatím žádní přátelé.
+                        </Text>
+                      ) : (
+                        accepted.map((e) => (
+                          <View
+                            key={"acc_" + e.otherUid}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginTop: 10,
+                            }}
                           >
-                            {friendNames[e.otherUid] || e.otherUid}
-                          </Text>
-                          <View style={{ flexDirection: "row", gap: 10 }}>
-                            <Pressable
-                              onPress={async () => {
-                                try {
-                                  const acceptedCount = friendEdges.filter(
-                                    (x) => x.status === "accepted"
-                                  ).length;
-                                  if (!premium && acceptedCount >= 1) {
+                            <Text
+                              style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+                              numberOfLines={1}
+                            >
+                              {getShownFriendName(e.otherUid)}
+                            </Text>
+                            <View style={{ flexDirection: "row", gap: 10 }}>
+                              <Pressable
+                                onPress={() =>
+                                  openChallengeInvite(
+                                    e.otherUid,
+                                    getShownFriendName(e.otherUid)
+                                  )
+                                }
+                                style={({ pressed }) => [
+                                  styles.smallBtn,
+                                  !premium && { opacity: 0.55 },
+                                  pressed && { opacity: 0.9 },
+                                ]}
+                              >
+                                <Text style={styles.smallBtnText}>Vyzvat</Text>
+                              </Pressable>
+
+                              <Pressable
+                                onPress={async () => {
+                                  try {
+                                    setFriendsBusy(true);
+                                    await removeFriend(e.otherUid);
+                                  } catch (err: any) {
                                     Alert.alert(
                                       "Přátelé",
-                                      "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium."
+                                      err?.message ?? "Nepodařilo se odebrat."
                                     );
-                                    return;
+                                  } finally {
+                                    setFriendsBusy(false);
                                   }
-                                  setFriendsBusy(true);
-                                  await acceptFriend(e.otherUid);
-                                } catch (err: any) {
-                                  Alert.alert(
-                                    "Přátelé",
-                                    err?.message ?? "Nepodařilo se přijmout."
-                                  );
-                                } finally {
-                                  setFriendsBusy(false);
-                                }
-                              }}
-                              style={({ pressed }) => [
-                                styles.smallBtn,
-                                pressed && { opacity: 0.9 },
-                              ]}
+                                }}
+                                style={({ pressed }) => [
+                                  styles.smallBtnGhost,
+                                  pressed && { opacity: 0.9 },
+                                ]}
+                              >
+                                <Text style={styles.smallBtnGhostText}>Odebrat</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </View>
+
+                    {!!incoming.length && (
+                      <View
+                        style={[
+                          styles.infoCard,
+                          { borderColor: UI.stroke, backgroundColor: UI.card },
+                        ]}
+                      >
+                        <Text style={[styles.infoTitle, { color: UI.text }]}>
+                          Příchozí žádosti
+                        </Text>
+                        {incoming.map((e) => (
+                          <View
+                            key={"in_" + e.otherUid}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginTop: 10,
+                            }}
+                          >
+                            <Text
+                              style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+                              numberOfLines={1}
                             >
-                              <Text style={styles.smallBtnText}>Přijmout</Text>
-                            </Pressable>
+                              {getShownFriendName(e.otherUid)}
+                            </Text>
+                            <View style={{ flexDirection: "row", gap: 10 }}>
+                              <Pressable
+                                onPress={async () => {
+                                  try {
+                                    const acceptedCount = friendEdges.filter(
+                                      (x) => x.status === "accepted"
+                                    ).length;
+                                    if (!premium && acceptedCount >= 1) {
+                                      Alert.alert(
+                                        "Přátelé",
+                                        "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium."
+                                      );
+                                      return;
+                                    }
+                                    setFriendsBusy(true);
+                                    await acceptFriend(e.otherUid);
+                                  } catch (err: any) {
+                                    Alert.alert(
+                                      "Přátelé",
+                                      err?.message ?? "Nepodařilo se přijmout."
+                                    );
+                                  } finally {
+                                    setFriendsBusy(false);
+                                  }
+                                }}
+                                style={({ pressed }) => [
+                                  styles.smallBtn,
+                                  pressed && { opacity: 0.9 },
+                                ]}
+                              >
+                                <Text style={styles.smallBtnText}>Přijmout</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={async () => {
+                                  try {
+                                    setFriendsBusy(true);
+                                    await declineFriend(e.otherUid);
+                                  } catch (err: any) {
+                                    Alert.alert(
+                                      "Přátelé",
+                                      err?.message ?? "Nepodařilo se odmítnout."
+                                    );
+                                  } finally {
+                                    setFriendsBusy(false);
+                                  }
+                                }}
+                                style={({ pressed }) => [
+                                  styles.smallBtnGhost,
+                                  pressed && { opacity: 0.9 },
+                                ]}
+                              >
+                                <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {!!outgoing.length && (
+                      <View
+                        style={[
+                          styles.infoCard,
+                          { borderColor: UI.stroke, backgroundColor: UI.card },
+                        ]}
+                      >
+                        <Text style={[styles.infoTitle, { color: UI.text }]}>
+                          Odeslané žádosti
+                        </Text>
+                        {outgoing.map((e) => (
+                          <View
+                            key={"out_" + e.otherUid}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginTop: 10,
+                            }}
+                          >
+                            <Text
+                              style={{ color: UI.sub, fontWeight: "900", flex: 1 }}
+                              numberOfLines={1}
+                            >
+                              {getShownFriendName(e.otherUid)}
+                            </Text>
                             <Pressable
                               onPress={async () => {
                                 try {
@@ -1956,7 +2020,7 @@ if (!cancelled) {
                                 } catch (err: any) {
                                   Alert.alert(
                                     "Přátelé",
-                                    err?.message ?? "Nepodařilo se odmítnout."
+                                    err?.message ?? "Nepodařilo se zrušit."
                                   );
                                 } finally {
                                   setFriendsBusy(false);
@@ -1967,90 +2031,39 @@ if (!cancelled) {
                                 pressed && { opacity: 0.9 },
                               ]}
                             >
-                              <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
+                              <Text style={styles.smallBtnGhostText}>Zrušit</Text>
                             </Pressable>
                           </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+                        ))}
+                      </View>
+                    )}
 
-                  {!!outgoing.length && (
-                    <View
-                      style={[
-                        styles.infoCard,
-                        { borderColor: UI.stroke, backgroundColor: UI.card },
-                      ]}
-                    >
-                      <Text style={[styles.infoTitle, { color: UI.text }]}>
-                        Odeslané žádosti
-                      </Text>
-                      {outgoing.map((e) => (
-                        <View
-                          key={"out_" + e.otherUid}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            marginTop: 10,
-                          }}
-                        >
+                    {!!blocked.length && (
+                      <View
+                        style={[
+                          styles.infoCard,
+                          { borderColor: UI.stroke, backgroundColor: UI.card },
+                        ]}
+                      >
+                        <Text style={[styles.infoTitle, { color: UI.text }]}>
+                          Blokovaní
+                        </Text>
+                        {blocked.map((e) => (
                           <Text
-                            style={{ color: UI.sub, fontWeight: "900", flex: 1 }}
+                            key={"blocked_" + e.otherUid}
+                            style={{ color: UI.text, fontWeight: "900", flex: 1, marginTop: 10 }}
                             numberOfLines={1}
                           >
-                            {friendNames[e.otherUid] || e.otherUid}
+                            {getShownFriendName(e.otherUid)}
                           </Text>
-                          <Pressable
-                            onPress={async () => {
-                              try {
-                                setFriendsBusy(true);
-                                await declineFriend(e.otherUid);
-                              } catch (err: any) {
-                                Alert.alert(
-                                  "Přátelé",
-                                  err?.message ?? "Nepodařilo se zrušit."
-                                );
-                              } finally {
-                                setFriendsBusy(false);
-                              }
-                            }}
-                            style={({ pressed }) => [
-                              styles.smallBtnGhost,
-                              pressed && { opacity: 0.9 },
-                            ]}
-                          >
-                            <Text style={styles.smallBtnGhostText}>Zrušit</Text>
-                          </Pressable>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {!!blocked.length && (
-                    <View
-                      style={[
-                        styles.infoCard,
-                        { borderColor: UI.stroke, backgroundColor: UI.card },
-                      ]}
-                    >
-                      <Text style={[styles.infoTitle, { color: UI.text }]}>
-                        Blokovaní
-                      </Text>
-                      {blocked.map((e) => (
-                       <Text
-  style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-  numberOfLines={1}
->
-  {friendNames[e.otherUid] || e.otherUid}
-</Text>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              );
-            })()}
-          </ScrollView>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+            </ScrollView>
+          )}
         </View>
       </Modal>
 
