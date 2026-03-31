@@ -834,11 +834,13 @@ export default function Index() {
   const [sharedTodayMap, setSharedTodayMap] = useState<Record<string, SharedChallengeDayProgress | null>>({});
   const [sharedFriendNames, setSharedFriendNames] = useState<Record<string, string>>({});
   const [sharedProgressMap, setSharedProgressMap] = useState<Record<string, SharedChallengeDayProgress[]>>({});
+
   useEffect(() => {
     return subscribeState((next) => {
       setAppState(next);
     });
   }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -1406,10 +1408,27 @@ export default function Index() {
     return Math.max(0, Math.min(1, done / Math.max(1, target)));
   }
 
-  function getSharedOtherUid(item: SharedChallenge): string | null {
+  function getSharedOtherUids(item: SharedChallenge): string[] {
     const me = auth.currentUser?.uid ?? "";
-    const other = item.memberUids.find((uid) => String(uid) !== String(me));
-    return other ? String(other) : null;
+    return item.memberUids
+      .filter((uid) => String(uid) !== String(me))
+      .map((uid) => String(uid));
+  }
+
+  function getSharedDisplayName(uid: string): string {
+    const me = auth.currentUser?.uid ?? "";
+    if (String(uid) === String(me)) return "Ty";
+    return sharedFriendNames[String(uid)] || String(uid);
+  }
+
+  function getSharedCompactLabel(item: SharedChallenge): string {
+    const otherNames = getSharedOtherUids(item).map((uid) => sharedFriendNames[uid] || uid);
+
+    if (!otherNames.length) return "Společná výzva";
+    if (otherNames.length === 1) return `S kamarádem: ${otherNames[0]}`;
+    if (otherNames.length === 2) return `S přáteli: ${otherNames[0]}, ${otherNames[1]}`;
+
+    return `S přáteli: ${otherNames.slice(0, 2).join(", ")} +${otherNames.length - 2}`;
   }
 
   function getSharedUserCompletedCount(item: SharedChallenge, uid: string): number {
@@ -1446,7 +1465,7 @@ export default function Index() {
     if (!me) return;
 
     if (item.status !== "active") {
-      Alert.alert("Společná výzva", "Tato výzva ještě nebyla přijata oběma stranami.");
+      Alert.alert("Společná výzva", "Tato výzva ještě nebyla přijata všemi členy.");
       return;
     }
 
@@ -2229,15 +2248,19 @@ export default function Index() {
 
                     {visibleSharedChallenges.map((item) => {
                       const me = auth.currentUser?.uid ?? "";
-                      const otherUid = getSharedOtherUid(item);
-                      const otherName = otherUid ? sharedFriendNames[otherUid] || otherUid : "Kamarád";
+                      const memberRows = item.memberUids.map((uid) => {
+                        const safeUid = String(uid);
+                        return {
+                          uid: safeUid,
+                          isMe: safeUid === me,
+                          name: getSharedDisplayName(safeUid),
+                          done: getSharedUserCompletedCount(item, safeUid),
+                          ratio: getSharedUserDoneRatio(item, safeUid),
+                          flame: getSharedUserFlame(item, safeUid),
+                        };
+                      });
 
                       const myDone = getSharedUserCompletedCount(item, me);
-                      const otherDone = otherUid ? getSharedUserCompletedCount(item, otherUid) : 0;
-
-                      const myRatio = getSharedUserDoneRatio(item, me);
-                      const otherRatio = otherUid ? getSharedUserDoneRatio(item, otherUid) : 0;
-
                       const activeToday = isSharedChallengeActiveOnDate(item, getSharedTodayISO());
                       const myDoneToday = myDone >= item.targetPerDay;
                       const expanded = expandedSharedId === item.id;
@@ -2260,7 +2283,7 @@ export default function Index() {
                                 </Text>
 
                                 <Text style={styles.sharedCompactMeta} numberOfLines={1}>
-                                  S kamarádem: {otherName}
+                                  {getSharedCompactLabel(item)}
                                 </Text>
                               </View>
 
@@ -2288,7 +2311,7 @@ export default function Index() {
                                     <Text style={styles.sharedPendingText}>
                                       {!iAccepted
                                         ? "Tuto společnou výzvu ti poslal kamarád. Nejprve ji přijmi."
-                                        : "Ty už jsi výzvu přijal. Čeká se na druhou stranu."}
+                                        : `Ty už jsi výzvu přijal. Čeká se na ostatní (${item.acceptedBy.length}/${item.memberUids.length}).`}
                                     </Text>
 
                                     {!iAccepted ? (
@@ -2304,7 +2327,7 @@ export default function Index() {
                                     ) : (
                                       <View style={[styles.modalRow, { marginTop: 0 }]}>
                                         <Text style={[styles.modalLabel, { color: UI.text }]}>
-                                          Čeká se na kamaráda
+                                          Čeká se na ostatní členy
                                         </Text>
                                       </View>
                                     )}
@@ -2346,56 +2369,46 @@ export default function Index() {
                                       </Pressable>
                                     </View>
 
-                                    <View style={styles.sharedPlayersRow}>
-                                      <View style={styles.sharedPlayerCol}>
-                                        <Text style={styles.sharedPlayerName}>Ty</Text>
-                                        <View style={styles.sharedFlameRow}>
-                                          <Text style={styles.sharedFlameNum}>{getSharedUserFlame(item, me)}</Text>
-                                          <Image
-                                            source={FLAME_IMG}
-                                            style={{
-                                              width: 42,
-                                              height: 42,
-                                              marginLeft: -8,
-                                              marginTop: -2,
-                                              opacity: 1,
-                                            }}
-                                            resizeMode="contain"
-                                          />
-                                        </View>
-                                        <Text style={styles.sharedPlayerMeta}>
-                                          {activeToday ? `Splněno ${myDone}/${item.targetPerDay}` : "Volný den"}
-                                        </Text>
-                                        <View style={styles.sharedBarTrack}>
-                                          <View style={[styles.sharedBarFill, { width: `${Math.round(myRatio * 100)}%` }]} />
-                                        </View>
-                                      </View>
-
-                                      <View style={styles.sharedPlayerCol}>
-                                        <Text style={styles.sharedPlayerName}>{otherName}</Text>
-                                        <View style={styles.sharedFlameRow}>
-                                          <Text style={styles.sharedFlameNum}>
-                                            {otherUid ? getSharedUserFlame(item, otherUid) : 0}
+                                    <View style={{ marginTop: 12, gap: 12 }}>
+                                      {memberRows.map((member) => (
+                                        <View
+                                          key={member.uid}
+                                          style={{
+                                            borderWidth: 1,
+                                            borderColor: UI.stroke,
+                                            backgroundColor: UI.card2,
+                                            borderRadius: 16,
+                                            padding: 12,
+                                          }}
+                                        >
+                                          <Text style={styles.sharedPlayerName}>{member.name}</Text>
+                                          <View style={styles.sharedFlameRow}>
+                                            <Text style={styles.sharedFlameNum}>{member.flame}</Text>
+                                            <Image
+                                              source={FLAME_IMG}
+                                              style={{
+                                                width: 42,
+                                                height: 42,
+                                                marginLeft: -8,
+                                                marginTop: -2,
+                                                opacity: 1,
+                                              }}
+                                              resizeMode="contain"
+                                            />
+                                          </View>
+                                          <Text style={styles.sharedPlayerMeta}>
+                                            {activeToday ? `Splněno ${member.done}/${item.targetPerDay}` : "Volný den"}
                                           </Text>
-                                          <Image
-                                            source={FLAME_IMG}
-                                            style={{
-                                              width: 42,
-                                              height: 42,
-                                              marginLeft: -8,
-                                              marginTop: -2,
-                                              opacity: 1,
-                                            }}
-                                            resizeMode="contain"
-                                          />
+                                          <View style={styles.sharedBarTrack}>
+                                            <View
+                                              style={[
+                                                styles.sharedBarFill,
+                                                { width: `${Math.round(member.ratio * 100)}%` },
+                                              ]}
+                                            />
+                                          </View>
                                         </View>
-                                        <Text style={styles.sharedPlayerMeta}>
-                                          {activeToday ? `Splněno ${otherDone}/${item.targetPerDay}` : "Volný den"}
-                                        </Text>
-                                        <View style={styles.sharedBarTrack}>
-                                          <View style={[styles.sharedBarFill, { width: `${Math.round(otherRatio * 100)}%` }]} />
-                                        </View>
-                                      </View>
+                                      ))}
                                     </View>
                                   </>
                                 )}
@@ -2539,9 +2552,9 @@ export default function Index() {
 
                             !isCompleteToday &&
                               item.enabled !== false && {
-                              opacity: pressed ? 0.88 : 1,
-                              transform: [{ scale: pressed ? 0.98 : 1 }],
-                            },
+                                opacity: pressed ? 0.88 : 1,
+                                transform: [{ scale: pressed ? 0.98 : 1 }],
+                              },
                           ]}
                           hitSlop={10}
                         >

@@ -7,9 +7,9 @@ service cloud.firestore {
 
     // User data
     match /users/{uid} {
-  allow read: if signedIn();
-  allow write: if isMe(uid);
-}
+      allow read: if signedIn();
+      allow write: if isMe(uid);
+    }
 
     // Friends graph (read-only from client; writes only via Cloud Functions)
     match /friends/{uid}/list/{otherUid} {
@@ -20,6 +20,7 @@ service cloud.firestore {
     // Username registry: usernames/{usernameLower} -> { uid }
     match /usernames/{uname} {
       allow read: if signedIn();
+
       // create: only owner can create
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
 
@@ -43,11 +44,12 @@ service cloud.firestore {
       allow read: if signedIn() && request.auth.uid in resource.data.memberUids;
 
       // Vytvořit může jen přihlášený uživatel, který je createdBy
-      // a zároveň je jedním ze dvou členů výzvy
+      // a zároveň je členem výzvy; povoleno 2 až 10 členů
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.memberUids is list
-        && request.resource.data.memberUids.size() == 2
+        && request.resource.data.memberUids.size() >= 2
+        && request.resource.data.memberUids.size() <= 10
         && request.auth.uid in request.resource.data.memberUids;
 
       // Update může udělat jen člen výzvy
@@ -74,6 +76,7 @@ service cloud.firestore {
 
       allow delete: if false;
     }
+
     // Legacy invites (nepoužívat; ponecháno kvůli zpětné kompatibilitě)
     match /invites/{token} {
       allow read, write: if false;

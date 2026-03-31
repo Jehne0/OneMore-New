@@ -17,7 +17,11 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createSharedChallenge, dowMon0 } from "../../lib/sharedChallenges";
+import {
+  createSharedChallenge,
+  dowMon0,
+  MAX_SHARED_MEMBERS,
+} from "../../lib/sharedChallenges";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getOfferingPackages,
@@ -128,8 +132,7 @@ export default function ProfileTabScreen() {
 
   // ✅ Shared challenge modal
   const [challengeInviteOpen, setChallengeInviteOpen] = useState(false);
-  const [challengeInviteFriendUid, setChallengeInviteFriendUid] = useState<string | null>(null);
-  const [challengeInviteFriendName, setChallengeInviteFriendName] = useState("");
+  const [challengeInviteFriendUids, setChallengeInviteFriendUids] = useState<string[]>([]);
   const [challengeInviteTitle, setChallengeInviteTitle] = useState("");
   const [challengeInviteTarget, setChallengeInviteTarget] = useState(1);
   const [challengeInvitePeriod, setChallengeInvitePeriod] = useState<"daily" | "every2" | "custom">("daily");
@@ -139,7 +142,7 @@ export default function ProfileTabScreen() {
   // ✅ změna hesla (v Účet)
   const [pwdOpen, setPwdOpen] = useState(false);
   const [pwdEmail, setPwdEmail] = useState(
-    (auth.currentUser?.email ?? "").trim()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+    (auth.currentUser?.email ?? "").trim()
   );
   const [pwdSending, setPwdSending] = useState(false);
   const [pwdError, setPwdError] = useState<string | null>(null);
@@ -573,8 +576,7 @@ export default function ProfileTabScreen() {
   };
 
   function resetChallengeInviteForm() {
-    setChallengeInviteFriendUid(null);
-    setChallengeInviteFriendName("");
+    setChallengeInviteFriendUids([]);
     setChallengeInviteTitle("");
     setChallengeInviteTarget(1);
     setChallengeInvitePeriod("daily");
@@ -582,7 +584,7 @@ export default function ProfileTabScreen() {
     setChallengeInviteBusy(false);
   }
 
-  function openChallengeInvite(friendUid: string, friendName: string) {
+  function openChallengeInvite(friendUid: string) {
     if (!premium) {
       Alert.alert(
         "Premium",
@@ -591,8 +593,7 @@ export default function ProfileTabScreen() {
       return;
     }
 
-    setChallengeInviteFriendUid(String(friendUid));
-    setChallengeInviteFriendName(String(friendName || ""));
+    setChallengeInviteFriendUids([String(friendUid)]);
     setChallengeInviteTitle("");
     setChallengeInviteTarget(1);
     setChallengeInvitePeriod("daily");
@@ -617,11 +618,18 @@ export default function ProfileTabScreen() {
         return;
       }
 
-      const friendUid = String(challengeInviteFriendUid ?? "").trim();
+      const friendUids = Array.from(
+        new Set(
+          (challengeInviteFriendUids ?? [])
+            .map((x) => String(x ?? "").trim())
+            .filter(Boolean)
+        )
+      ).slice(0, MAX_SHARED_MEMBERS - 1);
+
       const title = challengeInviteTitle.trim();
 
-      if (!friendUid) {
-        showPwdPopup("error", "Společná výzva", "Chybí vybraný přítel.");
+      if (!friendUids.length) {
+        showPwdPopup("error", "Společná výzva", "Vyber aspoň jednoho přítele.");
         return;
       }
 
@@ -639,7 +647,7 @@ export default function ProfileTabScreen() {
 
       await createSharedChallenge({
         title,
-        friendUid,
+        friendUids,
         targetPerDay: challengeInviteTarget,
         period: challengeInvitePeriod,
         customDays:
@@ -658,7 +666,7 @@ export default function ProfileTabScreen() {
       showPwdPopup(
         "success",
         "Společná výzva",
-        `Výzva byla vytvořena${challengeInviteFriendName ? ` pro ${challengeInviteFriendName}` : ""}.`
+        `Výzva byla vytvořena pro ${friendUids.length} ${friendUids.length === 1 ? "přítele" : friendUids.length >= 2 && friendUids.length <= 4 ? "přátele" : "přátel"}.`
       );
     } catch (e: any) {
       showPwdPopup(
@@ -670,6 +678,7 @@ export default function ProfileTabScreen() {
       setChallengeInviteBusy(false);
     }
   }
+
   const infoTitle = useMemo(() => {
     switch (infoScreen) {
       case "menu":
@@ -1859,12 +1868,7 @@ export default function ProfileTabScreen() {
                             </Text>
                             <View style={{ flexDirection: "row", gap: 10 }}>
                               <Pressable
-                                onPress={() =>
-                                  openChallengeInvite(
-                                    e.otherUid,
-                                    getShownFriendName(e.otherUid)
-                                  )
-                                }
+                                onPress={() => openChallengeInvite(e.otherUid)}
                                 style={({ pressed }) => [
                                   styles.smallBtn,
                                   !premium && { opacity: 0.55 },
@@ -2255,14 +2259,60 @@ export default function ProfileTabScreen() {
               ]}
             >
               <Text style={[styles.infoTitle, { color: UI.text }]}>
-                {challengeInviteFriendName
-                  ? `Vyzvat: ${challengeInviteFriendName}`
-                  : "Společná výzva"}
+                Společná výzva
               </Text>
 
               <Text style={[styles.infoText, { color: UI.sub, marginTop: -2 }]}>
-                Tato funkce je dostupná v Premium verzi.
+                Vyber až {MAX_SHARED_MEMBERS - 1} přátel do jedné výzvy.
               </Text>
+
+              <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
+                Přátelé
+              </Text>
+
+              <View style={styles.challengePills}>
+                {friendEdges
+                  .filter((e) => e.status === "accepted")
+                  .map((e) => {
+                    const uid = String(e.otherUid);
+                    const active = challengeInviteFriendUids.includes(uid);
+                    const disabled =
+                      !active &&
+                      challengeInviteFriendUids.length >= MAX_SHARED_MEMBERS - 1;
+
+                    return (
+                      <Pressable
+                        key={uid}
+                        onPress={() => {
+                          setChallengeInviteFriendUids((prev) => {
+                            const has = prev.includes(uid);
+                            if (has) return prev.filter((x) => x !== uid);
+                            if (prev.length >= MAX_SHARED_MEMBERS - 1) return prev;
+                            return [...prev, uid];
+                          });
+                        }}
+                        style={({ pressed }) => [
+                          styles.challengePill,
+                          {
+                            borderColor: active ? UI.accent : UI.stroke,
+                            backgroundColor: active ? UI.accent : UI.card2,
+                            opacity: disabled ? 0.45 : 1,
+                          },
+                          pressed && { opacity: disabled ? 0.45 : 0.9 },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.challengePillText,
+                            { color: active ? "#0B1220" : UI.text },
+                          ]}
+                        >
+                          {getShownFriendName(uid)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+              </View>
 
               <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
                 Název výzvy

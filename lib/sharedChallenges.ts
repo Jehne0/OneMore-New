@@ -15,6 +15,8 @@ import { auth, db } from "./firebase";
 export type SharedChallengePeriod = "daily" | "every2" | "custom";
 export type SharedChallengeStatus = "pending" | "active" | "declined";
 
+export const MAX_SHARED_MEMBERS = 10; // včetně mě
+
 export type SharedChallenge = {
   id: string;
   title: string;
@@ -33,7 +35,7 @@ export type SharedChallenge = {
 
 export type SharedChallengeCreateInput = {
   title: string;
-  friendUid: string;
+  friendUids: string[];
   targetPerDay?: number;
   period?: SharedChallengePeriod;
   customDays?: number[];
@@ -76,6 +78,18 @@ function dedupeDays(days?: number[]) {
     : [];
 
   return Array.from(new Set(safe)).sort((a, b) => a - b);
+}
+
+function dedupeMemberUids(input: string[], me: string) {
+  const safe = Array.isArray(input)
+    ? input
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean)
+        .filter((x) => x !== me)
+    : [];
+
+  const uniqueFriends = Array.from(new Set(safe)).slice(0, MAX_SHARED_MEMBERS - 1);
+  return [me, ...uniqueFriends];
 }
 
 export function getTodayISO() {
@@ -131,9 +145,16 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
   const title = String(input.title ?? "").trim();
   if (!title) throw new Error("Zadej název výzvy.");
 
-  const friendUid = String(input.friendUid ?? "").trim();
-  if (!friendUid) throw new Error("Chybí kamarád.");
-  if (friendUid === uid) throw new Error("Nemůžeš vytvořit společnou výzvu sám se sebou.");
+  const friendUidsRaw = Array.isArray(input.friendUids) ? input.friendUids : [];
+  const memberUids = dedupeMemberUids(friendUidsRaw, uid);
+
+  if (memberUids.length < 2) {
+    throw new Error("Vyber aspoň jednoho kamaráda.");
+  }
+
+  if (memberUids.length > MAX_SHARED_MEMBERS) {
+    throw new Error(`Společná výzva může mít maximálně ${MAX_SHARED_MEMBERS} členů.`);
+  }
 
   const targetPerDay = clamp(Number(input.targetPerDay ?? 1) || 1, 1, 20);
 
@@ -155,7 +176,7 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
   const payload: Omit<SharedChallenge, "id"> = {
     title,
     createdBy: uid,
-    memberUids: [uid, friendUid],
+    memberUids,
     targetPerDay,
     period,
     customDays,
@@ -325,7 +346,7 @@ export async function completeSharedChallengeToday(challengeId: string, dateISO 
   if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
   if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
   if (challenge.status !== "active") {
-    throw new Error("Tato společná výzva ještě nebyla přijata oběma stranami.");
+    throw new Error("Tato společná výzva ještě nebyla přijata všemi členy.");
   }
   if (!isSharedChallengeActiveOnDate(challenge, dateISO)) {
     throw new Error("Dnes je podle periody volno.");
