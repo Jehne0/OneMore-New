@@ -51,7 +51,11 @@ import {
   updateStatsOnCompleted,
 } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
-import { medalCountsFromChallengeStats } from "../../lib/medals";
+import {
+  medalCountsFromChallengeStats,
+  tierForBestStreak,
+  type MedalTier,
+} from "../../lib/medals";
 import * as Haptics from "expo-haptics";
 
 const FLAME_IMG = require("../../assets/images/flame.png");
@@ -321,12 +325,18 @@ function makeStyles(UI: any) {
     },
     medalsRow: {
       flexDirection: "row",
-      alignItems: "flex-end",
+      alignItems: "flex-start",
       gap: 8,
       paddingRight: 2,
       marginTop: 6,
     },
     medalItem: {
+      width: 34,
+      alignItems: "center",
+    },
+    medalIconBox: {
+      width: 34,
+      height: 34,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -335,11 +345,14 @@ function makeStyles(UI: any) {
       height: 34,
     },
     medalCount: {
-      marginTop: 0,
+      marginTop: 4,
+      minHeight: 14,
       fontSize: 12,
       fontWeight: "900",
       color: UI.text,
       opacity: 0.92,
+      lineHeight: 14,
+      textAlign: "center",
     },
     medalDim: {
       opacity: 0.22,
@@ -1532,7 +1545,42 @@ export default function Index() {
     return max;
   }, [appState?.challenges, appState?.challengeStats]);
 
-  const medalState = useMemo(() => medalsFromChallengeStats(appState?.challengeStats), [appState?.challengeStats]);
+  const medalState = useMemo(
+    () => medalsFromChallengeStats(appState?.challengeStats),
+    [appState?.challengeStats]
+  );
+
+  function medalLabel(tier: MedalTier): string {
+    switch (tier) {
+      case "brambora":
+        return "Brambora";
+      case "steel":
+        return "Ocel";
+      case "bronze":
+        return "Bronz";
+      case "silver":
+        return "Stříbro";
+      case "gold":
+        return "Zlato";
+      case "diamond":
+        return "Diamant";
+      default:
+        return "Žádná";
+    }
+  }
+
+  const selectedChallengeMedal = useMemo(() => {
+    if (!selectedId) return "none" as MedalTier;
+    const stats = appState?.challengeStats?.[String(selectedId)];
+    const bestStreak = Number(stats?.bestStreak ?? 0);
+    return tierForBestStreak(bestStreak);
+  }, [appState?.challengeStats, selectedId]);
+
+  const selectedChallengeBestStreak = useMemo(() => {
+    if (!selectedId) return 0;
+    const stats = appState?.challengeStats?.[String(selectedId)];
+    return Number(stats?.bestStreak ?? 0);
+  }, [appState?.challengeStats, selectedId]);
 
   const timeline = useMemo(() => {
     if (!selectedId) return [];
@@ -1733,66 +1781,78 @@ export default function Index() {
 
           <View style={styles.medalsRow}>
             <View style={styles.medalItem}>
-              <Image
-                source={MEDAL_BRAMBORA}
-                style={[styles.medalImg, !medalState.active.brambora && styles.medalDim]}
-                resizeMode="contain"
-              />
+              <View style={styles.medalIconBox}>
+                <Image
+                  source={MEDAL_BRAMBORA}
+                  style={[styles.medalImg, !medalState.active.brambora && styles.medalDim]}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={[styles.medalCount, !medalState.active.brambora && styles.medalCountDim]}>
                 {medalState.counts.brambora}
               </Text>
             </View>
 
             <View style={styles.medalItem}>
-              <Image
-                source={MEDAL_STEEL}
-                style={[styles.medalImg, !medalState.active.steel && styles.medalDim]}
-                resizeMode="contain"
-              />
+              <View style={styles.medalIconBox}>
+                <Image
+                  source={MEDAL_STEEL}
+                  style={[styles.medalImg, !medalState.active.steel && styles.medalDim]}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={[styles.medalCount, !medalState.active.steel && styles.medalCountDim]}>
                 {medalState.counts.steel}
               </Text>
             </View>
 
             <View style={styles.medalItem}>
-              <Image
-                source={MEDAL_BRONZE}
-                style={[styles.medalImg, !medalState.active.bronze && styles.medalDim]}
-                resizeMode="contain"
-              />
+              <View style={styles.medalIconBox}>
+                <Image
+                  source={MEDAL_BRONZE}
+                  style={[styles.medalImg, !medalState.active.bronze && styles.medalDim]}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={[styles.medalCount, !medalState.active.bronze && styles.medalCountDim]}>
                 {medalState.counts.bronze}
               </Text>
             </View>
 
             <View style={styles.medalItem}>
-              <Image
-                source={MEDAL_SILVER}
-                style={[styles.medalImg, !medalState.active.silver && styles.medalDim]}
-                resizeMode="contain"
-              />
+              <View style={styles.medalIconBox}>
+                <Image
+                  source={MEDAL_SILVER}
+                  style={[styles.medalImg, !medalState.active.silver && styles.medalDim]}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={[styles.medalCount, !medalState.active.silver && styles.medalCountDim]}>
                 {medalState.counts.silver}
               </Text>
             </View>
 
             <View style={styles.medalItem}>
-              <Image
-                source={MEDAL_GOLD}
-                style={[styles.medalImg, !medalState.active.gold && styles.medalDim]}
-                resizeMode="contain"
-              />
+              <View style={styles.medalIconBox}>
+                <Image
+                  source={MEDAL_GOLD}
+                  style={[styles.medalImg, !medalState.active.gold && styles.medalDim]}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={[styles.medalCount, !medalState.active.gold && styles.medalCountDim]}>
                 {medalState.counts.gold}
               </Text>
             </View>
 
             <View style={styles.medalItem}>
-              <Image
-                source={MEDAL_DIAMOND}
-                style={[styles.medalImg, !medalState.active.diamond && styles.medalDim]}
-                resizeMode="contain"
-              />
+              <View style={styles.medalIconBox}>
+                <Image
+                  source={MEDAL_DIAMOND}
+                  style={[styles.medalImg, !medalState.active.diamond && styles.medalDim]}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={[styles.medalCount, !medalState.active.diamond && styles.medalCountDim]}>
                 {medalState.counts.diamond}
               </Text>
@@ -2073,6 +2133,15 @@ export default function Index() {
               {premium && (
                 <Pressable
                   onPress={() => {
+                    if (!premium) {
+                      closeManage();
+                      router.push({
+                        pathname: "/(tabs)/profile",
+                        params: { open: "paywall", t: String(Date.now()) },
+                      } as any);
+                      return;
+                    }
+
                     closeManage();
                     setSelectedId(String(manageId));
                     setHistoryOpen(true);
@@ -2197,6 +2266,46 @@ export default function Index() {
                 <Text style={styles.modalHint}>Vyber výzvu pro zobrazení historie.</Text>
               ) : (
                 <>
+                  <View style={styles.modalRow}>
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      Aktuální medaile
+                    </Text>
+
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      {selectedChallengeMedal === "none" ? (
+                        <View
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            borderWidth: 2,
+                            borderColor: UI.sub,
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <View
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 9,
+                              borderWidth: 2,
+                              borderColor: UI.text,
+                              backgroundColor: "transparent",
+                            }}
+                          />
+                          <Text style={[styles.modalLabel, { color: UI.accent }]}>
+                            {medalLabel(selectedChallengeMedal)}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+
+                  <Text style={styles.modalHint}>
+                    Nejlepší streak této výzvy: {selectedChallengeBestStreak} dní
+                  </Text>
+
                   {([...timeline].reverse() as any[]).map((d: any) => (
                     <View key={d.date} style={styles.historyRow}>
                       <Text style={styles.historyDate}>{d.date}</Text>
@@ -2428,6 +2537,9 @@ export default function Index() {
               const streak = streakForChallenge(id);
               const done = completedTodayCount(id);
               const target = targetForChallenge(id);
+              const medalTier = tierForBestStreak(
+                Number(appState?.challengeStats?.[id]?.bestStreak ?? 0)
+              );
 
               const activeToday = isChallengeActiveToday(item as any);
 
@@ -2483,6 +2595,7 @@ export default function Index() {
                             <Text style={styles.rowTitle} numberOfLines={1}>
                               {item.text}
                             </Text>
+
                             <Text style={styles.rowDoneSmall}>
                               {activeToday ? `Splněno ${done}/${Math.max(1, target)}` : "Relaxuj :)"}
                             </Text>
