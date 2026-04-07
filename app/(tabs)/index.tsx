@@ -323,37 +323,39 @@ function makeStyles(UI: any) {
       justifyContent: "flex-start",
       gap: 6,
     },
-    medalsRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: 8,
-      paddingRight: 2,
-      marginTop: 6,
-    },
-    medalItem: {
-      width: 34,
-      alignItems: "center",
-    },
-    medalIconBox: {
-      width: 34,
-      height: 34,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    medalImg: {
-      width: 34,
-      height: 34,
-    },
-    medalCount: {
-      marginTop: 4,
-      minHeight: 14,
-      fontSize: 12,
-      fontWeight: "900",
-      color: UI.text,
-      opacity: 0.92,
-      lineHeight: 14,
-      textAlign: "center",
-    },
+ medalsRow: {
+  flexDirection: "row",
+  alignItems: "flex-end",
+  gap: 7,
+  paddingRight: 2,
+  marginTop: 4,
+  marginLeft: 6, // 👉 posun doprava
+},
+medalItem: {
+  width: 36,
+  alignItems: "center",
+},
+medalIconBox: {
+  width: 36,
+  height: 44,
+  alignItems: "center",
+  justifyContent: "flex-end",
+},
+medalImg: {
+  width: 34,
+  height: 34,
+},
+medalCount: {
+  marginTop: 4,
+  height: 14,
+  fontSize: 12,
+  fontWeight: "900",
+  color: UI.text,
+  opacity: 0.92,
+  lineHeight: 14,
+  textAlign: "center",
+  includeFontPadding: false,
+},
     medalDim: {
       opacity: 0.22,
     },
@@ -801,6 +803,15 @@ function makeStyles(UI: any) {
     },
   });
 }
+
+const MEDAL_OFFSETS = {
+  brambora: -5,
+  steel: -5,
+  bronze: -5,
+  silver: 0,
+  gold: 0,
+  diamond: 0,
+};
 
 export default function Index() {
   const router = useRouter();
@@ -1782,11 +1793,15 @@ export default function Index() {
           <View style={styles.medalsRow}>
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-                <Image
-                  source={MEDAL_BRAMBORA}
-                  style={[styles.medalImg, !medalState.active.brambora && styles.medalDim]}
-                  resizeMode="contain"
-                />
+               <Image
+  source={MEDAL_BRAMBORA}
+  style={[
+    styles.medalImg,
+    { marginLeft: -5, marginTop: 0},
+    !medalState.active.brambora && styles.medalDim,
+  ]}
+  resizeMode="contain"
+/>
               </View>
               <Text style={[styles.medalCount, !medalState.active.brambora && styles.medalCountDim]}>
                 {medalState.counts.brambora}
@@ -1795,11 +1810,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-                <Image
-                  source={MEDAL_STEEL}
-                  style={[styles.medalImg, !medalState.active.steel && styles.medalDim]}
-                  resizeMode="contain"
-                />
+               <Image
+  source={MEDAL_STEEL}
+  style={[
+    styles.medalImg,
+    { marginLeft: 1, marginTop: 2 },
+    !medalState.active.steel && styles.medalDim,
+  ]}
+  resizeMode="contain"
+/>
               </View>
               <Text style={[styles.medalCount, !medalState.active.steel && styles.medalCountDim]}>
                 {medalState.counts.steel}
@@ -1808,11 +1827,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-                <Image
-                  source={MEDAL_BRONZE}
-                  style={[styles.medalImg, !medalState.active.bronze && styles.medalDim]}
-                  resizeMode="contain"
-                />
+              <Image
+  source={MEDAL_BRONZE}
+  style={[
+    styles.medalImg,
+    { marginLeft: 5, marginTop: 1 },
+    !medalState.active.bronze && styles.medalDim,
+  ]}
+  resizeMode="contain"
+/>
               </View>
               <Text style={[styles.medalCount, !medalState.active.bronze && styles.medalCountDim]}>
                 {medalState.counts.bronze}
@@ -1822,10 +1845,14 @@ export default function Index() {
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
                 <Image
-                  source={MEDAL_SILVER}
-                  style={[styles.medalImg, !medalState.active.silver && styles.medalDim]}
-                  resizeMode="contain"
-                />
+  source={MEDAL_SILVER}
+  style={[
+    styles.medalImg,
+    { marginLeft: -5, marginTop: 0 },
+    !medalState.active.silver && styles.medalDim,
+  ]}
+  resizeMode="contain"
+/>
               </View>
               <Text style={[styles.medalCount, !medalState.active.silver && styles.medalCountDim]}>
                 {medalState.counts.silver}
@@ -1834,11 +1861,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-                <Image
-                  source={MEDAL_GOLD}
-                  style={[styles.medalImg, !medalState.active.gold && styles.medalDim]}
-                  resizeMode="contain"
-                />
+    <Image
+  source={MEDAL_GOLD}
+  style={[
+    styles.medalImg,
+    { marginLeft: 1, marginTop: 0 },
+    !medalState.active.gold && styles.medalDim,
+  ]}
+  resizeMode="contain"
+/>
               </View>
               <Text style={[styles.medalCount, !medalState.active.gold && styles.medalCountDim]}>
                 {medalState.counts.gold}
@@ -1847,11 +1878,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-                <Image
-                  source={MEDAL_DIAMOND}
-                  style={[styles.medalImg, !medalState.active.diamond && styles.medalDim]}
-                  resizeMode="contain"
-                />
+    <Image
+  source={MEDAL_DIAMOND}
+  style={[
+    styles.medalImg,
+    { marginLeft: 5, marginTop: -1 },
+    !medalState.active.diamond && styles.medalDim,
+  ]}
+  resizeMode="contain"
+/>
               </View>
               <Text style={[styles.medalCount, !medalState.active.diamond && styles.medalCountDim]}>
                 {medalState.counts.diamond}

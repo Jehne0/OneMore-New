@@ -2769,12 +2769,12 @@ export default function ProfileTabScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerBlock}>
-          <Text
+      <Text
   numberOfLines={1}
   ellipsizeMode="tail"
-  style={{ flex: 1, minWidth: 0 }}
+  style={[styles.userName, { flex: 1, minWidth: 0 }]}
 >
-    {myUsername}
+  {myUsername}
 </Text>
 
           {!!email && (
@@ -2899,7 +2899,13 @@ function makeStyles(UI: any) {
     content: { paddingHorizontal: 18, gap: 12 },
 
     headerBlock: { paddingHorizontal: 2, paddingBottom: 6 },
-    userName: { fontSize: 36, lineHeight: 40, fontWeight: "900", color: UI.text },
+    userName: {
+  fontSize: 34,
+  lineHeight: 38,
+  fontWeight: "900",
+  color: UI.text,
+  includeFontPadding: false,
+},
     userEmail: { marginTop: 6, fontSize: 15, fontWeight: "800", color: UI.sub },
 
     versionRow: {
