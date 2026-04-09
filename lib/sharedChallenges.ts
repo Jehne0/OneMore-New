@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -197,13 +198,15 @@ export async function acceptSharedChallenge(challengeId: string) {
   const uid = myUid();
   const challenge = await getSharedChallenge(challengeId);
 
-  if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
+    if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
   if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
 
   const acceptedBy = Array.from(new Set([...(challenge.acceptedBy ?? []), uid]));
   const everyoneAccepted = challenge.memberUids.every((memberUid) =>
     acceptedBy.includes(memberUid)
   );
+
+  
 
   await updateDoc(doc(db, "sharedChallenges", String(challengeId)), {
     acceptedBy,
@@ -212,6 +215,29 @@ export async function acceptSharedChallenge(challengeId: string) {
   });
 }
 
+export async function declineSharedChallenge(challengeId: string) {
+  const uid = myUid();
+  const challenge = await getSharedChallenge(challengeId);
+
+  if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
+  if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
+
+  const nextMemberUids = challenge.memberUids.filter((memberUid) => memberUid !== uid);
+  const nextAcceptedBy = (challenge.acceptedBy ?? []).filter((memberUid) => memberUid !== uid);
+
+  const ref = doc(db, "sharedChallenges", String(challengeId));
+
+  if (nextMemberUids.length < 2) {
+    await deleteDoc(ref);
+    return;
+  }
+
+  await updateDoc(ref, {
+    memberUids: nextMemberUids,
+    acceptedBy: nextAcceptedBy,
+    updatedAt: serverTimestamp(),
+  });
+}
 export function subscribeSharedChallenges(
   onItems: (items: SharedChallenge[]) => void,
   onError?: (e: any) => void

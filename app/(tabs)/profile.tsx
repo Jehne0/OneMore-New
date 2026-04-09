@@ -20,6 +20,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   acceptSharedChallenge,
   createSharedChallenge,
+  declineSharedChallenge,
   dowMon0,
   MAX_SHARED_MEMBERS,
   subscribeSharedChallenges,
@@ -381,6 +382,23 @@ export default function ProfileTabScreen() {
       setFriendsBusy(false);
     }
   }
+
+async function declineSharedInviteFromFriends(challengeId: string) {
+  try {
+    setFriendsBusy(true);
+    await declineSharedChallenge(challengeId);
+    showPwdPopup("success", "Výzva", "Výzva byla odmítnuta.");
+  } catch (e: any) {
+    showPwdPopup(
+      "error",
+      "Výzva",
+      e?.message ?? "Nepodařilo se odmítnout výzvu."
+    );
+  } finally {
+    setFriendsBusy(false);
+  }
+}
+
   const styles = useMemo(() => makeStyles(UI), [UI]);
 
   // ✅ víc oranžové pozadí v light režimu
@@ -2331,15 +2349,17 @@ export default function ProfileTabScreen() {
                           <Text style={styles.smallBtnText}>Přijmout</Text>
                         </Pressable>
 
-                        <Pressable
-                          disabled
-                          style={[
-                            styles.smallBtnGhost,
-                            { opacity: 0.45 },
-                          ]}
-                        >
-                          <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
-                        </Pressable>
+                       <Pressable
+  disabled={friendsBusy}
+  onPress={() => void declineSharedInviteFromFriends(item.id)}
+  style={({ pressed }) => [
+    styles.smallBtnGhost,
+    pressed && { opacity: 0.9 },
+    friendsBusy && { opacity: 0.6 },
+  ]}
+>
+  <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
+</Pressable>
                       </View>
                     </View>
                   ))
