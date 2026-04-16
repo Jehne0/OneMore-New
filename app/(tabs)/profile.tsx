@@ -80,7 +80,7 @@ type InfoScreen =
   | "privacy"
   | "terms"
   | "paywall";
-  type FriendsTab = "friends" | "invites";
+  type FriendsTab = "friends" | "requests" | "invites";
 
 // ✅ veřejné HTML stránky (otevírá se v prohlížeči)
 const PRIVACY_URL = "https://desigame.eu/privacy.html";
@@ -1913,111 +1913,117 @@ async function declineSharedInviteFromFriends(challengeId: string) {
             },
           ]}
         >
-                  <View style={styles.sheetHeader}>
-            <Text style={[styles.sheetTitle, { color: UI.text }]}>
-              {friendsTab === "friends" ? "Přátelé" : "Výzvy"}
-            </Text>
+   <View style={styles.sheetHeader}>
+  {/* LEVÁ STRANA – záložky */}
+  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+    <Pressable
+      onPress={() => setFriendsTab("friends")}
+      style={({ pressed }) => [
+        styles.closeBtn,
+        {
+          borderColor: friendsTab === "friends" ? UI.accent : UI.stroke,
+          backgroundColor: friendsTab === "friends" ? UI.accent : UI.card2,
+        },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <Text
+        style={[
+          styles.closeText,
+          { color: friendsTab === "friends" ? "#0B1220" : UI.text },
+        ]}
+      >
+        Přátelé
+      </Text>
+    </Pressable>
 
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Pressable
-                onPress={() => setFriendsTab("friends")}
-                style={({ pressed }) => [
-                  styles.closeBtn,
-                  {
-                    borderColor: friendsTab === "friends" ? UI.accent : UI.stroke,
-                    backgroundColor: friendsTab === "friends" ? UI.accent : UI.card2,
-                  },
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.closeText,
-                    { color: friendsTab === "friends" ? "#0B1220" : UI.text },
-                  ]}
-                >
-                  Přátelé
-                </Text>
-              </Pressable>
+    <Pressable
+      onPress={() => setFriendsTab("requests")}
+      style={({ pressed }) => [
+        styles.closeBtn,
+        {
+          borderColor: friendsTab === "requests" ? UI.accent : UI.stroke,
+          backgroundColor: friendsTab === "requests" ? UI.accent : UI.card2,
+        },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <Text
+        style={[
+          styles.closeText,
+          { color: friendsTab === "requests" ? "#0B1220" : UI.text },
+        ]}
+      >
+        Žádosti
+      </Text>
+    </Pressable>
 
-              <Pressable
-                onPress={() => setFriendsTab("invites")}
-                style={({ pressed }) => [
-                  styles.closeBtn,
-                  {
-                    borderColor: friendsTab === "invites" ? UI.accent : UI.stroke,
-                    backgroundColor: friendsTab === "invites" ? UI.accent : UI.card2,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                  },
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.closeText,
-                    { color: friendsTab === "invites" ? "#0B1220" : UI.text },
-                  ]}
-                >
-                  Výzvy
-                </Text>
+    <Pressable
+      onPress={() => setFriendsTab("invites")}
+      style={({ pressed }) => [
+        styles.closeBtn,
+        {
+          borderColor: friendsTab === "invites" ? UI.accent : UI.stroke,
+          backgroundColor: friendsTab === "invites" ? UI.accent : UI.card2,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+        },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <Text
+        style={[
+          styles.closeText,
+          { color: friendsTab === "invites" ? "#0B1220" : UI.text },
+        ]}
+      >
+        Výzvy
+      </Text>
 
-                {pendingInviteCount > 0 && (
-                  <View
-                    style={{
-                      minWidth: 22,
-                      height: 22,
-                      borderRadius: 11,
-                      paddingHorizontal: 6,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor:
-                        friendsTab === "invites" ? "rgba(11,18,32,0.16)" : UI.accent,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "900",
-                        color: "#0B1220",
-                      }}
-                    >
-                      +{pendingInviteCount}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
+      {pendingInviteCount > 0 && (
+        <View
+          style={{
+            minWidth: 22,
+            height: 22,
+            borderRadius: 11,
+            paddingHorizontal: 6,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor:
+              friendsTab === "invites" ? "rgba(11,18,32,0.16)" : UI.accent,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "900",
+              color: "#0B1220",
+            }}
+          >
+            +{pendingInviteCount}
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  </View>
 
-              {friendsTab === "friends" && (
-                <Pressable
-                  onPress={() => setAddFriendOpen(true)}
-                  style={({ pressed }) => [
-                    styles.iconBackBtn,
-                    { backgroundColor: UI.card2, borderColor: UI.stroke },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Ionicons name="add" size={22} color={UI.text} />
-                </Pressable>
-              )}
-
-              <Pressable
-                onPress={() => {
-                  setAddFriendOpen(false);
-                  setFriendsOpen(false);
-                  setFriendsTab("friends");
-                }}
-                style={({ pressed }) => [
-                  styles.closeBtn,
-                  { borderColor: UI.stroke, backgroundColor: UI.card2 },
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
-              </Pressable>
-            </View>
-          </View>
+  {/* PRAVÁ STRANA – Zavřít */}
+  <Pressable
+    onPress={() => {
+      setAddFriendOpen(false);
+      setFriendsOpen(false);
+      setFriendsTab("friends");
+    }}
+    style={({ pressed }) => [
+      styles.closeBtn,
+      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+      pressed && { opacity: 0.85 },
+    ]}
+  >
+    <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+  </Pressable>
+</View>
 
                    {friendsTab === "friends" ? (
             friendsLoading ? (
@@ -2055,68 +2061,92 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                           { borderColor: UI.stroke, backgroundColor: UI.card },
                         ]}
                       >
-                        <Text style={[styles.infoTitle, { color: UI.text }]}>
-                          Moji přátelé
-                        </Text>
+                      
+{!accepted.length ? (
+  <>
+    <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
+      Zatím žádní přátelé.
+    </Text>
 
-                        {!accepted.length ? (
-                          <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
-                            Zatím žádní přátelé.
-                          </Text>
-                        ) : (
-                          accepted.map((e) => (
-                            <View
-                              key={"acc_" + e.otherUid}
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                marginTop: 10,
-                              }}
-                            >
-                              <Text
-                                style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-                                numberOfLines={1}
-                              >
-                                {getShownFriendName(e.otherUid)}
-                              </Text>
-                              <View style={{ flexDirection: "row", gap: 10 }}>
-                                <Pressable
-                                  onPress={() => openChallengeInvite(e.otherUid)}
-                                  style={({ pressed }) => [
-                                    styles.smallBtn,
-                                    !premium && { opacity: 0.55 },
-                                    pressed && { opacity: 0.9 },
-                                  ]}
-                                >
-                                  <Text style={styles.smallBtnText}>Vyzvat</Text>
-                                </Pressable>
+    <Pressable
+      onPress={() => setAddFriendOpen(true)}
+      style={({ pressed }) => [
+        styles.smallBtn,
+        { marginTop: 14, alignSelf: "flex-start" },
+        pressed && { opacity: 0.9 },
+      ]}
+    >
+      <Text style={styles.smallBtnText}>+ Přidat přítele</Text>
+    </Pressable>
+  </>
+) : (
+  <>
+    {accepted.map((e) => (
+      <View
+        key={"acc_" + e.otherUid}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginTop: 10,
+        }}
+      >
+        <Text
+          style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+          numberOfLines={1}
+        >
+          {getShownFriendName(e.otherUid)}
+        </Text>
 
-                                <Pressable
-                                  onPress={async () => {
-                                    try {
-                                      setFriendsBusy(true);
-                                      await removeFriend(e.otherUid);
-                                    } catch (err: any) {
-                                      Alert.alert(
-                                        "Přátelé",
-                                        err?.message ?? "Nepodařilo se odebrat."
-                                      );
-                                    } finally {
-                                      setFriendsBusy(false);
-                                    }
-                                  }}
-                                  style={({ pressed }) => [
-                                    styles.smallBtnGhost,
-                                    pressed && { opacity: 0.9 },
-                                  ]}
-                                >
-                                  <Text style={styles.smallBtnGhostText}>Odebrat</Text>
-                                </Pressable>
-                              </View>
-                            </View>
-                          ))
-                        )}
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Pressable
+            onPress={() => openChallengeInvite(e.otherUid)}
+            style={({ pressed }) => [
+              styles.smallBtn,
+              !premium && { opacity: 0.55 },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.smallBtnText}>Vyzvat</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={async () => {
+              try {
+                setFriendsBusy(true);
+                await removeFriend(e.otherUid);
+              } catch (err: any) {
+                Alert.alert(
+                  "Přátelé",
+                  err?.message ?? "Nepodařilo se odebrat."
+                );
+              } finally {
+                setFriendsBusy(false);
+              }
+            }}
+            style={({ pressed }) => [
+              styles.smallBtnGhost,
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.smallBtnGhostText}>Odebrat</Text>
+          </Pressable>
+        </View>
+      </View>
+    ))}
+
+    <Pressable
+      onPress={() => setAddFriendOpen(true)}
+      style={({ pressed }) => [
+        styles.smallBtn,
+        { marginTop: 14, alignSelf: "flex-start" },
+        pressed && { opacity: 0.9 },
+      ]}
+    >
+      <Text style={styles.smallBtnText}>+ Přidat přítele</Text>
+    </Pressable>
+  </>
+)}
                       </View>
 
                       {!!incoming.length && (

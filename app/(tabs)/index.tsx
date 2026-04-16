@@ -8,6 +8,7 @@ import {
   completeSharedChallengeToday,
   getTodayISO as getSharedTodayISO,
   isSharedChallengeActiveOnDate,
+  leaveSharedChallenge,
   subscribeSharedChallengeDay,
   subscribeSharedChallengeProgress,
   subscribeSharedChallenges,
@@ -323,39 +324,39 @@ function makeStyles(UI: any) {
       justifyContent: "flex-start",
       gap: 6,
     },
- medalsRow: {
-  flexDirection: "row",
-  alignItems: "flex-end",
-  gap: 7,
-  paddingRight: 2,
-  marginTop: 4,
-  marginLeft: 6, // 👉 posun doprava
-},
-medalItem: {
-  width: 36,
-  alignItems: "center",
-},
-medalIconBox: {
-  width: 36,
-  height: 44,
-  alignItems: "center",
-  justifyContent: "flex-end",
-},
-medalImg: {
-  width: 34,
-  height: 34,
-},
-medalCount: {
-  marginTop: 4,
-  height: 14,
-  fontSize: 12,
-  fontWeight: "900",
-  color: UI.text,
-  opacity: 0.92,
-  lineHeight: 14,
-  textAlign: "center",
-  includeFontPadding: false,
-},
+    medalsRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 7,
+      paddingRight: 2,
+      marginTop: 4,
+      marginLeft: 6,
+    },
+    medalItem: {
+      width: 36,
+      alignItems: "center",
+    },
+    medalIconBox: {
+      width: 36,
+      height: 44,
+      alignItems: "center",
+      justifyContent: "flex-end",
+    },
+    medalImg: {
+      width: 34,
+      height: 34,
+    },
+    medalCount: {
+      marginTop: 4,
+      height: 14,
+      fontSize: 12,
+      fontWeight: "900",
+      color: UI.text,
+      opacity: 0.92,
+      lineHeight: 14,
+      textAlign: "center",
+      includeFontPadding: false,
+    },
     medalDim: {
       opacity: 0.22,
     },
@@ -758,6 +759,26 @@ medalCount: {
       fontSize: 14,
       fontWeight: "900",
       color: UI.text,
+    },
+    sharedLeaveBtn: {
+      paddingHorizontal: 14,
+      height: 40,
+      borderRadius: 999,
+      backgroundColor: UI.card2,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: UI.stroke,
+    },
+    sharedLeaveBtnText: {
+      fontSize: 14,
+      fontWeight: "900",
+      color: UI.text,
+    },
+    sharedActionsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
     },
     sharedCompactRow: {
       flexDirection: "row",
@@ -1486,7 +1507,10 @@ export default function Index() {
 
   async function markSharedDoneToday(item: SharedChallenge) {
     const me = auth.currentUser?.uid;
-    if (!me) return;
+    if (!me) {
+      Alert.alert("Společná výzva", "Nejsi přihlášený.");
+      return;
+    }
 
     if (item.status !== "active") {
       Alert.alert("Společná výzva", "Tato výzva ještě nebyla přijata všemi členy.");
@@ -1502,7 +1526,29 @@ export default function Index() {
     if (done >= item.targetPerDay) return;
 
     try {
-      await completeSharedChallengeToday(item.id, getSharedTodayISO());
+      const nextCount = await completeSharedChallengeToday(item.id, getSharedTodayISO());
+
+      setSharedTodayMap((prev) => {
+        const prevDay = prev[item.id];
+        const prevUsers = prevDay?.users ?? {};
+        return {
+          ...prev,
+          [item.id]: {
+            date: getSharedTodayISO(),
+            users: {
+              ...prevUsers,
+              [me]: {
+                completedCount: nextCount,
+                completed: nextCount >= item.targetPerDay,
+                updatedAt: new Date(),
+              },
+            },
+            updatedAt: new Date(),
+          },
+        };
+      });
+
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (e: any) {
       Alert.alert("Společná výzva", e?.message ?? "Nepodařilo se uložit splnění.");
     }
@@ -1515,6 +1561,26 @@ export default function Index() {
     } catch (e: any) {
       Alert.alert("Společná výzva", e?.message ?? "Nepodařilo se přijmout výzvu.");
     }
+  }
+
+  function confirmLeaveShared(item: SharedChallenge) {
+    Alert.alert("Odejít z výzvy?", "Opravdu odejít?", [
+      { text: "Ne", style: "cancel" },
+      {
+        text: "Ano",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await leaveSharedChallenge(item.id);
+            if (expandedSharedId === item.id) {
+              setExpandedSharedId(null);
+            }
+          } catch (e: any) {
+            Alert.alert("Společná výzva", e?.message ?? "Nepodařilo se odejít z výzvy.");
+          }
+        },
+      },
+    ]);
   }
 
   function dayStatus(challengeId: string, date: string): DayStatus {
@@ -1793,15 +1859,15 @@ export default function Index() {
           <View style={styles.medalsRow}>
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-               <Image
-  source={MEDAL_BRAMBORA}
-  style={[
-    styles.medalImg,
-    { marginLeft: -5, marginTop: 0},
-    !medalState.active.brambora && styles.medalDim,
-  ]}
-  resizeMode="contain"
-/>
+                <Image
+                  source={MEDAL_BRAMBORA}
+                  style={[
+                    styles.medalImg,
+                    { marginLeft: -5, marginTop: 0 },
+                    !medalState.active.brambora && styles.medalDim,
+                  ]}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[styles.medalCount, !medalState.active.brambora && styles.medalCountDim]}>
                 {medalState.counts.brambora}
@@ -1810,15 +1876,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-               <Image
-  source={MEDAL_STEEL}
-  style={[
-    styles.medalImg,
-    { marginLeft: 1, marginTop: 2 },
-    !medalState.active.steel && styles.medalDim,
-  ]}
-  resizeMode="contain"
-/>
+                <Image
+                  source={MEDAL_STEEL}
+                  style={[
+                    styles.medalImg,
+                    { marginLeft: 1, marginTop: 2 },
+                    !medalState.active.steel && styles.medalDim,
+                  ]}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[styles.medalCount, !medalState.active.steel && styles.medalCountDim]}>
                 {medalState.counts.steel}
@@ -1827,15 +1893,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-              <Image
-  source={MEDAL_BRONZE}
-  style={[
-    styles.medalImg,
-    { marginLeft: 5, marginTop: 1 },
-    !medalState.active.bronze && styles.medalDim,
-  ]}
-  resizeMode="contain"
-/>
+                <Image
+                  source={MEDAL_BRONZE}
+                  style={[
+                    styles.medalImg,
+                    { marginLeft: 5, marginTop: 1 },
+                    !medalState.active.bronze && styles.medalDim,
+                  ]}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[styles.medalCount, !medalState.active.bronze && styles.medalCountDim]}>
                 {medalState.counts.bronze}
@@ -1845,14 +1911,14 @@ export default function Index() {
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
                 <Image
-  source={MEDAL_SILVER}
-  style={[
-    styles.medalImg,
-    { marginLeft: -5, marginTop: 0 },
-    !medalState.active.silver && styles.medalDim,
-  ]}
-  resizeMode="contain"
-/>
+                  source={MEDAL_SILVER}
+                  style={[
+                    styles.medalImg,
+                    { marginLeft: -5, marginTop: 0 },
+                    !medalState.active.silver && styles.medalDim,
+                  ]}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[styles.medalCount, !medalState.active.silver && styles.medalCountDim]}>
                 {medalState.counts.silver}
@@ -1861,15 +1927,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-    <Image
-  source={MEDAL_GOLD}
-  style={[
-    styles.medalImg,
-    { marginLeft: 1, marginTop: 0 },
-    !medalState.active.gold && styles.medalDim,
-  ]}
-  resizeMode="contain"
-/>
+                <Image
+                  source={MEDAL_GOLD}
+                  style={[
+                    styles.medalImg,
+                    { marginLeft: 1, marginTop: 0 },
+                    !medalState.active.gold && styles.medalDim,
+                  ]}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[styles.medalCount, !medalState.active.gold && styles.medalCountDim]}>
                 {medalState.counts.gold}
@@ -1878,15 +1944,15 @@ export default function Index() {
 
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
-    <Image
-  source={MEDAL_DIAMOND}
-  style={[
-    styles.medalImg,
-    { marginLeft: 5, marginTop: -1 },
-    !medalState.active.diamond && styles.medalDim,
-  ]}
-  resizeMode="contain"
-/>
+                <Image
+                  source={MEDAL_DIAMOND}
+                  style={[
+                    styles.medalImg,
+                    { marginLeft: 5, marginTop: -1 },
+                    !medalState.active.diamond && styles.medalDim,
+                  ]}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[styles.medalCount, !medalState.active.diamond && styles.medalCountDim]}>
                 {medalState.counts.diamond}
@@ -2485,32 +2551,44 @@ export default function Index() {
                                         </Text>
                                       </View>
 
-                                      <Pressable
-                                        onPress={() => void markSharedDoneToday(item)}
-                                        style={({ pressed }) => [
-                                          styles.sharedDoneBtn,
-                                          myDoneToday && {
-                                            backgroundColor: UI.card2,
-                                            borderColor: UI.stroke,
-                                            opacity: 0.78,
-                                          },
-                                          !activeToday && {
-                                            backgroundColor: UI.card2,
-                                            borderColor: UI.stroke,
-                                            opacity: 0.78,
-                                          },
-                                          pressed && !myDoneToday && activeToday && { opacity: 0.9 },
-                                        ]}
-                                      >
-                                        <Text
-                                          style={[
-                                            styles.sharedDoneBtnText,
-                                            (myDoneToday || !activeToday) && { color: UI.sub },
+                                      <View style={styles.sharedActionsRow}>
+                                        <Pressable
+                                          onPress={() => confirmLeaveShared(item)}
+                                          style={({ pressed }) => [
+                                            styles.sharedLeaveBtn,
+                                            pressed && { opacity: 0.9 },
                                           ]}
                                         >
-                                          {myDoneToday ? "Splněno" : !activeToday ? "Volný den" : "Splnit"}
-                                        </Text>
-                                      </Pressable>
+                                          <Text style={styles.sharedLeaveBtnText}>Odejít</Text>
+                                        </Pressable>
+
+                                        <Pressable
+                                          onPress={() => void markSharedDoneToday(item)}
+                                          style={({ pressed }) => [
+                                            styles.sharedDoneBtn,
+                                            myDoneToday && {
+                                              backgroundColor: UI.card2,
+                                              borderColor: UI.stroke,
+                                              opacity: 0.78,
+                                            },
+                                            !activeToday && {
+                                              backgroundColor: UI.card2,
+                                              borderColor: UI.stroke,
+                                              opacity: 0.78,
+                                            },
+                                            pressed && !myDoneToday && activeToday && { opacity: 0.9 },
+                                          ]}
+                                        >
+                                          <Text
+                                            style={[
+                                              styles.sharedDoneBtnText,
+                                              (myDoneToday || !activeToday) && { color: UI.sub },
+                                            ]}
+                                          >
+                                            {myDoneToday ? "Splněno" : !activeToday ? "Volný den" : "Splnit"}
+                                          </Text>
+                                        </Pressable>
+                                      </View>
                                     </View>
 
                                     <View style={{ marginTop: 12, gap: 12 }}>

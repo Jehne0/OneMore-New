@@ -52,28 +52,33 @@ service cloud.firestore {
         && request.resource.data.memberUids.size() <= 10
         && request.auth.uid in request.resource.data.memberUids;
 
-      // Update může udělat jen člen výzvy
-      allow update: if signedIn()
-        && request.auth.uid in resource.data.memberUids
+      // 🔥 JEDINÁ ZMĚNA – zjednodušený update (aby fungovalo odejít)
+     allow update: if signedIn()
+        && (
+          request.auth.uid in resource.data.memberUids
+          || (
+            resource.data.leftBy is list
+            && request.auth.uid in resource.data.leftBy
+          )
+        )
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.memberUids == resource.data.memberUids;
+        && request.resource.data.memberUids is list
+        && request.resource.data.acceptedBy is list;
 
-      // Mazání z klienta radši zakázat
-      allow delete: if false;
-    }
+      // Progress pro konkrétní dny
+      match /progress/{dateISO} {
+        allow read: if signedIn() && request.auth.uid in get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids;
 
-    // Shared challenge progress
-    match /sharedChallenges/{challengeId}/progress/{dateISO} {
-      // Číst mohou jen členové výzvy
-      allow read: if signedIn()
-        && request.auth.uid in
-          get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids;
+        allow create, update: if signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids
+          && request.resource.data.date == dateISO
+          && request.resource.data.users is map
+          && request.resource.data.users[request.auth.uid] is map;
 
-      // Zapisovat může jen člen výzvy
-      allow create, update: if signedIn()
-        && request.auth.uid in
-          get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids;
+        allow delete: if false;
+      }
 
+      // Mazání z klienta necháme zakázané
       allow delete: if false;
     }
 

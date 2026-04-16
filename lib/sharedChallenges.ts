@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -30,6 +29,7 @@ export type SharedChallenge = {
   enabled: boolean;
   status: SharedChallengeStatus;
   acceptedBy: string[];
+  leftBy?: string[];
   createdAt?: any;
   updatedAt?: any;
 };
@@ -185,6 +185,7 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
     enabled: true,
     status: "pending",
     acceptedBy: [uid],
+    leftBy: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -198,7 +199,7 @@ export async function acceptSharedChallenge(challengeId: string) {
   const uid = myUid();
   const challenge = await getSharedChallenge(challengeId);
 
-    if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
+  if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
   if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
 
   const acceptedBy = Array.from(new Set([...(challenge.acceptedBy ?? []), uid]));
@@ -206,10 +207,11 @@ export async function acceptSharedChallenge(challengeId: string) {
     acceptedBy.includes(memberUid)
   );
 
-  
+  const leftBy = (challenge.leftBy ?? []).filter((memberUid) => memberUid !== uid);
 
   await updateDoc(doc(db, "sharedChallenges", String(challengeId)), {
     acceptedBy,
+    leftBy,
     status: everyoneAccepted ? "active" : "pending",
     updatedAt: serverTimestamp(),
   });
@@ -224,20 +226,63 @@ export async function declineSharedChallenge(challengeId: string) {
 
   const nextMemberUids = challenge.memberUids.filter((memberUid) => memberUid !== uid);
   const nextAcceptedBy = (challenge.acceptedBy ?? []).filter((memberUid) => memberUid !== uid);
+  const nextLeftBy = (challenge.leftBy ?? []).filter((memberUid) => memberUid !== uid);
 
   const ref = doc(db, "sharedChallenges", String(challengeId));
 
   if (nextMemberUids.length < 2) {
-    await deleteDoc(ref);
+    await updateDoc(ref, {
+      memberUids: nextMemberUids,
+      acceptedBy: nextAcceptedBy,
+      leftBy: nextLeftBy,
+      enabled: false,
+      status: "declined",
+      updatedAt: serverTimestamp(),
+    });
     return;
   }
 
   await updateDoc(ref, {
     memberUids: nextMemberUids,
     acceptedBy: nextAcceptedBy,
+    leftBy: nextLeftBy,
     updatedAt: serverTimestamp(),
   });
 }
+
+export async function leaveSharedChallenge(challengeId: string) {
+  const uid = myUid();
+  const challenge = await getSharedChallenge(challengeId);
+
+  if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
+  if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
+
+  const nextMemberUids = challenge.memberUids.filter((memberUid) => memberUid !== uid);
+  const nextAcceptedBy = (challenge.acceptedBy ?? []).filter((memberUid) => memberUid !== uid);
+  const nextLeftBy = (challenge.leftBy ?? []).filter((memberUid) => memberUid !== uid);
+
+  const ref = doc(db, "sharedChallenges", String(challengeId));
+
+  if (nextMemberUids.length < 2) {
+    await updateDoc(ref, {
+      memberUids: nextMemberUids,
+      acceptedBy: nextAcceptedBy,
+      leftBy: nextLeftBy,
+      enabled: false,
+      status: "declined",
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
+
+  await updateDoc(ref, {
+    memberUids: nextMemberUids,
+    acceptedBy: nextAcceptedBy,
+    leftBy: nextLeftBy,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export function subscribeSharedChallenges(
   onItems: (items: SharedChallenge[]) => void,
   onError?: (e: any) => void
@@ -252,34 +297,39 @@ export function subscribeSharedChallenges(
   return onSnapshot(
     q,
     (snap) => {
-      const items: SharedChallenge[] = snap.docs.map((d) => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          title: String(data.title ?? ""),
-          createdBy: String(data.createdBy ?? ""),
-          memberUids: Array.isArray(data.memberUids)
-            ? data.memberUids.map((x: any) => String(x))
-            : [],
-          targetPerDay: clamp(Number(data.targetPerDay ?? 1) || 1, 1, 20),
-          period:
-            data.period === "every2" || data.period === "custom"
-              ? data.period
-              : "daily",
-          customDays: dedupeDays(data.customDays),
-          periodAnchor: ensureISODate(data.periodAnchor),
-          enabled: data.enabled !== false,
-          status:
-            data.status === "pending" || data.status === "declined"
-              ? data.status
-              : "active",
-          acceptedBy: Array.isArray(data.acceptedBy)
-            ? data.acceptedBy.map((x: any) => String(x))
-            : [],
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        };
-      });
+      const items: SharedChallenge[] = snap.docs
+        .map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            title: String(data.title ?? ""),
+            createdBy: String(data.createdBy ?? ""),
+            memberUids: Array.isArray(data.memberUids)
+              ? data.memberUids.map((x: any) => String(x))
+              : [],
+            targetPerDay: clamp(Number(data.targetPerDay ?? 1) || 1, 1, 20),
+            period:
+              data.period === "every2" || data.period === "custom"
+                ? data.period
+                : "daily",
+            customDays: dedupeDays(data.customDays),
+            periodAnchor: ensureISODate(data.periodAnchor),
+            enabled: data.enabled !== false,
+            status:
+              data.status === "pending" || data.status === "declined"
+                ? data.status
+                : "active",
+            acceptedBy: Array.isArray(data.acceptedBy)
+              ? data.acceptedBy.map((x: any) => String(x))
+              : [],
+            leftBy: Array.isArray(data.leftBy)
+              ? data.leftBy.map((x: any) => String(x))
+              : [],
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+          };
+        })
+        .filter((item) => !(item.leftBy ?? []).includes(uid));
 
       items.sort((a, b) => {
         const ta = a.createdAt?.seconds ?? 0;
@@ -360,6 +410,9 @@ export async function getSharedChallenge(challengeId: string): Promise<SharedCha
     acceptedBy: Array.isArray(data.acceptedBy)
       ? data.acceptedBy.map((x: any) => String(x))
       : [],
+    leftBy: Array.isArray(data.leftBy)
+      ? data.leftBy.map((x: any) => String(x))
+      : [],
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
@@ -371,6 +424,9 @@ export async function completeSharedChallengeToday(challengeId: string, dateISO 
 
   if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
   if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
+  if ((challenge.leftBy ?? []).includes(uid)) {
+    throw new Error("Z této společné výzvy jsi už odešel.");
+  }
   if (challenge.status !== "active") {
     throw new Error("Tato společná výzva ještě nebyla přijata všemi členy.");
   }
@@ -402,10 +458,6 @@ export async function completeSharedChallengeToday(challengeId: string, dateISO 
     },
     { merge: true }
   );
-
-  await updateDoc(doc(db, "sharedChallenges", String(challengeId)), {
-    updatedAt: serverTimestamp(),
-  });
 
   return nextCount;
 }
