@@ -45,7 +45,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { deleteDoc, doc, getDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { deleteCloudUserDoc } from "../../lib/cloud";
 import { auth, db, functions } from "../../lib/firebase";
@@ -80,7 +80,15 @@ type InfoScreen =
   | "privacy"
   | "terms"
   | "paywall";
-  type FriendsTab = "friends" | "requests" | "invites";
+
+type FriendsTab = "friends" | "requests" | "invites";
+
+type FriendPreviewStats = {
+  bestStreak: number;
+  totalMedals: number;
+  highestMedal: "none" | "brambora" | "steel" | "bronze" | "silver" | "gold" | "diamond";
+  activeChallenges: number;
+};
 
 // ✅ veřejné HTML stránky (otevírá se v prohlížeči)
 const PRIVACY_URL = "https://desigame.eu/privacy.html";
@@ -123,6 +131,14 @@ export default function ProfileTabScreen() {
   const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
   const [sharedInvites, setSharedInvites] = useState<SharedChallenge[]>([]);
   const [sharedInvitesLoading, setSharedInvitesLoading] = useState(false);
+
+    const [shareAchievementsWithFriends, setShareAchievementsWithFriends] = useState(true);
+
+  const [friendStatsOpen, setFriendStatsOpen] = useState(false);
+  const [selectedFriendName, setSelectedFriendName] = useState("");
+  const [selectedFriendLoading, setSelectedFriendLoading] = useState(false);
+  const [selectedFriendShares, setSelectedFriendShares] = useState(true);
+  const [selectedFriendStats, setSelectedFriendStats] = useState<FriendPreviewStats | null>(null);
 
   // ✅ delete účet modal (oranžové okno)
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -203,6 +219,34 @@ export default function ProfileTabScreen() {
         if (!cancelled) setMyUsername((p?.username ?? "").trim());
       } catch {}
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.currentUser?.uid]);
+
+    useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
+      try {
+        const snap = await getDoc(doc(db, "users", uid));
+        const share = snap.exists()
+          ? snap.data()?.profile?.shareAchievementsWithFriends
+          : undefined;
+
+        if (!cancelled) {
+          setShareAchievementsWithFriends(share !== false);
+        }
+      } catch {
+        if (!cancelled) {
+          setShareAchievementsWithFriends(true);
+        }
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -354,6 +398,65 @@ await Promise.all(
     if (typeof v === "string" && v.trim()) return v.trim();
     return "Kamarád";
   };
+
+  const medalLabel = (tier: FriendPreviewStats["highestMedal"]) => {
+    switch (tier) {
+      case "brambora":
+        return "Bramborová";
+      case "steel":
+        return "Ocelová";
+      case "bronze":
+        return "Bronzová";
+      case "silver":
+        return "Stříbrná";
+      case "gold":
+        return "Zlatá";
+      case "diamond":
+        return "Diamantová";
+      default:
+        return "Žádná";
+    }
+  };
+
+  async function openFriendStats(friendUid: string) {
+    try {
+      setSelectedFriendLoading(true);
+      setFriendStatsOpen(true);
+      setSelectedFriendName(getShownFriendName(friendUid));
+      setSelectedFriendStats(null);
+      setSelectedFriendShares(true);
+
+      const snap = await getDoc(doc(db, "users", String(friendUid)));
+
+      if (!snap.exists()) {
+        setSelectedFriendShares(false);
+        return;
+      }
+
+      const profile = snap.data()?.profile ?? {};
+      const share = profile?.shareAchievementsWithFriends !== false;
+      const stats = profile?.friendStats ?? null;
+
+      setSelectedFriendShares(share);
+
+      if (!share || !stats) {
+        setSelectedFriendStats(null);
+        return;
+      }
+
+      setSelectedFriendStats({
+        bestStreak: Number(stats?.bestStreak ?? 0) || 0,
+        totalMedals: Number(stats?.totalMedals ?? 0) || 0,
+        highestMedal: (stats?.highestMedal ?? "none") as FriendPreviewStats["highestMedal"],
+        activeChallenges: Number(stats?.activeChallenges ?? 0) || 0,
+      });
+    } catch {
+      setSelectedFriendShares(false);
+      setSelectedFriendStats(null);
+    } finally {
+      setSelectedFriendLoading(false);
+    }
+  }
 
   const getInviteMembersLabel = (challenge: SharedChallenge) => {
     const me = auth.currentUser?.uid ?? "";
@@ -1183,6 +1286,34 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                 Tmavý režim
               </Text>
               <Switch value={isDark} onValueChange={toggle} />
+            </View>
+
+            <View
+              style={[
+                styles.modalRow,
+                { borderColor: UI.stroke, backgroundColor: UI.card },
+              ]}
+            >
+              <Text style={[styles.modalLabel, { color: UI.text, flex: 1 }]}>
+                Sdílet s přáteli své úspěchy
+              </Text>
+              <Switch
+                value={shareAchievementsWithFriends}
+                onValueChange={async (v) => {
+                  setShareAchievementsWithFriends(v);
+                  try {
+                    const uid = auth.currentUser?.uid;
+                    if (!uid) return;
+
+                    await updateDoc(doc(db, "users", uid), {
+                      "profile.shareAchievementsWithFriends": v,
+                    });
+                  } catch {
+                    setShareAchievementsWithFriends((prev) => !prev);
+                    showPwdPopup("error", "Soukromí", "Nepodařilo se uložit nastavení.");
+                  }
+                }}
+              />
             </View>
 
             <View
@@ -2107,12 +2238,20 @@ async function declineSharedInviteFromFriends(challengeId: string) {
           gap: 12,
         }}
       >
-        <Text
-          style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-          numberOfLines={1}
+               <Pressable
+          onPress={() => void openFriendStats(e.otherUid)}
+          style={({ pressed }) => [
+            { flex: 1, marginRight: 8 },
+            pressed && { opacity: 0.85 },
+          ]}
         >
-          {getShownFriendName(e.otherUid)}
-        </Text>
+          <Text
+            style={{ color: UI.text, fontWeight: "900" }}
+            numberOfLines={1}
+          >
+            {getShownFriendName(e.otherUid)}
+          </Text>
+        </Pressable>
 
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pressable
@@ -2152,63 +2291,7 @@ async function declineSharedInviteFromFriends(challengeId: string) {
     ))}
   </>
 )}
-) : (
-  <>
-    {accepted.map((e) => (
-      <View
-        key={"acc_" + e.otherUid}
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: 10,
-        }}
-      >
-        <Text
-          style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-          numberOfLines={1}
-        >
-          {getShownFriendName(e.otherUid)}
-        </Text>
 
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <Pressable
-            onPress={() => openChallengeInvite(e.otherUid)}
-            style={({ pressed }) => [
-              styles.smallBtn,
-              !premium && { opacity: 0.55 },
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.smallBtnText}>Vyzvat</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={async () => {
-              try {
-                setFriendsBusy(true);
-                await removeFriend(e.otherUid);
-              } catch (err: any) {
-                Alert.alert(
-                  "Přátelé",
-                  err?.message ?? "Nepodařilo se odebrat."
-                );
-              } finally {
-                setFriendsBusy(false);
-              }
-            }}
-            style={({ pressed }) => [
-              styles.smallBtnGhost,
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.smallBtnGhostText}>Odebrat</Text>
-          </Pressable>
-        </View>
-      </View>
-    ))}
-    
-  </>
 
                       </View>
 
@@ -2868,6 +2951,130 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
                   {challengeInviteBusy ? "Odesílám…" : "Odeslat"}
                 </Text>
               </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+            {/* ✅ MODAL – Statistiky přítele */}
+      <Modal
+        visible={friendStatsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFriendStatsOpen(false)}
+      >
+        <Pressable
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          onPress={() => setFriendStatsOpen(false)}
+        />
+        <View
+          style={[
+            styles.sheet,
+            {
+              height: "52%",
+              backgroundColor: isDark ? UI.sheetBg : "#FFE0C2",
+              borderColor: isDark ? UI.sheetStroke : "#FF8A1F",
+            },
+          ]}
+        >
+          <View style={styles.sheetHeader}>
+            <Text style={[styles.sheetTitle, { color: UI.text }]}>
+              {selectedFriendName || "Profil přítele"}
+            </Text>
+
+            <Pressable
+              onPress={() => setFriendStatsOpen(false)}
+              style={({ pressed }) => [
+                styles.closeBtn,
+                { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
+            <View
+              style={[
+                styles.infoCard,
+                { borderColor: UI.stroke, backgroundColor: UI.card },
+              ]}
+            >
+              {selectedFriendLoading ? (
+                <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 30 }}>
+                  <ActivityIndicator size="large" />
+                  <Text style={{ marginTop: 12, color: UI.sub, fontWeight: "800" }}>
+                    Načítám statistiky...
+                  </Text>
+                </View>
+              ) : !selectedFriendShares ? (
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  Tento uživatel nesdílí své úspěchy.
+                </Text>
+              ) : !selectedFriendStats ? (
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  Statistiky nejsou dostupné.
+                </Text>
+              ) : (
+                <View style={{ gap: 12 }}>
+                  <View
+                    style={[
+                      styles.modalRow,
+                      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                    ]}
+                  >
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      🔥 Nejdelší streak
+                    </Text>
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      {selectedFriendStats.bestStreak} dní
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.modalRow,
+                      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                    ]}
+                  >
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      🏅 Počet medailí
+                    </Text>
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      {selectedFriendStats.totalMedals}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.modalRow,
+                      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                    ]}
+                  >
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      💎 Nejvyšší medaile
+                    </Text>
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      {medalLabel(selectedFriendStats.highestMedal)}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.modalRow,
+                      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                    ]}
+                  >
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      ✅ Aktivní výzvy
+                    </Text>
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      {selectedFriendStats.activeChallenges}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
           </ScrollView>
         </View>

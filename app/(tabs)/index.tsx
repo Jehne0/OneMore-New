@@ -16,6 +16,7 @@ import {
   type SharedChallengeDayProgress,
 } from "../../lib/sharedChallenges";
 import { getProfile } from "../../lib/usernames";
+import { doc, updateDoc } from "firebase/firestore";
 import {
   Animated,
   FlatList,
@@ -33,7 +34,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert } from "../../lib/appAlert";
 import { useTodayISO } from "../../lib/clock";
-import { auth } from "../../lib/firebase";
+import { auth, db } from "../../lib/firebase";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import {
   clearDailyRemindersForChallenge,
@@ -886,6 +887,8 @@ export default function Index() {
     });
   }, []);
 
+  
+
   useEffect(() => {
     let mounted = true;
 
@@ -993,6 +996,8 @@ export default function Index() {
       unsubProgress.forEach((u) => u());
     };
   }, []);
+
+  
 
   useEffect(() => {
     let mounted = true;
@@ -1626,6 +1631,66 @@ export default function Index() {
     () => medalsFromChallengeStats(appState?.challengeStats),
     [appState?.challengeStats]
   );
+
+const highestMedalForFriends = useMemo(() => {
+  if (medalState.counts.diamond > 0) return "diamond";
+  if (medalState.counts.gold > 0) return "gold";
+  if (medalState.counts.silver > 0) return "silver";
+  if (medalState.counts.bronze > 0) return "bronze";
+  if (medalState.counts.steel > 0) return "steel";
+  if (medalState.counts.brambora > 0) return "brambora";
+  return "none";
+}, [medalState]);
+
+const totalMedalsForFriends = useMemo(() => {
+  return (
+    medalState.counts.brambora +
+    medalState.counts.steel +
+    medalState.counts.bronze +
+    medalState.counts.silver +
+    medalState.counts.gold +
+    medalState.counts.diamond
+  );
+}, [medalState]);
+
+const bestStreakForFriends = useMemo(() => {
+  const stats = appState?.challengeStats ?? {};
+  let best = 0;
+
+  for (const value of Object.values(stats as Record<string, any>)) {
+    const n = Number((value as any)?.bestStreak ?? 0);
+    if (Number.isFinite(n)) best = Math.max(best, Math.floor(n));
+  }
+
+  return best;
+}, [appState?.challengeStats]);
+
+const activeChallengesForFriends = useMemo(() => {
+  const list = (appState?.challenges ?? []) as any[];
+  return list.filter((c) => c && c.enabled !== false && !c.deletedAt).length;
+}, [appState?.challenges]);
+
+useEffect(() => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  if (!appState) return;
+
+  void updateDoc(doc(db, "users", uid), {
+    "profile.friendStats": {
+      bestStreak: bestStreakForFriends,
+      totalMedals: totalMedalsForFriends,
+      highestMedal: highestMedalForFriends,
+      activeChallenges: activeChallengesForFriends,
+      updatedAtISO: new Date().toISOString(),
+    },
+  }).catch(() => {});
+}, [
+  appState,
+  bestStreakForFriends,
+  totalMedalsForFriends,
+  highestMedalForFriends,
+  activeChallengesForFriends,
+]);
 
   function medalLabel(tier: MedalTier): string {
     switch (tier) {
