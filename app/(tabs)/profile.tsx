@@ -227,25 +227,27 @@ export default function ProfileTabScreen() {
       if (cancelled) return;
 
       const uids = [...new Set(edges.map((e) => e.otherUid))];
-      const nextNames: Record<string, string> = {};
+    const nextNames: Record<string, string> = {};
 
-      for (const otherUid of uids) {
-        try {
-          const p = await getProfile(otherUid);
-          console.log("PROFILE CHECK", otherUid, p);
+await Promise.all(
+  uids.map(async (otherUid) => {
+    try {
+      const p = await getProfile(otherUid);
+      console.log("PROFILE CHECK", otherUid, p);
 
-          const shownName =
-            typeof p?.username === "string" && p.username.trim()
-              ? p.username.trim()
-              : "";
+      const shownName =
+        typeof p?.username === "string" && p.username.trim()
+          ? p.username.trim()
+          : "";
 
-          if (shownName) {
-            nextNames[otherUid] = shownName;
-          }
-        } catch (e) {
-          console.log("PROFILE CHECK ERROR", otherUid, e);
-        }
+      if (shownName) {
+        nextNames[otherUid] = shownName;
       }
+    } catch (e) {
+      console.log("PROFILE CHECK ERROR", otherUid, e);
+    }
+  })
+);
 
       if (cancelled) return;
 
@@ -297,21 +299,23 @@ export default function ProfileTabScreen() {
           )
         ).filter(Boolean);
 
-        const nextNames: Record<string, string> = {};
+    const nextNames: Record<string, string> = {};
 
-        for (const otherUid of extraUids) {
-          try {
-            const p = await getProfile(otherUid);
-            const shownName =
-              typeof p?.username === "string" && p.username.trim()
-                ? p.username.trim()
-                : "";
+await Promise.all(
+  extraUids.map(async (otherUid) => {
+    try {
+      const p = await getProfile(otherUid);
+      const shownName =
+        typeof p?.username === "string" && p.username.trim()
+          ? p.username.trim()
+          : "";
 
-            if (shownName) {
-              nextNames[otherUid] = shownName;
-            }
-          } catch {}
-        }
+      if (shownName) {
+        nextNames[otherUid] = shownName;
+      }
+    } catch {}
+  })
+);
 
         if (cancelled) return;
 
@@ -2062,23 +2066,92 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                         ]}
                       >
                       
-{!accepted.length ? (
-  <>
-    <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
-      Zatím žádní přátelé.
-    </Text>
+<View
+  style={{
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 12,
+  }}
+>
+  <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 0 }]}>
+    Moji přátelé
+  </Text>
 
-    <Pressable
-      onPress={() => setAddFriendOpen(true)}
-      style={({ pressed }) => [
-        styles.smallBtn,
-        { marginTop: 14, alignSelf: "flex-start" },
-        pressed && { opacity: 0.9 },
-      ]}
-    >
-      <Text style={styles.smallBtnText}>+ Přidat přítele</Text>
-    </Pressable>
+  <Pressable
+    onPress={() => setAddFriendOpen(true)}
+    style={({ pressed }) => [
+      styles.smallBtn,
+      pressed && { opacity: 0.9 },
+    ]}
+  >
+    <Text style={styles.smallBtnText}>+ Přidat</Text>
+  </Pressable>
+</View>
+
+{!accepted.length ? (
+  <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
+    Zatím žádní přátelé.
+  </Text>
+) : (
+  <>
+    {accepted.map((e) => (
+      <View
+        key={"acc_" + e.otherUid}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginTop: 10,
+          gap: 12,
+        }}
+      >
+        <Text
+          style={{ color: UI.text, fontWeight: "900", flex: 1 }}
+          numberOfLines={1}
+        >
+          {getShownFriendName(e.otherUid)}
+        </Text>
+
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Pressable
+            onPress={() => openChallengeInvite(e.otherUid)}
+            style={({ pressed }) => [
+              styles.smallBtn,
+              !premium && { opacity: 0.55 },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.smallBtnText}>Vyzvat</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={async () => {
+              try {
+                setFriendsBusy(true);
+                await removeFriend(e.otherUid);
+              } catch (err: any) {
+                Alert.alert(
+                  "Přátelé",
+                  err?.message ?? "Nepodařilo se odebrat."
+                );
+              } finally {
+                setFriendsBusy(false);
+              }
+            }}
+            style={({ pressed }) => [
+              styles.smallBtnGhost,
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.smallBtnGhostText}>Odebrat</Text>
+          </Pressable>
+        </View>
+      </View>
+    ))}
   </>
+)}
 ) : (
   <>
     {accepted.map((e) => (
@@ -2134,19 +2207,9 @@ async function declineSharedInviteFromFriends(challengeId: string) {
         </View>
       </View>
     ))}
-
-    <Pressable
-      onPress={() => setAddFriendOpen(true)}
-      style={({ pressed }) => [
-        styles.smallBtn,
-        { marginTop: 14, alignSelf: "flex-start" },
-        pressed && { opacity: 0.9 },
-      ]}
-    >
-      <Text style={styles.smallBtnText}>+ Přidat přítele</Text>
-    </Pressable>
+    
   </>
-)}
+
                       </View>
 
                       {!!incoming.length && (
@@ -2513,9 +2576,9 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                         return;
                       }
                       await sendFriendRequest(otherUid);
-                      setAddUsername("");
-                      setAddFriendOpen(false);
-                      Alert.alert("Přátelé", "Žádost odeslána.");
+                  setAddUsername("");
+setAddFriendOpen(false);
+showPwdPopup("success", "Přátelé", "Žádost odeslána.");
                     } catch (e: any) {
                       Alert.alert(
                         "Přátelé",
