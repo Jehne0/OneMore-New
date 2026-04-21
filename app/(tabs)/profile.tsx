@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons, Feather  } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -99,6 +99,7 @@ export default function ProfileTabScreen() {
   const { open, t } = useLocalSearchParams<{ open?: string; t?: string }>();
   const insets = useSafeAreaInsets();
   const { UI, isDark, toggle } = useTheme();
+
 
   // ✅ Změna username
   const [usernameOpen, setUsernameOpen] = useState(false);
@@ -507,7 +508,10 @@ async function declineSharedInviteFromFriends(challengeId: string) {
 }
 
   const styles = useMemo(() => makeStyles(UI), [UI]);
-
+const noScaleText = {
+  allowFontScaling: false as const,
+  maxFontSizeMultiplier: 1,
+};
   // ✅ víc oranžové pozadí v light režimu
   const gradientColors = isDark
     ? [UI.bg, UI.bg]
@@ -932,7 +936,7 @@ async function declineSharedInviteFromFriends(challengeId: string) {
       case "streak_medals":
         return "Ohýnky & medaile";
       case "freeprem":
-        return "Free vs Premium";
+        return "Free & Premium";
       case "paywall":
         return "Premium";
       case "privacy":
@@ -1533,7 +1537,7 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                     <Ionicons name="sparkles" size={26} color={UI.accent} />
                   </View>
                   <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-                    Free vs Premium
+                    Free & Premium
                   </Text>
                   <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
                     Limity & výhody
@@ -1563,9 +1567,10 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                     Ohýnky & medaile
                   </Text>
                   <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
-                    Streak & odměny
+                    Série & odměny
                   </Text>
                 </Pressable>
+
 
                 <Pressable
                   onPress={() => setInfoScreen("privacy")}
@@ -1588,6 +1593,48 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                   </Text>
                 </Pressable>
 
+<Pressable
+  onPress={() => {
+    setInfoOpen(false);
+    router.push("/history");
+  }}
+  style={({ pressed }) => [
+    styles.iconTile,
+    {
+      borderColor: UI.stroke,
+      backgroundColor: UI.card,
+    },
+    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+  ]}
+>
+  <View
+    style={[
+      styles.iconCircle,
+      {
+        backgroundColor: "rgba(255,138,31,0.18)",
+        borderColor: "rgba(255,138,31,0.35)",
+      },
+    ]}
+  >
+    <Ionicons name="time-outline" size={24} color={UI.accent} />
+  </View>
+
+  <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+    Historie výzev
+  </Text>
+
+  <Text
+    style={{
+      color: UI.sub,
+      fontWeight: "700",
+      fontSize: 13,
+      textAlign: "center",
+      lineHeight: 18,
+    }}
+  >
+    Přehled plnění a série
+  </Text>
+</Pressable>
                 <Pressable
                   onPress={() => setInfoScreen("terms")}
                   style={({ pressed }) => [
@@ -1646,19 +1693,19 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                 >
                   <Text style={[styles.infoTitle, { color: UI.text }]}>Ohýnky</Text>
                   <Text style={[styles.infoText, { color: UI.sub }]}>
-                    Ohýnek ukazuje, kolik dní po sobě máš splněno (streak).
+                    Ohýnek ukazuje, kolik dní po sobě máš splněno (série).
                     {"\n\n"}
-                    Pokud je výzva v daný den neaktivní nebo má volný den, streak se
+                    Pokud je výzva v daný den neaktivní nebo má volný den, série se
                     neruší.
                     {"\n"}
-                    Streak se resetuje jen tehdy, když nesplníš aktivní den výzvy.
+                    Série se resetuje jen tehdy, když nesplníš aktivní den výzvy. Výzvu můžeš deaktivovat (série se ti neruší).
                   </Text>
 
                   <Text style={[styles.infoTitle, { color: UI.text, marginTop: 16 }]}>
                     Medaile
                   </Text>
                   <Text style={[styles.infoText, { color: UI.sub, marginTop: 6 }]}>
-                    Každá výzva si počítá medaile podle svého nejdelšího streaku:
+                    Každá výzva si počítá medaile podle tvé nejdelší série:
                   </Text>
 
                   <View style={styles.medalsGrid}>
@@ -1736,62 +1783,201 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                 </View>
               )}
 
-              {infoScreen === "freeprem" && (
-                <View
-                  style={[
-                    styles.infoCard,
-                    { borderColor: UI.stroke, backgroundColor: UI.card },
-                  ]}
-                >
-                  <Text style={[styles.infoTitle, { color: UI.text }]}>
-                    Free vs Premium
-                  </Text>
+{infoScreen === "freeprem" && (
+  <View
+    style={[
+      styles.infoCard,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+    ]}
+  >
+    <LinearGradient
+      colors={["rgba(255,145,0,0.18)", "rgba(255,120,0,0.06)"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.pmHero}
+    >
+      <View style={styles.pmHeroIcon}>
+        <MaterialCommunityIcons name="crown" size={24} color="#FF9F1A" />
+      </View>
 
-                  <Text style={[styles.infoText, { color: UI.sub }]}>
-                    OneMore je zdarma, avšak Premium odemyká další výhody.
-                  </Text>
+      <View style={{ flex: 1 }}>
+       <Text {...noScaleText} style={styles.pmHeroTitle}>
+  {premium ? "Premium je aktivní." : "OneMore zdarma. Premium bez limitů."}
+</Text>
+<Text {...noScaleText} style={styles.pmHeroText}>
+  {premium
+    ? "Spravuj své předplatné"
+    : "Odemkni více výzev, připomínek, přátel a společných výzev."}
+</Text>
+      </View>
+    </LinearGradient>
 
-                  <View style={styles.tableWrap}>
-                    <View style={[styles.tableHead, { backgroundColor: UI.card2 }]}>
-                      <Text style={[styles.tableHeadCellLeft, { color: UI.text }]}>
-                        Funkce
-                      </Text>
-                      <Text style={[styles.tableHeadCellMid, { color: UI.text }]}>
-                        Free
-                      </Text>
-                      <Text style={[styles.tableHeadCellRight, { color: UI.text }]}>
-                        Premium
-                      </Text>
-                    </View>
+    <View
+      style={[
+        styles.pmPlanCard,
+        { backgroundColor: UI.card2, borderColor: UI.stroke },
+      ]}
+    >
+      <View style={styles.pmPlanHeader}>
+        <View style={styles.pmPlanBadgeFree}>
+          <Feather name="gift" size={18} color="#C7CEDD" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text {...noScaleText} style={[styles.pmPlanTitle, { color: UI.text }]}>
+            Free
+          </Text>
+          <Text {...noScaleText} style={[styles.pmPlanSubtitle, { color: UI.sub }]}>
+            Základní verze zdarma
+          </Text>
+        </View>
+      </View>
 
-                    {[
-                      { f: "Výzvy", free: "2", prem: "∞" },
-                      { f: "Připomínky (reminders)", free: "1", prem: "∞" },
-                      { f: "Historie výzev", free: "✕", prem: "✓" },
-                      { f: "Přátelé (propojení výzvy)", free: "1", prem: "∞" },
-                    ].map((row) => (
-                      <View
-                        key={row.f}
-                        style={[
-                          styles.tableRow,
-                          { borderTopColor: UI.stroke, backgroundColor: UI.card },
-                        ]}
-                      >
-                        <Text style={[styles.tableCellLeft, { color: UI.text }]}>
-                          {row.f}
-                        </Text>
-                        <Text style={[styles.tableCellMid, { color: UI.text }]}>
-                          {row.free}
-                        </Text>
-                        <Text style={[styles.tableCellRight, { color: UI.text }]}>
-                          {row.prem}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
+      <View style={styles.pmList}>
+        <View style={styles.pmListRow}>
+          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+            Výzvy
+          </Text>
+          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+            2
+          </Text>
+        </View>
 
+        <View style={styles.pmListRow}>
+          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+            Připomínky
+          </Text>
+          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+            1
+          </Text>
+        </View>
+
+        <View style={styles.pmListRow}>
+          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+            Historie výzev
+          </Text>
+          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+            ×
+          </Text>
+        </View>
+
+        <View style={styles.pmListRow}>
+          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+            Přátelé
+          </Text>
+          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+            1
+          </Text>
+        </View>
+
+        <View style={styles.pmListRowLast}>
+          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+            Společné výzvy
+          </Text>
+          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+            1
+          </Text>
+        </View>
+      </View>
+    </View>
+
+    <LinearGradient
+      colors={["rgba(255,159,26,0.18)", "rgba(255,120,0,0.07)"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.pmPlanCardPremium}
+    >
+      <View style={styles.pmBestBadge}>
+        <Text {...noScaleText} style={styles.pmBestBadgeText}>
+          NEJLEPŠÍ VOLBA
+        </Text>
+      </View>
+
+      <View style={styles.pmPlanHeader}>
+        <View style={styles.pmPlanBadgePremium}>
+          <MaterialCommunityIcons name="crown" size={18} color="#FFB02E" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text {...noScaleText} style={styles.pmPlanTitlePremium}>
+            Premium
+          </Text>
+          <Text {...noScaleText} style={styles.pmPlanSubtitlePremium}>
+            Pro maximální výsledky
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.pmFeatureList}>
+        <View style={styles.pmFeatureRow}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Text {...noScaleText} style={styles.pmFeatureText}>
+            Neomezené výzvy
+          </Text>
+        </View>
+
+        <View style={styles.pmFeatureRow}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Text {...noScaleText} style={styles.pmFeatureText}>
+            Neomezené připomínky
+          </Text>
+        </View>
+
+        <View style={styles.pmFeatureRow}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Text {...noScaleText} style={styles.pmFeatureText}>
+            Plná historie výzev
+          </Text>
+        </View>
+
+        <View style={styles.pmFeatureRow}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Text {...noScaleText} style={styles.pmFeatureText}>
+            Neomezeně přátel
+          </Text>
+        </View>
+
+        <View style={styles.pmFeatureRow}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Text {...noScaleText} style={styles.pmFeatureText}>
+            Neomezené společné výzvy
+          </Text>
+        </View>
+      </View>
+    </LinearGradient>
+
+    <Pressable
+  style={styles.pmCtaButton}
+  onPress={() => setInfoScreen("paywall")}
+>
+  <Text {...noScaleText} style={styles.pmCtaButtonText}>
+    {premium ? "Spravovat Premium" : "Získat Premium"}
+  </Text>
+  <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+</Pressable>
+
+    <View style={styles.pmBottomWrap}>
+      <View style={styles.pmBottomItem}>
+        <Ionicons name="shield-checkmark-outline" size={18} color="#FFB02E" />
+        <Text {...noScaleText} style={[styles.pmBottomText, { color: UI.text }]}>
+          Bezpečná platba
+        </Text>
+      </View>
+
+      <View style={styles.pmBottomItem}>
+        <MaterialCommunityIcons name="restore" size={18} color="#FFB02E" />
+        <Text {...noScaleText} style={[styles.pmBottomText, { color: UI.text }]}>
+          Zrušení kdykoliv
+        </Text>
+      </View>
+
+      <View style={styles.pmBottomItem}>
+        <Ionicons name="heart-outline" size={18} color="#FFB02E" />
+        <Text {...noScaleText} style={[styles.pmBottomText, { color: UI.text }]}>
+          Podporuješ vývoj
+        </Text>
+      </View>
+    </View>
+  </View>
+)}
               {infoScreen === "paywall" && (
                 <View
                   style={[
@@ -1809,7 +1995,7 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                   <View style={{ marginTop: 12, gap: 8 }}>
                     {[
                       "Neomezené výzvy",
-                      "Neomezené reminders",
+                      "Neomezené připomínky (notifikace)",
                       "Neomezené propojení s přáteli",
                       "Další odměny a drobné vychytávky (postupně)",
                     ].map((t) => (
@@ -1865,25 +2051,6 @@ async function declineSharedInviteFromFriends(challengeId: string) {
                     </Pressable>
                   )}
 
-                  <Pressable
-                    disabled={premiumBusy}
-                    onPress={restorePremiumNow}
-                    style={({ pressed }) => [
-                      styles.modalLinkRow,
-                      {
-                        borderColor: UI.stroke,
-                        backgroundColor: UI.card,
-                        marginTop: 10,
-                        opacity: premiumBusy ? 0.6 : 1,
-                      },
-                      pressed && !premiumBusy && { opacity: 0.88 },
-                    ]}
-                  >
-                    <Text style={[styles.modalLinkText, { color: UI.text }]}>
-                      Obnovit stav Premium
-                    </Text>
-                    <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
-                  </Pressable>
                 </View>
               )}
 
@@ -3025,7 +3192,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
                     ]}
                   >
                     <Text style={[styles.modalLabel, { color: UI.text }]}>
-                      🔥 Nejdelší streak
+                      🔥 Nejdelší série
                     </Text>
                     <Text style={[styles.modalLabel, { color: UI.text }]}>
                       {selectedFriendStats.bestStreak} dní
@@ -3272,6 +3439,203 @@ function makeStyles(UI: any) {
       borderWidth: 1,
       padding: 14,
     },
+
+pmHero: {
+  borderRadius: 20,
+  borderWidth: 1,
+  borderColor: "rgba(255,159,26,0.20)",
+  padding: 14,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 12,
+},
+
+pmHeroIcon: {
+  width: 44,
+  height: 44,
+  borderRadius: 14,
+  backgroundColor: "rgba(255,159,26,0.10)",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+pmHeroTitle: {
+  color: "#FFF3E0",
+  fontSize: 16,
+  fontWeight: "900",
+},
+
+pmHeroText: {
+  marginTop: 4,
+  color: "#E8D2B0",
+  fontSize: 12,
+  lineHeight: 17,
+  fontWeight: "700",
+},
+
+pmPlanCard: {
+  borderRadius: 20,
+  borderWidth: 1,
+  padding: 14,
+  marginBottom: 12,
+},
+
+pmPlanCardPremium: {
+  borderRadius: 20,
+  borderWidth: 1,
+  borderColor: "rgba(255,159,26,0.30)",
+  padding: 14,
+  marginBottom: 12,
+  position: "relative",
+  overflow: "hidden",
+},
+
+pmPlanHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 12,
+},
+
+pmPlanBadgeFree: {
+  width: 38,
+  height: 38,
+  borderRadius: 12,
+  backgroundColor: "rgba(255,255,255,0.06)",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+pmPlanBadgePremium: {
+  width: 38,
+  height: 38,
+  borderRadius: 12,
+  backgroundColor: "rgba(255,159,26,0.12)",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+pmPlanTitle: {
+  fontSize: 17,
+  fontWeight: "900",
+},
+
+pmPlanSubtitle: {
+  marginTop: 2,
+  fontSize: 11,
+  fontWeight: "700",
+},
+
+pmPlanTitlePremium: {
+  color: "#FFF5E8",
+  fontSize: 17,
+  fontWeight: "900",
+},
+
+pmPlanSubtitlePremium: {
+  marginTop: 2,
+  color: "#FFC978",
+  fontSize: 11,
+  fontWeight: "800",
+},
+
+pmBestBadge: {
+  position: "absolute",
+  top: 10,
+  right: 10,
+  backgroundColor: "#F58A07",
+  paddingHorizontal: 10,
+  paddingVertical: 5,
+  borderRadius: 999,
+},
+
+pmBestBadgeText: {
+  color: "#FFF8ED",
+  fontSize: 9,
+  fontWeight: "900",
+},
+
+pmList: {
+  borderTopWidth: 1,
+  borderTopColor: "rgba(255,255,255,0.08)",
+},
+
+pmListRow: {
+  minHeight: 40,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  borderBottomWidth: 1,
+  borderBottomColor: "rgba(255,255,255,0.08)",
+},
+
+pmListRowLast: {
+  minHeight: 40,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+},
+
+pmListLabel: {
+  fontSize: 13,
+  fontWeight: "800",
+},
+
+pmListValue: {
+  fontSize: 15,
+  fontWeight: "900",
+},
+
+pmFeatureList: {
+  gap: 10,
+  marginTop: 4,
+},
+
+pmFeatureRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 10,
+},
+
+pmFeatureText: {
+  flex: 1,
+  color: "#FFF7EF",
+  fontSize: 13,
+  fontWeight: "800",
+},
+
+pmCtaButton: {
+  height: 50,
+  borderRadius: 16,
+  backgroundColor: "#F58A07",
+  alignItems: "center",
+  justifyContent: "center",
+  flexDirection: "row",
+  gap: 6,
+  marginBottom: 12,
+},
+
+pmCtaButtonText: {
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: "900",
+},
+
+pmBottomWrap: {
+  gap: 8,
+},
+
+pmBottomItem: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+},
+
+pmBottomText: {
+  fontSize: 12,
+  fontWeight: "700",
+},
     sheetHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -3504,17 +3868,17 @@ function makeStyles(UI: any) {
     },
 
     iconGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-    iconTile: {
-      width: "48%",
-      borderWidth: 1,
-      borderRadius: 22,
-      paddingVertical: 14,
-      paddingHorizontal: 12,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 10,
-      minHeight: 110,
-    },
+   iconTile: {
+  width: "48%",
+  borderWidth: 1,
+  borderRadius: 22,
+  paddingVertical: 16,
+  paddingHorizontal: 12,
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 10,
+  minHeight: 118,
+},
     iconCircle: {
       width: 46,
       height: 46,
@@ -3523,7 +3887,12 @@ function makeStyles(UI: any) {
       alignItems: "center",
       justifyContent: "center",
     },
-    iconTileText: { fontSize: 14, fontWeight: "900", textAlign: "center" },
+    iconTileText: {
+  fontSize: 14,
+  fontWeight: "900",
+  textAlign: "center",
+  lineHeight: 18,
+},
 
     popupWrap: {
       flex: 1,

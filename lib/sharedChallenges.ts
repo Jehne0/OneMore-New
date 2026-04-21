@@ -4,6 +4,7 @@ import {
   getDoc,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -418,46 +419,94 @@ export async function getSharedChallenge(challengeId: string): Promise<SharedCha
   };
 }
 
-export async function completeSharedChallengeToday(challengeId: string, dateISO = getTodayISO()) {
+export async function completeSharedChallengeToday(
+  challengeId: string,
+  dateISO = getTodayISO()
+) {
   const uid = myUid();
-  const challenge = await getSharedChallenge(challengeId);
 
-  if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
-  if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
-  if ((challenge.leftBy ?? []).includes(uid)) {
-    throw new Error("Z této společné výzvy jsi už odešel.");
-  }
-  if (challenge.status !== "active") {
-    throw new Error("Tato společná výzva ještě nebyla přijata všemi členy.");
-  }
-  if (!isSharedChallengeActiveOnDate(challenge, dateISO)) {
-    throw new Error("Dnes je podle periody volno.");
-  }
-
-  const dayRef = doc(db, "sharedChallenges", String(challengeId), "progress", String(dateISO));
-  const daySnap = await getDoc(dayRef);
-
-  const prevUsers = daySnap.exists() ? ((daySnap.data() as any)?.users ?? {}) : {};
-  const mine = prevUsers?.[uid] ?? {};
-
-  const prevCount = Math.max(0, Math.floor(Number(mine?.completedCount ?? 0) || 0));
-  const nextCount = Math.min(challenge.targetPerDay, prevCount + 1);
-
-  await setDoc(
-    dayRef,
-    {
-      date: String(dateISO),
-      users: {
-        [uid]: {
-          completedCount: nextCount,
-          completed: nextCount >= challenge.targetPerDay,
-          updatedAt: serverTimestamp(),
-        },
-      },
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
+  const challengeRef = doc(db, "sharedChallenges", String(challengeId));
+  const dayRef = doc(
+    db,
+    "sharedChallenges",
+    String(challengeId),
+    "progress",
+    String(dateISO)
   );
+
+  const nextCount = await runTransaction(db, async (tx) => {
+    const challengeSnap = await tx.get(challengeRef);
+    if (!challengeSnap.exists()) {
+      throw new Error("Společná výzva nebyla nalezena.");
+    }
+
+    const challengeData = challengeSnap.data() as any;
+    const challenge: SharedChallenge = {
+      id: challengeSnap.id,
+      title: String(challengeData.title ?? ""),
+      createdBy: String(challengeData.createdBy ?? ""),
+      memberUids: Array.isArray(challengeData.memberUids)
+        ? challengeData.memberUids.map((x: any) => String(x))
+        : [],
+      targetPerDay: clamp(Number(challengeData.targetPerDay ?? 1) || 1, 1, 20),
+      period:
+        challengeData.period === "every2" || challengeData.period === "custom"
+          ? challengeData.period
+          : "daily",
+      customDays: dedupeDays(challengeData.customDays),
+      periodAnchor: ensureISODate(challengeData.periodAnchor),
+      enabled: challengeData.enabled !== false,
+      status:
+        challengeData.status === "pending" || challengeData.status === "declined"
+          ? challengeData.status
+          : "active",
+      acceptedBy: Array.isArray(challengeData.acceptedBy)
+        ? challengeData.acceptedBy.map((x: any) => String(x))
+        : [],
+      createdAt: challengeData.createdAt,
+      updatedAt: challengeData.updatedAt,
+    };
+
+    if (!challenge.memberUids.includes(uid)) {
+      throw new Error("Do této výzvy nepatříš.");
+    }
+
+    if (challenge.status !== "active") {
+      throw new Error("Tato společná výzva ještě nebyla přijata všemi členy.");
+    }
+
+    if (!isSharedChallengeActiveOnDate(challenge, dateISO)) {
+      throw new Error("Dnes je podle periody volno.");
+    }
+
+    const daySnap = await tx.get(dayRef);
+    const prevUsers = daySnap.exists() ? ((daySnap.data() as any)?.users ?? {}) : {};
+    const mine = prevUsers?.[uid] ?? {};
+    const prevCount = Math.max(
+      0,
+      Math.floor(Number(mine?.completedCount ?? 0) || 0)
+    );
+
+    const newCount = Math.min(challenge.targetPerDay, prevCount + 1);
+
+    tx.set(
+      dayRef,
+      {
+        date: String(dateISO),
+        users: {
+          [uid]: {
+            completedCount: newCount,
+            completed: newCount >= challenge.targetPerDay,
+            updatedAt: serverTimestamp(),
+          },
+        },
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return newCount;
+  });
 
   return nextCount;
 }
