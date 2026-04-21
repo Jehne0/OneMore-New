@@ -1791,89 +1791,248 @@ const noScaleText = {
     ]}
   >
     <LinearGradient
-      colors={["rgba(255,145,0,0.18)", "rgba(255,120,0,0.06)"]}
+      colors={
+        isDark
+          ? ["rgba(255,145,0,0.18)", "rgba(255,120,0,0.06)"]
+          : ["#FFF1DD", "#FFE3B3"]
+      }
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={styles.pmHero}
+      style={[
+        styles.pmHero,
+        !isDark && {
+          borderColor: "#F2C27A",
+          shadowColor: "#000",
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 2,
+        },
+      ]}
     >
-      <View style={styles.pmHeroIcon}>
-        <MaterialCommunityIcons name="crown" size={24} color="#FF9F1A" />
+      <View
+        style={[
+          styles.pmHeroIcon,
+          !isDark && {
+            backgroundColor: "#FFE7BF",
+          },
+        ]}
+      >
+        <MaterialCommunityIcons name="crown" size={24} color="#D97706" />
       </View>
 
       <View style={{ flex: 1 }}>
-       <Text {...noScaleText} style={styles.pmHeroTitle}>
-  {premium ? "Premium je aktivní." : "OneMore zdarma. Premium bez limitů."}
-</Text>
-<Text {...noScaleText} style={styles.pmHeroText}>
-  {premium
-    ? "Spravuj své předplatné"
-    : "Odemkni více výzev, připomínek, přátel a společných výzev."}
-</Text>
+        <Text
+          {...noScaleText}
+          style={[
+            styles.pmHeroTitle,
+            !isDark && { color: "#7A3E00" },
+          ]}
+        >
+          {premium ? "Premium je aktivní." : "OneMore zdarma. Premium bez limitů."}
+        </Text>
+
+        <Text
+          {...noScaleText}
+          style={[
+            styles.pmHeroText,
+            !isDark && { color: "#8A5A1F" },
+          ]}
+        >
+          {premium
+            ? "Spravuj své předplatné"
+            : "Odemkni více výzev, připomínek, přátel a společných výzev."}
+        </Text>
       </View>
     </LinearGradient>
 
     <View
       style={[
         styles.pmPlanCard,
-        { backgroundColor: UI.card2, borderColor: UI.stroke },
+        {
+          backgroundColor: isDark ? UI.card2 : "#FAFAFA",
+          borderColor: isDark ? UI.stroke : "#D9DDE5",
+        },
+        !isDark && {
+          shadowColor: "#000",
+          shadowOpacity: 0.05,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: 1,
+        },
       ]}
     >
       <View style={styles.pmPlanHeader}>
-        <View style={styles.pmPlanBadgeFree}>
-          <Feather name="gift" size={18} color="#C7CEDD" />
+        <View
+          style={[
+            styles.pmPlanBadgeFree,
+            !isDark && { backgroundColor: "#EEF2F7" },
+          ]}
+        >
+          <Feather name="gift" size={18} color={isDark ? "#C7CEDD" : "#64748B"} />
         </View>
+
         <View style={{ flex: 1 }}>
-          <Text {...noScaleText} style={[styles.pmPlanTitle, { color: UI.text }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmPlanTitle,
+              { color: UI.text },
+              !isDark && { color: "#1E293B" },
+            ]}
+          >
             Free
           </Text>
-          <Text {...noScaleText} style={[styles.pmPlanSubtitle, { color: UI.sub }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmPlanSubtitle,
+              { color: UI.sub },
+              !isDark && { color: "#64748B" },
+            ]}
+          >
             Základní verze zdarma
           </Text>
         </View>
       </View>
 
-      <View style={styles.pmList}>
-        <View style={styles.pmListRow}>
-          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+      <View
+        style={[
+          styles.pmList,
+          !isDark && { borderTopColor: "#E5E7EB" },
+        ]}
+      >
+        <View
+          style={[
+            styles.pmListRow,
+            !isDark && { borderBottomColor: "#E5E7EB" },
+          ]}
+        >
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListLabel,
+              { color: UI.text },
+              !isDark && { color: "#1E293B" },
+            ]}
+          >
             Výzvy
           </Text>
-          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListValue,
+              { color: UI.text },
+              !isDark && { color: "#0F172A" },
+            ]}
+          >
             2
           </Text>
         </View>
 
-        <View style={styles.pmListRow}>
-          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+        <View
+          style={[
+            styles.pmListRow,
+            !isDark && { borderBottomColor: "#E5E7EB" },
+          ]}
+        >
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListLabel,
+              { color: UI.text },
+              !isDark && { color: "#1E293B" },
+            ]}
+          >
             Připomínky
           </Text>
-          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListValue,
+              { color: UI.text },
+              !isDark && { color: "#0F172A" },
+            ]}
+          >
             1
           </Text>
         </View>
 
-        <View style={styles.pmListRow}>
-          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+        <View
+          style={[
+            styles.pmListRow,
+            !isDark && { borderBottomColor: "#E5E7EB" },
+          ]}
+        >
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListLabel,
+              { color: UI.text },
+              !isDark && { color: "#1E293B" },
+            ]}
+          >
             Historie výzev
           </Text>
-          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListValue,
+              { color: UI.text },
+              !isDark && { color: "#0F172A" },
+            ]}
+          >
             ×
           </Text>
         </View>
 
-        <View style={styles.pmListRow}>
-          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+        <View
+          style={[
+            styles.pmListRow,
+            !isDark && { borderBottomColor: "#E5E7EB" },
+          ]}
+        >
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListLabel,
+              { color: UI.text },
+              !isDark && { color: "#1E293B" },
+            ]}
+          >
             Přátelé
           </Text>
-          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListValue,
+              { color: UI.text },
+              !isDark && { color: "#0F172A" },
+            ]}
+          >
             1
           </Text>
         </View>
 
         <View style={styles.pmListRowLast}>
-          <Text {...noScaleText} style={[styles.pmListLabel, { color: UI.text }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListLabel,
+              { color: UI.text },
+              !isDark && { color: "#1E293B" },
+            ]}
+          >
             Společné výzvy
           </Text>
-          <Text {...noScaleText} style={[styles.pmListValue, { color: UI.text }]}>
+          <Text
+            {...noScaleText}
+            style={[
+              styles.pmListValue,
+              { color: UI.text },
+              !isDark && { color: "#0F172A" },
+            ]}
+          >
             1
           </Text>
         </View>
@@ -1881,21 +2040,46 @@ const noScaleText = {
     </View>
 
     <LinearGradient
-      colors={["rgba(255,159,26,0.18)", "rgba(255,120,0,0.07)"]}
+      colors={
+        isDark
+          ? ["rgba(255,159,26,0.18)", "rgba(255,120,0,0.07)"]
+          : ["#A04A00", "#D97706"]
+      }
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={styles.pmPlanCardPremium}
+      style={[
+        styles.pmPlanCardPremium,
+        !isDark && {
+          borderColor: "#C96A10",
+          shadowColor: "#000",
+          shadowOpacity: 0.10,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 3,
+        },
+      ]}
     >
-      <View style={styles.pmBestBadge}>
+      <View
+        style={[
+          styles.pmBestBadge,
+          !isDark && { backgroundColor: "#7C2D12" },
+        ]}
+      >
         <Text {...noScaleText} style={styles.pmBestBadgeText}>
           NEJLEPŠÍ VOLBA
         </Text>
       </View>
 
       <View style={styles.pmPlanHeader}>
-        <View style={styles.pmPlanBadgePremium}>
-          <MaterialCommunityIcons name="crown" size={18} color="#FFB02E" />
+        <View
+          style={[
+            styles.pmPlanBadgePremium,
+            !isDark && { backgroundColor: "rgba(255,255,255,0.14)" },
+          ]}
+        >
+          <MaterialCommunityIcons name="crown" size={18} color="#FFD166" />
         </View>
+
         <View style={{ flex: 1 }}>
           <Text {...noScaleText} style={styles.pmPlanTitlePremium}>
             Premium
@@ -1908,35 +2092,35 @@ const noScaleText = {
 
       <View style={styles.pmFeatureList}>
         <View style={styles.pmFeatureRow}>
-          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
             Neomezené výzvy
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
-          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
             Neomezené připomínky
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
-          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
             Plná historie výzev
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
-          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
             Neomezeně přátel
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
-          <Ionicons name="checkmark-circle" size={18} color="#FFB02E" />
+          <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
             Neomezené společné výzvy
           </Text>
@@ -1945,33 +2129,64 @@ const noScaleText = {
     </LinearGradient>
 
     <Pressable
-  style={styles.pmCtaButton}
-  onPress={() => setInfoScreen("paywall")}
->
-  <Text {...noScaleText} style={styles.pmCtaButtonText}>
-    {premium ? "Spravovat Premium" : "Získat Premium"}
-  </Text>
-  <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
-</Pressable>
+      style={[
+        styles.pmCtaButton,
+        !isDark && {
+          backgroundColor: "#EA580C",
+          shadowColor: "#000",
+          shadowOpacity: 0.10,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 2,
+        },
+      ]}
+      onPress={() => setInfoScreen("paywall")}
+    >
+      <Text {...noScaleText} style={styles.pmCtaButtonText}>
+        {premium ? "Spravovat Premium" : "Získat Premium"}
+      </Text>
+      <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+    </Pressable>
 
     <View style={styles.pmBottomWrap}>
       <View style={styles.pmBottomItem}>
-        <Ionicons name="shield-checkmark-outline" size={18} color="#FFB02E" />
-        <Text {...noScaleText} style={[styles.pmBottomText, { color: UI.text }]}>
+        <Ionicons name="shield-checkmark-outline" size={18} color={isDark ? "#FFB02E" : "#D97706"} />
+        <Text
+          {...noScaleText}
+          style={[
+            styles.pmBottomText,
+            { color: UI.text },
+            !isDark && { color: "#374151" },
+          ]}
+        >
           Bezpečná platba
         </Text>
       </View>
 
       <View style={styles.pmBottomItem}>
-        <MaterialCommunityIcons name="restore" size={18} color="#FFB02E" />
-        <Text {...noScaleText} style={[styles.pmBottomText, { color: UI.text }]}>
+        <MaterialCommunityIcons name="restore" size={18} color={isDark ? "#FFB02E" : "#D97706"} />
+        <Text
+          {...noScaleText}
+          style={[
+            styles.pmBottomText,
+            { color: UI.text },
+            !isDark && { color: "#374151" },
+          ]}
+        >
           Zrušení kdykoliv
         </Text>
       </View>
 
       <View style={styles.pmBottomItem}>
-        <Ionicons name="heart-outline" size={18} color="#FFB02E" />
-        <Text {...noScaleText} style={[styles.pmBottomText, { color: UI.text }]}>
+        <Ionicons name="heart-outline" size={18} color={isDark ? "#FFB02E" : "#D97706"} />
+        <Text
+          {...noScaleText}
+          style={[
+            styles.pmBottomText,
+            { color: UI.text },
+            !isDark && { color: "#374151" },
+          ]}
+        >
           Podporuješ vývoj
         </Text>
       </View>
@@ -3528,14 +3743,14 @@ pmPlanSubtitle: {
 },
 
 pmPlanTitlePremium: {
-  color: "#FFF5E8",
+  color: "#FFF8EE",
   fontSize: 17,
   fontWeight: "900",
 },
 
 pmPlanSubtitlePremium: {
   marginTop: 2,
-  color: "#FFC978",
+  color: "#FFE2B0",
   fontSize: 11,
   fontWeight: "800",
 },
