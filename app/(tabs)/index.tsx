@@ -701,16 +701,46 @@ function makeStyles(UI: any) {
       justifyContent: "space-between",
       gap: 12,
     },
-    sharedPlayersRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: 16,
-      marginTop: 12,
-    },
-    sharedPlayerCol: {
-      flex: 1,
-      minWidth: 0,
-    },
+sharedMembersGrid: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  marginTop: 12,
+  borderWidth: 1,
+  borderColor: UI.stroke,
+  borderRadius: 16,
+  overflow: "hidden",
+},
+
+sharedMemberCol: {
+  width: "20%",
+  minWidth: 90,
+  borderRightWidth: 1,
+  borderBottomWidth: 1,
+  borderRightColor: UI.stroke,
+  borderBottomColor: UI.stroke,
+  paddingHorizontal: 10,
+  paddingVertical: 10,
+  backgroundColor: UI.card2,
+},
+
+sharedMemberColLastInRow: {
+  borderRightWidth: 0,
+},
+
+sharedMemberTop: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 6,
+  marginBottom: 6,
+},
+
+sharedMemberCount: {
+  marginTop: 2,
+  fontSize: 13,
+  fontWeight: "900",
+  color: UI.text,
+},
     sharedPlayerName: {
       fontSize: 13,
       fontWeight: "900",
@@ -2656,47 +2686,56 @@ useEffect(() => {
                                       </View>
                                     </View>
 
-                                    <View style={{ marginTop: 12, gap: 12 }}>
-                                      {memberRows.map((member) => (
-                                        <View
-                                          key={member.uid}
-                                          style={{
-                                            borderWidth: 1,
-                                            borderColor: UI.stroke,
-                                            backgroundColor: UI.card2,
-                                            borderRadius: 16,
-                                            padding: 12,
-                                          }}
-                                        >
-                                          <Text style={styles.sharedPlayerName}>{member.name}</Text>
-                                          <View style={styles.sharedFlameRow}>
-                                            <Text style={styles.sharedFlameNum}>{member.flame}</Text>
-                                            <Image
-                                              source={FLAME_IMG}
-                                              style={{
-                                                width: 42,
-                                                height: 42,
-                                                marginLeft: -8,
-                                                marginTop: -2,
-                                                opacity: 1,
-                                              }}
-                                              resizeMode="contain"
-                                            />
-                                          </View>
-                                          <Text style={styles.sharedPlayerMeta}>
-                                            {activeToday ? `Splněno ${member.done}/${item.targetPerDay}` : "Volný den"}
-                                          </Text>
-                                          <View style={styles.sharedBarTrack}>
-                                            <View
-                                              style={[
-                                                styles.sharedBarFill,
-                                                { width: `${Math.round(member.ratio * 100)}%` },
-                                              ]}
-                                            />
-                                          </View>
-                                        </View>
-                                      ))}
-                                    </View>
+     <View style={styles.sharedMembersGrid}>
+  {memberRows.map((member, memberIndex) => {
+    const colIndex = memberIndex % 5;
+    const isLastInRow = colIndex === 4;
+
+    return (
+      <View
+        key={member.uid}
+        style={[
+          styles.sharedMemberCol,
+          isLastInRow && styles.sharedMemberColLastInRow,
+        ]}
+      >
+       <View style={styles.sharedMemberTop}>
+  <Text style={styles.sharedPlayerName} numberOfLines={1}>
+    {member.name}
+  </Text>
+</View>
+
+        <View style={styles.sharedFlameRow}>
+          <Text style={styles.sharedFlameNum}>{member.flame}</Text>
+          <Image
+            source={FLAME_IMG}
+            style={{
+              width: 34,
+              height: 34,
+              marginLeft: -6,
+              marginTop: -1,
+              opacity: 1,
+            }}
+            resizeMode="contain"
+          />
+        </View>
+
+        <Text style={styles.sharedMemberCount}>
+          {activeToday ? `${member.done}/${item.targetPerDay}` : "Volno"}
+        </Text>
+
+        <View style={styles.sharedBarTrack}>
+          <View
+            style={[
+              styles.sharedBarFill,
+              { width: `${Math.round(member.ratio * 100)}%` },
+            ]}
+          />
+        </View>
+      </View>
+    );
+  })}
+</View>
                                   </>
                                 )}
                               </View>
