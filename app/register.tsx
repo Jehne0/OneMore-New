@@ -16,11 +16,13 @@ import {
 import { Alert } from "../lib/appAlert";
 import { auth } from "../lib/firebase";
 import { useTheme } from "../lib/theme";
+import { useI18n } from "../lib/i18n";
 import { claimUsername } from "../lib/usernames";
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { UI, isDark } = useTheme();
+  const { t } = useI18n();
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -29,7 +31,10 @@ export default function RegisterScreen() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const gradientColors = useMemo(() => (isDark ? [UI.bg, UI.bg, UI.bg] : [UI.bg, UI.bg, UI.bg]), [UI.bg, isDark]);
+  const gradientColors = useMemo(
+    () => (isDark ? [UI.bg, UI.bg, UI.bg] : [UI.bg, UI.bg, UI.bg]),
+    [UI.bg, isDark]
+  );
 
   const isEmailValid = (v: string) => {
     const s = v.trim();
@@ -43,7 +48,11 @@ export default function RegisterScreen() {
   const isUsernameValid = (v: string) => v.trim().length >= 2;
   const isPasswordValid = (v: string) => v.trim().length >= 6;
 
-  const canRegister = isUsernameValid(username) && isEmailValid(email) && isPasswordValid(password) && !loading;
+  const canRegister =
+    isUsernameValid(username) &&
+    isEmailValid(email) &&
+    isPasswordValid(password) &&
+    !loading;
 
   const withTimeout = async <T,>(p: Promise<T>, ms: number) => {
     let t: any;
@@ -66,21 +75,24 @@ export default function RegisterScreen() {
     const passTrim = password.trim();
 
     if (!isUsernameValid(nameTrim)) {
-      Alert.alert("Chybí jméno", "Zadej prosím uživatelské jméno (min. 2 znaky).");
+      Alert.alert(t.register.missingNameTitle, t.register.missingNameText);
       return;
     }
     if (!isEmailValid(emailTrim)) {
-      Alert.alert("Neplatný e-mail", "Zadej prosím platný e-mail.");
+      Alert.alert(t.register.invalidEmailTitle, t.register.invalidEmailText);
       return;
     }
     if (!isPasswordValid(passTrim)) {
-      Alert.alert("Slabé heslo", "Heslo musí mít alespoň 6 znaků.");
+      Alert.alert(t.register.weakPasswordTitle, t.register.weakPasswordText);
       return;
     }
 
     setLoading(true);
     try {
-      const cred = await withTimeout(createUserWithEmailAndPassword(auth, emailTrim, passTrim), 12000);
+      const cred = await withTimeout(
+        createUserWithEmailAndPassword(auth, emailTrim, passTrim),
+        12000
+      );
 
       if (cred.user) {
         // ✅ displayName pro UI
@@ -88,7 +100,7 @@ export default function RegisterScreen() {
         await cred.user.reload();
 
         // ✅ Firestore: users/{uid} + usernames/{usernameLower}
-       try {
+        try {
           await claimUsername(cred.user.uid, nameTrim);
         } catch (err: any) {
           // když se nepodaří uložit profil/username, smažeme Auth účet, aby nezůstal viset
@@ -102,55 +114,48 @@ export default function RegisterScreen() {
           const msgRaw = String(err?.message ?? "");
           const c = (codeRaw || msgRaw).toLowerCase();
 
-          // ✅ jen specifické chyby pro username (NE "already" obecně)
           if (
             c.includes("username-taken") ||
             c.includes("username_taken") ||
             c.includes("usernamealready") ||
             c.includes("username-already") ||
-            c.includes("taken") && c.includes("username")
+            (c.includes("taken") && c.includes("username"))
           ) {
-            Alert.alert("Jméno je obsazené", "Zkus jiné uživatelské jméno.");
+            Alert.alert(t.register.usernameTakenTitle, t.register.usernameTakenText);
             return;
           }
 
           if (c.includes("permission-denied")) {
-            Alert.alert(
-              "Nemám přístup do cloudu",
-              "Firestore pravidla blokují zápis (PERMISSION_DENIED). Zkontroluj Firestore Rules a zkus to znovu."
-            );
+            Alert.alert(t.register.cloudAccessTitle, t.register.cloudAccessText);
             return;
           }
 
           console.log("CLAIM USERNAME ERROR:", err);
-Alert.alert(
-  "Chyba cloudu",
-  `Nepodařilo se uložit profil do cloudu.\n\nCODE: ${String(err?.code ?? "unknown")}\nMSG: ${String(err?.message ?? "")}`
-);
-return;
+          Alert.alert(
+            t.register.cloudErrorTitle,
+            `CODE: ${String(err?.code ?? "unknown")}\nMSG: ${String(err?.message ?? "")}`
+          );
+          return;
         }
       }
 
-      Alert.alert("Hotovo", "Účet byl vytvořen.");
-      // po registraci rovnou do aplikace
+      Alert.alert(t.register.doneTitle, t.register.doneText);
       router.replace("/(tabs)");
     } catch (e: any) {
       const code = e?.code ?? "";
       if (code.includes("auth/email-already-in-use")) {
-        Alert.alert("E-mail už existuje", "Tento e-mail už je zaregistrovaný. Zkus se přihlásit.");
+        Alert.alert(t.register.emailExistsTitle, t.register.emailExistsText);
       } else if (code.includes("auth/invalid-email")) {
-        Alert.alert("Neplatný e-mail", "Zkontroluj prosím formát e-mailu.");
+        Alert.alert(t.register.invalidEmailTitle, t.register.invalidEmailText);
       } else if (code.includes("auth/weak-password")) {
-        Alert.alert("Slabé heslo", "Zkus delší heslo (min. 6 znaků).");
+        Alert.alert(t.register.weakPasswordTitle, t.register.weakPasswordText);
       } else if (code.includes("auth/timeout")) {
-        Alert.alert("Trvá to moc dlouho", "Registrace se zasekla (signál / Firebase). Zkus to prosím znovu.");
+        Alert.alert(t.register.timeoutTitle, t.register.timeoutText);
       } else {
         console.log("REGISTER ERROR:", e?.code, e?.message, e);
         Alert.alert(
-          "Chyba",
-          `Nepodařilo se registrovat. Zkus to prosím znovu.
-
-(${code || "unknown"})`
+          t.register.genericErrorTitle,
+          `${t.register.genericErrorText}\n\n(${code || "unknown"})`
         );
       }
     } finally {
@@ -172,16 +177,21 @@ return;
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.container}>
-          <Text style={[styles.title, { color: UI.text }]}>Registrace</Text>
-          <Text style={[styles.subtitle, { color: UI.sub }]}>Vytvoř si účet a pojď na to.</Text>
+          <Text style={[styles.title, { color: UI.text }]}>{t.register.title}</Text>
+          <Text style={[styles.subtitle, { color: UI.sub }]}>{t.register.subtitle}</Text>
 
           <View style={{ marginTop: 22 }}>
             {/* USERNAME */}
-            <View style={[styles.inputWrap, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
+            <View
+              style={[
+                styles.inputWrap,
+                { backgroundColor: UI.card, borderColor: UI.stroke },
+              ]}
+            >
               <TextInput
                 value={username}
                 onChangeText={setUsername}
-                placeholder="Uživatelské jméno"
+                placeholder={t.register.username}
                 placeholderTextColor={UI.sub}
                 autoCapitalize="words"
                 autoCorrect={false}
@@ -191,11 +201,20 @@ return;
             </View>
 
             {/* EMAIL */}
-            <View style={[styles.inputWrap, { backgroundColor: UI.card, borderColor: UI.stroke, marginTop: 14 }]}>
+            <View
+              style={[
+                styles.inputWrap,
+                {
+                  backgroundColor: UI.card,
+                  borderColor: UI.stroke,
+                  marginTop: 14,
+                },
+              ]}
+            >
               <TextInput
                 value={email}
                 onChangeText={setEmail}
-                placeholder="E-mail"
+                placeholder={t.register.email}
                 placeholderTextColor={UI.sub}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -206,11 +225,20 @@ return;
             </View>
 
             {/* PASSWORD */}
-            <View style={[styles.inputWrap, { backgroundColor: UI.card, borderColor: UI.stroke, marginTop: 14 }]}>
+            <View
+              style={[
+                styles.inputWrap,
+                {
+                  backgroundColor: UI.card,
+                  borderColor: UI.stroke,
+                  marginTop: 14,
+                },
+              ]}
+            >
               <TextInput
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Heslo"
+                placeholder={t.register.password}
                 placeholderTextColor={UI.sub}
                 secureTextEntry={!showPass}
                 autoCapitalize="none"
@@ -225,7 +253,9 @@ return;
                 style={({ pressed }) => [styles.eyeBtn, { opacity: pressed ? 0.75 : 1 }]}
                 hitSlop={10}
               >
-                <Text style={[styles.eyeText, { color: UI.sub }]}>{showPass ? "👁️" : "👁️‍🗨️"}</Text>
+                <Text style={[styles.eyeText, { color: UI.sub }]}>
+                  {showPass ? "👁️" : "👁️‍🗨️"}
+                </Text>
               </Pressable>
             </View>
 
@@ -247,16 +277,16 @@ return;
               {loading ? (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator />
-                  <Text style={styles.primaryBtnText}>VYTVÁŘÍM…</Text>
+                  <Text style={styles.primaryBtnText}>{t.register.creating}</Text>
                 </View>
               ) : (
-                <Text style={styles.primaryBtnText}>VYTVOŘIT ÚČET</Text>
+                <Text style={styles.primaryBtnText}>{t.register.createAccount}</Text>
               )}
             </Pressable>
 
             {/* BACK TO LOGIN */}
             <View style={styles.backRow}>
-              <Text style={[styles.backText, { color: UI.sub }]}>Už máš účet?</Text>
+              <Text style={[styles.backText, { color: UI.sub }]}>{t.register.haveAccount}</Text>
               <Pressable
                 onPress={() => {
                   Keyboard.dismiss();
@@ -264,7 +294,10 @@ return;
                 }}
                 style={({ pressed }) => [pressed && { opacity: 0.85 }]}
               >
-                <Text style={[styles.backLink, { color: UI.accent }]}>{" "}Přihlásit se</Text>
+                <Text style={[styles.backLink, { color: UI.accent }]}>
+                  {" "}
+                  {t.register.login}
+                </Text>
               </Pressable>
             </View>
           </View>

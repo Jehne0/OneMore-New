@@ -36,6 +36,7 @@ import {
 } from "../../lib/revenuecat";
 
 import { useTheme } from "../../lib/theme";
+import { useI18n } from "../../lib/i18n";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import {
   EmailAuthProvider,
@@ -94,11 +95,292 @@ type FriendPreviewStats = {
 const PRIVACY_URL = "https://desigame.eu/privacy.html";
 const TERMS_URL = "https://desigame.eu/terms.html";
 
+const PROFILE_STRINGS = {
+  cs: {
+    deleteAccountTitle: "Odstranit účet?",
+    deleteAccountText: "Tahle akce je nevratná. Účet bude smazán.",
+    enterPassword: "Zadej heslo",
+    cancel: "Zrušit",
+    deleteAccountAction: "Chci odstranit účet",
+    deletingAccount: "Mažu účet…",
+    changePassword: "Změna hesla",
+    close: "Zavřít",
+    passwordResetInfo: "Pošleme ti e-mail s odkazem na změnu hesla.",
+    email: "E-mail",
+    sendLink: "Poslat odkaz",
+    sending: "Odesílám…",
+    changeUsername: "Změna uživatelského jména",
+    newUsername: "Nové uživatelské jméno",
+    saveChange: "Uložit změnu",
+    saving: "Ukládám…",
+    account: "Účet",
+    darkMode: "Tmavý režim",
+    shareAchievements: "Sdílet s přáteli své úspěchy",
+    language: "Jazyk",
+    premium: "Premium",
+    managePremium: "Spravovat Premium",
+    logout: "Odhlásit se",
+    deleteAccount: "Odstranit účet",
+    info: "Informace",
+    sendQuestion: "Poslat dotaz",
+    streaksMedals: "Ohýnky & medaile",
+    freePremium: "Free & Premium",
+    privacy: "Ochrana soukromí",
+    terms: "Podmínky používání",
+    limitsBenefits: "Limity & výhody",
+    streaksRewards: "Série & odměny",
+    history: "Historie výzev",
+    historySubtitle: "Přehled plnění a série",
+    flames: "Ohýnky",
+    medals: "Medaile",
+    premiumBuy: "Koupit Premium",
+    premiumCancel: "Zrušit předplatné",
+    open: "Otevřít",
+    subject: "Předmět",
+    message: "Zpráva",
+    send: "Odeslat",
+    friends: "Přátelé",
+    requests: "Žádosti",
+    challenges: "Výzvy",
+    addFriend: "Přidat přítele",
+    addByUsername: "Přidat podle username",
+    addByUsernameHelp: "Zadej uživatelské jméno člověka, kterého chceš přidat.",
+    add: "Přidat",
+    myFriends: "Moji přátelé",
+    addShort: "+ Přidat",
+    invite: "Vyzvat",
+    remove: "Odebrat",
+    accept: "Přijmout",
+    decline: "Odmítnout",
+    sentRequests: "Odeslané žádosti",
+    incomingRequests: "Příchozí žádosti",
+    blocked: "Blokovaní",
+    loadingFriends: "Načítám přátele...",
+    noFriendsYet: "Zatím žádní přátelé.",
+    loadingChallenges: "Načítám výzvy...",
+    noPendingChallenges: "Zatím tu nemáš žádné nepřijaté společné výzvy.",
+    from: "Od",
+    participants: "Účastníci",
+    target: "Cíl",
+    daily: "denně",
+    every2: "obden",
+    selectedDays: "ve vybrané dny",
+    newSharedChallenge: "Nová společná výzva",
+    sharedChallenge: "Společná výzva",
+    selectUpToFriends: "Vyber až {count} přátel do jedné výzvy.",
+    friendsLabel: "Přátelé",
+    challengeName: "Název výzvy",
+    challengeNamePlaceholder: "Např. Kliky",
+    countPerDay: "Počet za den",
+    period: "Perioda",
+    dailyCap: "Denně",
+    every2Cap: "Obden",
+    customDays: "Vlastní dny",
+    chooseDays: "Vyber dny",
+    submit: "Odeslat",
+    friendProfile: "Profil přítele",
+    loadingStats: "Načítám statistiky...",
+    userNotSharing: "Tento uživatel nesdílí své úspěchy.",
+    statsUnavailable: "Statistiky nejsou dostupné.",
+    longestStreak: "🔥 Nejdelší série",
+    medalsCount: "🏅 Počet medailí",
+    highestMedal: "💎 Nejvyšší medaile",
+    activeChallenges: "✅ Aktivní výzvy",
+    upgrade: "Upgradovat",
+    ok: "OK",
+    supportReplyEmail: "E-mail pro odpověď",
+    supportPlaceholder: "tvuj@email.cz",
+    supportSubjectPlaceholder: "Např. Problém s notifikacemi",
+    supportMessagePlaceholder: "Popiš prosím svůj dotaz…",
+    freeVersion: "Základní verze zdarma",
+    bestChoice: "NEJLEPŠÍ VOLBA",
+    premiumForResults: "Pro maximální výsledky",
+    unlimitedChallenges: "Neomezené výzvy",
+    unlimitedReminders: "Neomezené připomínky",
+    fullHistory: "Plná historie výzev",
+    unlimitedFriends: "Neomezeně přátel",
+    unlimitedSharedChallenges: "Neomezené společné výzvy",
+    getPremium: "Získat Premium",
+    securePayment: "Bezpečná platba",
+    cancelAnytime: "Zrušení kdykoliv",
+    supportDevelopment: "Podporuješ vývoj",
+    free: "Free",
+    oneMoreFree: "OneMore zdarma. Premium bez limitů.",
+    premiumActiveShort: "Premium je aktivní.",
+    manageSubscription: "Spravuj své předplatné",
+    unlockMore: "Odemkni více výzev, připomínek, přátel a společných výzev.",
+    reminders: "Připomínky",
+    historyChallenges: "Historie výzev",
+    sharedChallenges: "Společné výzvy",
+    activePremiumInfo: "Premium je aktivní. Můžeš ho kdykoliv zrušit nebo zkusit obnovit stav.",
+    unlockPremiumInfo: "Odemkni Premium a získej neomezené výzvy, připomínky a přátele.",
+    priceInfo: "Cena: zobrazí se po napojení nabídky (Offering) v RevenueCat.",
+    unlimitedRemindersNotif: "Neomezené připomínky (notifikace)",
+    unlimitedFriendsLink: "Neomezené propojení s přáteli",
+    moreRewards: "Další odměny a drobné vychytávky (postupně)",
+    querySubject: "Poslat dotaz",
+    profileTitleFriends: "Přátelé",
+    profileTitleInfo: "Informace",
+    passwordPlaceholder: "heslo",
+    usernamePlaceholder: "username",
+    noScalePremium: "Premium",
+    noScaleFree: "Free",
+    premiumFriendsOnly: "Společné výzvy s přáteli jsou dostupné jen v Premium verzi.",
+    medalNone: "Žádná",
+    medalPotato: "Bramborová",
+    medalSteel: "Ocelová",
+    medalBronze: "Bronzová",
+    medalSilver: "Stříbrná",
+    medalGold: "Zlatá",
+    medalDiamond: "Diamantová",
+  },
+  en: {
+    deleteAccountTitle: "Delete account?",
+    deleteAccountText: "This action is irreversible. Your account will be deleted.",
+    enterPassword: "Enter password",
+    cancel: "Cancel",
+    deleteAccountAction: "Delete my account",
+    deletingAccount: "Deleting account…",
+    changePassword: "Change password",
+    close: "Close",
+    passwordResetInfo: "We will send you an email with a password reset link.",
+    email: "Email",
+    sendLink: "Send link",
+    sending: "Sending…",
+    changeUsername: "Change username",
+    newUsername: "New username",
+    saveChange: "Save changes",
+    saving: "Saving…",
+    account: "Account",
+    darkMode: "Dark mode",
+    shareAchievements: "Share my achievements with friends",
+    language: "Language",
+    premium: "Premium",
+    managePremium: "Manage Premium",
+    logout: "Log out",
+    deleteAccount: "Delete account",
+    info: "Info",
+    sendQuestion: "Send a question",
+    streaksMedals: "Streaks & medals",
+    freePremium: "Free & Premium",
+    privacy: "Privacy policy",
+    terms: "Terms of use",
+    limitsBenefits: "Limits & benefits",
+    streaksRewards: "Streaks & rewards",
+    history: "Challenge history",
+    historySubtitle: "Completion and streak overview",
+    flames: "Flames",
+    medals: "Medals",
+    premiumBuy: "Buy Premium",
+    premiumCancel: "Cancel subscription",
+    open: "Open",
+    subject: "Subject",
+    message: "Message",
+    send: "Send",
+    friends: "Friends",
+    requests: "Requests",
+    challenges: "Challenges",
+    addFriend: "Add friend",
+    addByUsername: "Add by username",
+    addByUsernameHelp: "Enter the username of the person you want to add.",
+    add: "Add",
+    myFriends: "My friends",
+    addShort: "+ Add",
+    invite: "Invite",
+    remove: "Remove",
+    accept: "Accept",
+    decline: "Decline",
+    sentRequests: "Sent requests",
+    incomingRequests: "Incoming requests",
+    blocked: "Blocked",
+    loadingFriends: "Loading friends...",
+    noFriendsYet: "No friends yet.",
+    loadingChallenges: "Loading challenges...",
+    noPendingChallenges: "You have no pending shared challenges right now.",
+    from: "From",
+    participants: "Participants",
+    target: "Target",
+    daily: "daily",
+    every2: "every other day",
+    selectedDays: "on selected days",
+    newSharedChallenge: "New shared challenge",
+    sharedChallenge: "Shared challenge",
+    selectUpToFriends: "Select up to {count} friends for one challenge.",
+    friendsLabel: "Friends",
+    challengeName: "Challenge name",
+    challengeNamePlaceholder: "For example: Push-ups",
+    countPerDay: "Count per day",
+    period: "Period",
+    dailyCap: "Daily",
+    every2Cap: "Every other day",
+    customDays: "Custom days",
+    chooseDays: "Choose days",
+    submit: "Send",
+    friendProfile: "Friend profile",
+    loadingStats: "Loading stats...",
+    userNotSharing: "This user is not sharing achievements.",
+    statsUnavailable: "Stats are not available.",
+    longestStreak: "🔥 Longest streak",
+    medalsCount: "🏅 Medal count",
+    highestMedal: "💎 Highest medal",
+    activeChallenges: "✅ Active challenges",
+    upgrade: "Upgrade",
+    ok: "OK",
+    supportReplyEmail: "Reply email",
+    supportPlaceholder: "your@email.com",
+    supportSubjectPlaceholder: "For example: Notification issue",
+    supportMessagePlaceholder: "Describe your issue…",
+    freeVersion: "Basic version for free",
+    bestChoice: "BEST VALUE",
+    premiumForResults: "For maximum results",
+    unlimitedChallenges: "Unlimited challenges",
+    unlimitedReminders: "Unlimited reminders",
+    fullHistory: "Full challenge history",
+    unlimitedFriends: "Unlimited friends",
+    unlimitedSharedChallenges: "Unlimited shared challenges",
+    getPremium: "Get Premium",
+    securePayment: "Secure payment",
+    cancelAnytime: "Cancel anytime",
+    supportDevelopment: "You support development",
+    free: "Free",
+    oneMoreFree: "OneMore for free. Premium without limits.",
+    premiumActiveShort: "Premium is active.",
+    manageSubscription: "Manage your subscription",
+    unlockMore: "Unlock more challenges, reminders, friends, and shared challenges.",
+    reminders: "Reminders",
+    historyChallenges: "Challenge history",
+    sharedChallenges: "Shared challenges",
+    activePremiumInfo: "Premium is active. You can cancel it anytime or try restoring the status.",
+    unlockPremiumInfo: "Unlock Premium and get unlimited challenges, reminders, and friends.",
+    priceInfo: "Price will appear after the RevenueCat offering is connected.",
+    unlimitedRemindersNotif: "Unlimited reminders (notifications)",
+    unlimitedFriendsLink: "Unlimited friend connections",
+    moreRewards: "More rewards and small extras (coming gradually)",
+    querySubject: "Send a question",
+    profileTitleFriends: "Friends",
+    profileTitleInfo: "Info",
+    passwordPlaceholder: "password",
+    usernamePlaceholder: "username",
+    noScalePremium: "Premium",
+    noScaleFree: "Free",
+    premiumFriendsOnly: "Shared challenges with friends are available only in Premium.",
+    medalNone: "None",
+    medalPotato: "Potato",
+    medalSteel: "Steel",
+    medalBronze: "Bronze",
+    medalSilver: "Silver",
+    medalGold: "Gold",
+    medalDiamond: "Diamond",
+  },
+} as const;
+
 export default function ProfileTabScreen() {
   const router = useRouter();
   const { open, t } = useLocalSearchParams<{ open?: string; t?: string }>();
   const insets = useSafeAreaInsets();
   const { UI, isDark, toggle } = useTheme();
+  const { lang, setLang } = useI18n();
+  const p = PROFILE_STRINGS[lang];
 
 
   // ✅ Změna username
@@ -194,8 +476,6 @@ export default function ProfileTabScreen() {
     setPwdPopupOpen(true);
   };
 
-  // ✅ jazyk (zatím UI-only placeholder)
-  const [lang, setLang] = useState<"cs" | "en">("cs");
 
   // --- EFFECTS ---
 
@@ -389,7 +669,7 @@ await Promise.all(
   const getShownFriendName = (uid: string) => {
     const v = friendNames[uid];
     if (typeof v === "string" && v.trim()) return v.trim();
-    return "Načítám...";
+    return lang === "cs" ? "Načítám..." : "Loading...";
   };
   const pendingInviteCount = sharedInvites.length;
 
@@ -397,25 +677,25 @@ await Promise.all(
     const creatorUid = String(challenge.createdBy ?? "");
     const v = friendNames[creatorUid];
     if (typeof v === "string" && v.trim()) return v.trim();
-    return "Kamarád";
+    return lang === "cs" ? "Kamarád" : "Friend";
   };
 
   const medalLabel = (tier: FriendPreviewStats["highestMedal"]) => {
     switch (tier) {
       case "brambora":
-        return "Bramborová";
+        return p.medalPotato;
       case "steel":
-        return "Ocelová";
+        return p.medalSteel;
       case "bronze":
-        return "Bronzová";
+        return p.medalBronze;
       case "silver":
-        return "Stříbrná";
+        return p.medalSilver;
       case "gold":
-        return "Zlatá";
+        return p.medalGold;
       case "diamond":
-        return "Diamantová";
+        return p.medalDiamond;
       default:
-        return "Žádná";
+        return p.medalNone;
     }
   };
 
@@ -466,10 +746,10 @@ await Promise.all(
     const names = others.map((uid) => {
       const v = friendNames[String(uid)];
       if (typeof v === "string" && v.trim()) return v.trim();
-      return "Načítám...";
+      return lang === "cs" ? "Načítám..." : "Loading...";
     });
 
-    if (!names.length) return "Společná výzva";
+    if (!names.length) return p.sharedChallenge;
     if (names.length === 1) return names[0];
     if (names.length === 2) return `${names[0]}, ${names[1]}`;
     return `${names[0]}, ${names[1]} +${names.length - 2}`;
@@ -479,12 +759,12 @@ await Promise.all(
     try {
       setFriendsBusy(true);
       await acceptSharedChallenge(challengeId);
-      showPwdPopup("success", "Výzva", "Výzva byla přijata.");
+      showPwdPopup("success", p.challenges, lang === "cs" ? "Výzva byla přijata." : "Challenge was accepted.");
     } catch (e: any) {
       showPwdPopup(
         "error",
-        "Výzva",
-        e?.message ?? "Nepodařilo se přijmout výzvu."
+        p.challenges,
+        e?.message ?? (lang === "cs" ? "Nepodařilo se přijmout výzvu." : "Could not accept the challenge.")
       );
     } finally {
       setFriendsBusy(false);
@@ -495,12 +775,12 @@ async function declineSharedInviteFromFriends(challengeId: string) {
   try {
     setFriendsBusy(true);
     await declineSharedChallenge(challengeId);
-    showPwdPopup("success", "Výzva", "Výzva byla odmítnuta.");
+    showPwdPopup("success", p.challenges, lang === "cs" ? "Výzva byla odmítnuta." : "Challenge was declined.");
   } catch (e: any) {
     showPwdPopup(
       "error",
-      "Výzva",
-      e?.message ?? "Nepodařilo se odmítnout výzvu."
+      p.challenges,
+      e?.message ?? (lang === "cs" ? "Nepodařilo se odmítnout výzvu." : "Could not decline the challenge.")
     );
   } finally {
     setFriendsBusy(false);
@@ -544,15 +824,17 @@ const noScaleText = {
       const pkgs = await getOfferingPackages();
       if (!pkgs.length) {
         Alert.alert(
-          "Premium",
-          "Balíčky Premium nejsou dostupné. (V Test Store se ujisti, že máš nastavené Offering/Package v RevenueCat.)"
+          p.premium,
+          lang === "cs"
+            ? "Balíčky Premium nejsou dostupné. (V Test Store se ujisti, že máš nastavené Offering/Package v RevenueCat.)"
+            : "Premium packages are not available. (In Test Store, make sure your Offering/Package is configured in RevenueCat.)"
         );
         return;
       }
       await purchasePackage(pkgs[0]);
-      Alert.alert("Premium", "Premium aktivováno.");
+      Alert.alert(p.premium, lang === "cs" ? "Premium aktivováno." : "Premium activated.");
     } catch {
-      Alert.alert("Premium", "Nepodařilo se aktivovat Premium.");
+      Alert.alert(p.premium, lang === "cs" ? "Nepodařilo se aktivovat Premium." : "Could not activate Premium.");
     } finally {
       setPremiumBusy(false);
     }
@@ -561,12 +843,12 @@ const noScaleText = {
   const cancelPremiumNow = async () => {
     if (premiumBusy) return;
     Alert.alert(
-      "Zrušit Premium",
-      "Zrušení předplatného se provádí ve Store (Google Play / App Store). Chceš otevřít správu předplatného?",
+      lang === "cs" ? "Zrušit Premium" : "Cancel Premium",
+      lang === "cs" ? "Zrušení předplatného se provádí ve Store (Google Play / App Store). Chceš otevřít správu předplatného?" : "Subscription cancellation is handled in the Store (Google Play / App Store). Do you want to open subscription management?",
       [
-        { text: "Ne", style: "cancel" },
+        { text: lang === "cs" ? "Ne" : "No", style: "cancel" },
         {
-          text: "Otevřít",
+          text: p.open,
           style: "default",
           onPress: async () => {
             setPremiumBusy(true);
@@ -574,8 +856,8 @@ const noScaleText = {
               await openCancelSubscription();
             } catch {
               Alert.alert(
-                "Premium",
-                "Nepodařilo se otevřít správu předplatného."
+                p.premium,
+                lang === "cs" ? "Nepodařilo se otevřít správu předplatného." : "Could not open subscription management."
               );
             } finally {
               setPremiumBusy(false);
@@ -593,9 +875,9 @@ const noScaleText = {
       await restorePurchases();
       // stav se propíše přes subscribePremium listener
       const v = await isPremiumActive();
-      Alert.alert("Premium", v ? "Premium je aktivní." : "Premium není aktivní.");
+      Alert.alert(p.premium, v ? (lang === "cs" ? "Premium je aktivní." : "Premium is active.") : (lang === "cs" ? "Premium není aktivní." : "Premium is not active."));
     } catch {
-      Alert.alert("Premium", "Nepodařilo se obnovit stav Premium.");
+      Alert.alert(p.premium, lang === "cs" ? "Nepodařilo se obnovit stav Premium." : "Could not restore Premium status.");
     } finally {
       setPremiumBusy(false);
     }
@@ -612,7 +894,7 @@ const noScaleText = {
 
     const user = auth.currentUser;
     if (!user || !user.email) {
-      showPwdPopup("error", "Nelze smazat účet", "Nejsi přihlášený.");
+      showPwdPopup("error", lang === "cs" ? "Nelze smazat účet" : "Cannot delete account", lang === "cs" ? "Nejsi přihlášený." : "You are not signed in.");
       setDeleteOpen(false);
       return;
     }
@@ -621,8 +903,8 @@ const noScaleText = {
     if (!pwd) {
       showPwdPopup(
         "error",
-        "Chybí heslo",
-        "Pro smazání účtu zadej heslo (kvůli bezpečnosti Firebase)."
+        lang === "cs" ? "Chybí heslo" : "Missing password",
+        lang === "cs" ? "Pro smazání účtu zadej heslo (kvůli bezpečnosti Firebase)." : "Enter your password to delete the account (required by Firebase security)."
       );
       return;
     }
@@ -682,8 +964,8 @@ const noScaleText = {
       if (code.includes("auth/wrong-password")) {
         showPwdPopup(
           "error",
-          "Špatné heslo",
-          "Zadal jsi špatné heslo. Zkus to znovu."
+          lang === "cs" ? "Špatné heslo" : "Wrong password",
+          lang === "cs" ? "Zadal jsi špatné heslo. Zkus to znovu." : "You entered the wrong password. Try again."
         );
         return;
       }
@@ -692,8 +974,8 @@ const noScaleText = {
         setDeleteOpen(false);
         showPwdPopup(
           "error",
-          "Vyžadováno znovu přihlášení",
-          "Z bezpečnostních důvodů se musíš znovu přihlásit a pak smazání zopakovat. Odhlásím tě teď."
+          lang === "cs" ? "Vyžadováno znovu přihlášení" : "Re-login required",
+          lang === "cs" ? "Z bezpečnostních důvodů se musíš znovu přihlásit a pak smazání zopakovat. Odhlásím tě teď." : "For security reasons, you need to sign in again and then repeat the deletion. I will sign you out now."
         );
         try {
           await revenueCatLogout();
@@ -708,8 +990,8 @@ const noScaleText = {
       setDeleteOpen(false);
       showPwdPopup(
         "error",
-        "Smazání se nepovedlo",
-        "Nepodařilo se smazat účet. Zkus to prosím znovu."
+        lang === "cs" ? "Smazání se nepovedlo" : "Deletion failed",
+        lang === "cs" ? "Nepodařilo se smazat účet. Zkus to prosím znovu." : "Could not delete the account. Please try again."
       );
     } finally {
       setDeleteWorking(false);
@@ -720,7 +1002,7 @@ const noScaleText = {
     const url = PRIVACY_URL;
     const ok = await Linking.canOpenURL(url);
     if (!ok) {
-      Alert.alert("Odkaz", "Nepodařilo se otevřít Ochranu soukromí.");
+      Alert.alert(lang === "cs" ? "Odkaz" : "Link", lang === "cs" ? "Nepodařilo se otevřít Ochranu soukromí." : "Could not open the privacy policy.");
       return;
     }
     await Linking.openURL(url);
@@ -730,7 +1012,7 @@ const noScaleText = {
     const url = TERMS_URL;
     const ok = await Linking.canOpenURL(url);
     if (!ok) {
-      Alert.alert("Odkaz", "Nepodařilo se otevřít Podmínky používání.");
+      Alert.alert(lang === "cs" ? "Odkaz" : "Link", lang === "cs" ? "Nepodařilo se otevřít Podmínky používání." : "Could not open the terms of use.");
       return;
     }
     await Linking.openURL(url);
@@ -742,12 +1024,12 @@ const noScaleText = {
     const m = supportMessage.trim();
 
     if (!e || !s || !m) {
-      showPwdPopup("error", "Podpora", "Vyplň prosím e-mail, předmět i zprávu.");
+      showPwdPopup("error", lang === "cs" ? "Podpora" : "Support", lang === "cs" ? "Vyplň prosím e-mail, předmět i zprávu." : "Please fill in email, subject, and message." );
       return;
     }
 
     if (!auth.currentUser) {
-      showPwdPopup("error", "Podpora", "Musíš být přihlášený/á.");
+      showPwdPopup("error", lang === "cs" ? "Podpora" : "Support", lang === "cs" ? "Musíš být přihlášený/á." : "You must be signed in.");
       return;
     }
 
@@ -760,22 +1042,22 @@ const noScaleText = {
       setSupportMessage("");
 
       // ✅ místo bílého Alert.alert použijeme tvůj oranžový popup
-      showPwdPopup("success", "Odesláno", "Díky! Zpráva byla odeslána na podporu.");
+      showPwdPopup("success", lang === "cs" ? "Odesláno" : "Sent", lang === "cs" ? "Díky! Zpráva byla odeslána na podporu." : "Thanks! Your message was sent to support.");
 
       setInfoScreen("menu");
     } catch (err: any) {
       const code = String(err?.code ?? "");
       const msg0 = String(err?.message ?? "");
 
-      let msg = "Nepodařilo se odeslat zprávu. Zkus to prosím znovu.";
-      if (code.includes("unauthenticated")) msg = "Musíš být přihlášený/á.";
+      let msg = lang === "cs" ? "Nepodařilo se odeslat zprávu. Zkus to prosím znovu." : "Could not send the message. Please try again.";
+      if (code.includes("unauthenticated")) msg = lang === "cs" ? "Musíš být přihlášený/á." : "You must be signed in.";
       else if (code.includes("permission-denied"))
-        msg = "Nemáš oprávnění odeslat zprávu.";
+        msg = lang === "cs" ? "Nemáš oprávnění odeslat zprávu." : "You do not have permission to send the message.";
       else if (code.includes("invalid-argument"))
-        msg = "Zkontroluj prosím vyplněné údaje.";
+        msg = lang === "cs" ? "Zkontroluj prosím vyplněné údaje." : "Please check the entered details.";
       else if (msg0) msg = msg0;
 
-      showPwdPopup("error", "Chyba", msg);
+      showPwdPopup("error", lang === "cs" ? "Chyba" : "Error", msg);
     } finally {
       setSupportSending(false);
     }
@@ -784,8 +1066,8 @@ const noScaleText = {
   const requestPasswordReset = async () => {
     const e = pwdEmail.trim();
     if (!e) {
-      setPwdError("Zadej prosím e-mail.");
-      showPwdPopup("error", "Chybí e-mail", "Zadej prosím e-mail a zkus to znovu.");
+      setPwdError(lang === "cs" ? "Zadej prosím e-mail." : "Please enter your email.");
+      showPwdPopup("error", lang === "cs" ? "Chybí e-mail" : "Missing email", lang === "cs" ? "Zadej prosím e-mail a zkus to znovu." : "Please enter your email and try again.");
       return;
     }
 
@@ -797,22 +1079,22 @@ const noScaleText = {
       setPwdSent(true);
       showPwdPopup(
         "success",
-        "Hotovo",
-        "Poslali jsme ti e-mail s odkazem na změnu hesla. Zkontroluj i spam."
+        lang === "cs" ? "Hotovo" : "Done",
+        lang === "cs" ? "Poslali jsme ti e-mail s odkazem na změnu hesla. Zkontroluj i spam." : "We sent you an email with a password reset link. Check spam too."
       );
     } catch (err: any) {
       const code = String(err?.code ?? "");
-      let msg = "Nepodařilo se odeslat e-mail. Zkus to prosím znovu.";
+      let msg = lang === "cs" ? "Nepodařilo se odeslat e-mail. Zkus to prosím znovu." : "Could not send the email. Please try again.";
 
       if (code.includes("auth/invalid-email"))
-        msg = "E-mail není ve správném formátu.";
+        msg = lang === "cs" ? "E-mail není ve správném formátu." : "The email format is invalid.";
       else if (code.includes("auth/user-not-found"))
-        msg = "Pro tento e-mail neexistuje účet.";
+        msg = lang === "cs" ? "Pro tento e-mail neexistuje účet." : "There is no account for this email.";
       else if (code.includes("auth/too-many-requests"))
-        msg = "Příliš mnoho pokusů. Zkus to prosím později.";
+        msg = lang === "cs" ? "Příliš mnoho pokusů. Zkus to prosím později." : "Too many attempts. Please try again later.";
 
       setPwdError(msg);
-      showPwdPopup("error", "Nepodařilo se odeslat", msg);
+      showPwdPopup("error", lang === "cs" ? "Nepodařilo se odeslat" : "Could not send", msg);
     } finally {
       setPwdSending(false);
     }
@@ -860,8 +1142,8 @@ const noScaleText = {
       if (!premium) {
         showPwdPopup(
           "error",
-          "Premium",
-          "Společné výzvy s přáteli jsou dostupné jen v Premium verzi."
+          p.premium,
+          p.premiumFriendsOnly
         );
         return;
       }
@@ -877,17 +1159,17 @@ const noScaleText = {
       const title = challengeInviteTitle.trim();
 
       if (!friendUids.length) {
-        showPwdPopup("error", "Společná výzva", "Vyber aspoň jednoho přítele.");
+        showPwdPopup("error", p.sharedChallenge, lang === "cs" ? "Vyber aspoň jednoho přítele." : "Select at least one friend.");
         return;
       }
 
       if (!title) {
-        showPwdPopup("error", "Společná výzva", "Zadej název výzvy.");
+        showPwdPopup("error", p.sharedChallenge, lang === "cs" ? "Zadej název výzvy." : "Enter a challenge name.");
         return;
       }
 
       if (challengeInvitePeriod === "custom" && challengeInviteCustomDays.length === 0) {
-        showPwdPopup("error", "Společná výzva", "Vyber aspoň jeden den.");
+        showPwdPopup("error", p.sharedChallenge, lang === "cs" ? "Vyber aspoň jeden den." : "Select at least one day.");
         return;
       }
 
@@ -913,14 +1195,14 @@ const noScaleText = {
 
       showPwdPopup(
         "success",
-        "Společná výzva",
-        `Výzva byla vytvořena pro ${friendUids.length} ${friendUids.length === 1 ? "přítele" : friendUids.length >= 2 && friendUids.length <= 4 ? "přátele" : "přátel"}.`
+        p.sharedChallenge,
+        lang === "cs" ? `Výzva byla vytvořena pro ${friendUids.length} ${friendUids.length === 1 ? "přítele" : friendUids.length >= 2 && friendUids.length <= 4 ? "přátele" : "přátel"}.` : `Challenge was created for ${friendUids.length} ${friendUids.length === 1 ? "friend" : "friends"}.`
       );
     } catch (e: any) {
       showPwdPopup(
         "error",
-        "Společná výzva",
-        e?.message ?? "Nepodařilo se vytvořit společnou výzvu."
+        p.sharedChallenge,
+        e?.message ?? (lang === "cs" ? "Nepodařilo se vytvořit společnou výzvu." : "Could not create the shared challenge.")
       );
     } finally {
       setChallengeInviteBusy(false);
@@ -930,21 +1212,21 @@ const noScaleText = {
   const infoTitle = useMemo(() => {
     switch (infoScreen) {
       case "menu":
-        return "Informace";
+        return p.info;
       case "support":
-        return "Poslat dotaz";
+        return p.sendQuestion;
       case "streak_medals":
-        return "Ohýnky & medaile";
+        return p.streaksMedals;
       case "freeprem":
-        return "Free & Premium";
+        return p.freePremium;
       case "paywall":
-        return "Premium";
+        return p.premium;
       case "privacy":
-        return "Ochrana soukromí";
+        return p.privacy;
       case "terms":
-        return "Podmínky používání";
+        return p.terms;
       default:
-        return "Informace";
+        return p.info;
     }
   }, [infoScreen]);
 
@@ -980,7 +1262,7 @@ const noScaleText = {
             ]}
           >
             <View style={styles.popupHeader}>
-              <Text style={styles.popupTitle}>Odstranit účet?</Text>
+              <Text style={styles.popupTitle}>{p.deleteAccountTitle}</Text>
 
               <Pressable
                 onPress={() => !deleteWorking && setDeleteOpen(false)}
@@ -992,16 +1274,16 @@ const noScaleText = {
             </View>
 
             <Text style={styles.popupText}>
-              Tahle akce je nevratná. Účet bude smazán.
+              {p.deleteAccountText}
             </Text>
 
             <Text style={[styles.smallLabel, { color: "#0B1220", marginTop: 10 }]}>
-              Zadej heslo
+              {p.enterPassword}
             </Text>
             <TextInput
               value={deletePassword}
               onChangeText={setDeletePassword}
-              placeholder="heslo"
+              placeholder={p.passwordPlaceholder}
               placeholderTextColor={"rgba(11,18,32,0.55)"}
               secureTextEntry
               autoCapitalize="none"
@@ -1024,7 +1306,7 @@ const noScaleText = {
                 deleteWorking && { opacity: 0.6 },
               ]}
             >
-              <Text style={styles.popupBtnText}>Zrušit</Text>
+              <Text style={styles.popupBtnText}>{p.cancel}</Text>
             </Pressable>
 
             <Pressable
@@ -1038,7 +1320,7 @@ const noScaleText = {
               ]}
             >
               <Text style={styles.dangerText}>
-                {deleteWorking ? "Mažu účet…" : "Chci odstranit účet"}
+                {deleteWorking ? p.deletingAccount : p.deleteAccountAction}
               </Text>
             </Pressable>
           </View>
@@ -1067,7 +1349,7 @@ const noScaleText = {
         >
           <View style={styles.sheetHeader}>
             <Text style={[styles.sheetTitle, { color: UI.text }]}>
-              Změna hesla
+              {p.changePassword}
             </Text>
 
             <Pressable
@@ -1078,7 +1360,7 @@ const noScaleText = {
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
             </Pressable>
           </View>
 
@@ -1087,7 +1369,7 @@ const noScaleText = {
             contentContainerStyle={{ paddingBottom: 10 }}
           >
             <Text style={[styles.infoText, { color: UI.sub }]}>
-              Pošleme ti e-mail s odkazem na změnu hesla.
+              {p.passwordResetInfo}
             </Text>
 
             <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 10 }]}>
@@ -1096,7 +1378,7 @@ const noScaleText = {
             <TextInput
               value={pwdEmail}
               onChangeText={setPwdEmail}
-              placeholder="tvuj@email.cz"
+              placeholder={p.supportPlaceholder}
               placeholderTextColor={UI.sub}
               autoCapitalize="none"
               keyboardType="email-address"
@@ -1116,7 +1398,7 @@ const noScaleText = {
               ]}
             >
               <Text style={styles.primaryBtnText}>
-                {pwdSending ? "Odesílám…" : "Poslat odkaz"}
+                {pwdSending ? p.sending : p.sendLink}
               </Text>
             </Pressable>
           </ScrollView>
@@ -1145,7 +1427,7 @@ const noScaleText = {
         >
           <View style={styles.sheetHeader}>
             <Text style={[styles.sheetTitle, { color: UI.text }]}>
-              Změna uživatelského jména
+              {p.changeUsername}
             </Text>
 
             <Pressable
@@ -1156,7 +1438,7 @@ const noScaleText = {
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
             </Pressable>
           </View>
 
@@ -1165,7 +1447,7 @@ const noScaleText = {
             contentContainerStyle={{ paddingBottom: 10 }}
           >
             <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 10 }]}>
-              Nové uživatelské jméno
+              {p.newUsername}
             </Text>
             <TextInput
               value={newUsername}
@@ -1193,8 +1475,8 @@ const noScaleText = {
                   if (!v) {
                     showPwdPopup(
                       "error",
-                      "Změna username",
-                      "Zadej prosím nové uživatelské jméno."
+                      lang === "cs" ? "Změna username" : "Change username",
+                      lang === "cs" ? "Zadej prosím nové uživatelské jméno." : "Please enter a new username."
                     );
                     return;
                   }
@@ -1216,12 +1498,12 @@ const noScaleText = {
                   setUsernameOpen(false);
                   setNewUsername("");
 
-                  showPwdPopup("success", "Hotovo", "Uživatelské jméno bylo změněno.");
+                  showPwdPopup("success", lang === "cs" ? "Hotovo" : "Done", lang === "cs" ? "Uživatelské jméno bylo změněno." : "Username has been changed.");
                 } catch (e: any) {
                   showPwdPopup(
                     "error",
-                    "Změna username",
-                    e?.message ?? "Změna se nepovedla."
+                    lang === "cs" ? "Změna username" : "Change username",
+                    e?.message ?? (lang === "cs" ? "Změna se nepovedla." : "Change failed.")
                   );
                 } finally {
                   setUsernameBusy(false);
@@ -1234,7 +1516,7 @@ const noScaleText = {
               ]}
             >
               <Text style={styles.primaryBtnText}>
-                {usernameBusy ? "Ukládám…" : "Uložit změnu"}
+                {usernameBusy ? p.saving : p.saveChange}
               </Text>
             </Pressable>
           </ScrollView>
@@ -1262,7 +1544,7 @@ const noScaleText = {
           ]}
         >
           <View style={styles.sheetHeader}>
-            <Text style={[styles.sheetTitle, { color: UI.text }]}>Účet</Text>
+            <Text style={[styles.sheetTitle, { color: UI.text }]}>{p.account}</Text>
 
             <Pressable
               onPress={() => setAccountOpen(false)}
@@ -1272,7 +1554,7 @@ const noScaleText = {
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
             </Pressable>
           </View>
 
@@ -1287,7 +1569,7 @@ const noScaleText = {
               ]}
             >
               <Text style={[styles.modalLabel, { color: UI.text }]}>
-                Tmavý režim
+                {p.darkMode}
               </Text>
               <Switch value={isDark} onValueChange={toggle} />
             </View>
@@ -1299,7 +1581,7 @@ const noScaleText = {
               ]}
             >
               <Text style={[styles.modalLabel, { color: UI.text, flex: 1 }]}>
-                Sdílet s přáteli své úspěchy
+                {p.shareAchievements}
               </Text>
               <Switch
                 value={shareAchievementsWithFriends}
@@ -1314,7 +1596,7 @@ const noScaleText = {
                     });
                   } catch {
                     setShareAchievementsWithFriends((prev) => !prev);
-                    showPwdPopup("error", "Soukromí", "Nepodařilo se uložit nastavení.");
+                    showPwdPopup("error", lang === "cs" ? "Soukromí" : "Privacy", lang === "cs" ? "Nepodařilo se uložit nastavení." : "Could not save settings.");
                   }
                 }}
               />
@@ -1326,7 +1608,7 @@ const noScaleText = {
                 { borderColor: UI.stroke, backgroundColor: UI.card },
               ]}
             >
-              <Text style={[styles.modalLabel, { color: UI.text }]}>Jazyk</Text>
+              <Text style={[styles.modalLabel, { color: UI.text }]}>{p.language}</Text>
               <View style={styles.langPills}>
                 <Pressable
                   onPress={() => setLang("cs")}
@@ -1383,7 +1665,7 @@ const noScaleText = {
               ]}
             >
               <Text style={[styles.modalLinkText, { color: UI.text }]}>
-                Změna hesla
+                {p.changePassword}
               </Text>
               <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
             </Pressable>
@@ -1400,7 +1682,7 @@ const noScaleText = {
               ]}
             >
               <Text style={[styles.modalLinkText, { color: UI.text }]}>
-                Změna uživatelského jména
+                {p.changeUsername}
               </Text>
               <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
             </Pressable>
@@ -1448,14 +1730,14 @@ const noScaleText = {
               }}
               style={({ pressed }) => [styles.dangerBtn, pressed && { opacity: 0.9 }]}
             >
-              <Text style={styles.dangerText}>Odhlásit se</Text>
+              <Text style={styles.dangerText}>{p.logout}</Text>
             </Pressable>
 
             <Pressable
               onPress={requestDeleteAccount}
               style={({ pressed }) => [styles.dangerOutline, pressed && { opacity: 0.92 }]}
             >
-              <Text style={styles.dangerOutlineText}>Odstranit účet</Text>
+              <Text style={styles.dangerOutlineText}>{p.deleteAccount}</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -1505,7 +1787,7 @@ const noScaleText = {
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
             </Pressable>
           </View>
 
@@ -1540,7 +1822,7 @@ const noScaleText = {
                     Free & Premium
                   </Text>
                   <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
-                    Limity & výhody
+                    {p.limitsBenefits}
                   </Text>
                 </Pressable>
 
@@ -1564,10 +1846,10 @@ const noScaleText = {
                     <Ionicons name="flame" size={26} color={UI.accent} />
                   </View>
                   <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-                    Ohýnky & medaile
+                    {p.streaksMedals}
                   </Text>
                   <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
-                    Série & odměny
+                    {p.streaksRewards}
                   </Text>
                 </Pressable>
 
@@ -1589,7 +1871,7 @@ const noScaleText = {
                     <Ionicons name="shield-checkmark" size={24} color={UI.accent} />
                   </View>
                   <Text style={[styles.iconTileText, { color: UI.text }]}>
-                    Ochrana soukromí
+                    {p.privacy}
                   </Text>
                 </Pressable>
 
@@ -1620,7 +1902,7 @@ const noScaleText = {
   </View>
 
   <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-    Historie výzev
+    {p.history}
   </Text>
 
   <Text
@@ -1632,7 +1914,7 @@ const noScaleText = {
       lineHeight: 18,
     }}
   >
-    Přehled plnění a série
+    {p.historySubtitle}
   </Text>
 </Pressable>
                 <Pressable
@@ -1652,7 +1934,7 @@ const noScaleText = {
                     <Ionicons name="document-text" size={24} color={UI.accent} />
                   </View>
                   <Text style={[styles.iconTileText, { color: UI.text }]}>
-                    Podmínky používání
+                    {p.terms}
                   </Text>
                 </Pressable>
 
@@ -1691,21 +1973,18 @@ const noScaleText = {
                     { borderColor: UI.stroke, backgroundColor: UI.card },
                   ]}
                 >
-                  <Text style={[styles.infoTitle, { color: UI.text }]}>Ohýnky</Text>
+                  <Text style={[styles.infoTitle, { color: UI.text }]}>{p.flames}</Text>
                   <Text style={[styles.infoText, { color: UI.sub }]}>
-                    Ohýnek ukazuje, kolik dní po sobě máš splněno (série).
-                    {"\n\n"}
-                    Pokud je výzva v daný den neaktivní nebo má volný den, série se
-                    neruší.
-                    {"\n"}
-                    Série se resetuje jen tehdy, když nesplníš aktivní den výzvy. Výzvu můžeš deaktivovat (série se ti neruší).
+                    {lang === "cs"
+                      ? "Ohýnek ukazuje, kolik dní po sobě máš splněno (série).\n\nPokud je výzva v daný den neaktivní nebo má volný den, série se neruší.\nSérie se resetuje jen tehdy, když nesplníš aktivní den výzvy. Výzvu můžeš deaktivovat (série se ti neruší)."
+                      : "The flame shows how many days in a row you have completed your challenge (streak).\n\nIf a challenge is inactive on a given day or it is a rest day, the streak does not break.\nThe streak resets only when you miss an active challenge day. You can deactivate a challenge without breaking the streak."}
                   </Text>
 
                   <Text style={[styles.infoTitle, { color: UI.text, marginTop: 16 }]}>
                     Medaile
                   </Text>
                   <Text style={[styles.infoText, { color: UI.sub, marginTop: 6 }]}>
-                    Každá výzva si počítá medaile podle tvé nejdelší série:
+                    {lang === "cs" ? "Každá výzva si počítá medaile podle tvé nejdelší série:" : "Each challenge awards medals based on your longest streak:"}
                   </Text>
 
                   <View style={styles.medalsGrid}>
@@ -1713,43 +1992,43 @@ const noScaleText = {
                       {
                         key: "brambora",
                         days: 10,
-                        title: "Brambora",
-                        desc: "Začátek. 10 dní držíš směr.",
+                        title: lang === "cs" ? "Brambora" : "Potato",
+                        desc: lang === "cs" ? "Začátek. 10 dní držíš směr." : "The beginning. 10 days of staying on track.",
                         img: require("../../assets/medals/potato_medal.png"),
                       },
                       {
                         key: "steel",
                         days: 30,
-                        title: "Ocel",
-                        desc: "30 dní. Pevný základ. Jdeš dál.",
+                        title: lang === "cs" ? "Ocel" : "Steel",
+                        desc: lang === "cs" ? "30 dní. Pevný základ. Jdeš dál." : "30 days. A solid foundation. Keep going.",
                         img: require("../../assets/medals/steel_medal.png"),
                       },
                       {
                         key: "bronze",
                         days: 45,
-                        title: "Bronz",
-                        desc: "45 dní. Už to nabírá tvar rutiny.",
+                        title: lang === "cs" ? "Bronz" : "Bronze",
+                        desc: lang === "cs" ? "45 dní. Už to nabírá tvar rutiny." : "45 days. It is starting to become a routine.",
                         img: require("../../assets/medals/bronze_medal.png"),
                       },
                       {
                         key: "silver",
                         days: 90,
-                        title: "Stříbro",
-                        desc: "Tři měsíce. Návyky jsou součást dne.",
+                        title: lang === "cs" ? "Stříbro" : "Silver",
+                        desc: lang === "cs" ? "Tři měsíce. Návyky jsou součást dne." : "Three months. Habits are now part of your day.",
                         img: require("../../assets/medals/silver_medal.png"),
                       },
                       {
                         key: "gold",
                         days: 180,
-                        title: "Zlato",
-                        desc: "Půl roku. Top disciplína.",
+                        title: lang === "cs" ? "Zlato" : "Gold",
+                        desc: lang === "cs" ? "Půl roku. Top disciplína." : "Half a year. Top discipline.",
                         img: require("../../assets/medals/gold_medal.png"),
                       },
                       {
                         key: "diamond",
                         days: 365,
-                        title: "Diamant",
-                        desc: "Celý rok. To už je životní styl.",
+                        title: lang === "cs" ? "Diamant" : "Diamond",
+                        desc: lang === "cs" ? "Celý rok. To už je životní styl." : "A full year. That is a lifestyle.",
                         img: require("../../assets/medals/diamond_medal.png"),
                       },
                     ].map((m) => (
@@ -1771,7 +2050,7 @@ const noScaleText = {
 
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.medalTitle, { color: UI.text }]}>
-                            {m.days} dní – {m.title}
+                            {lang === "cs" ? `${m.days} dní – ${m.title}` : `${m.days} days – ${m.title}`}
                           </Text>
                           <Text style={[styles.medalDesc, { color: UI.sub }]}>
                             {m.desc}
@@ -1829,7 +2108,7 @@ const noScaleText = {
             !isDark && { color: "#7A3E00" },
           ]}
         >
-          {premium ? "Premium je aktivní." : "OneMore zdarma. Premium bez limitů."}
+          {premium ? p.premiumActiveShort : p.oneMoreFree}
         </Text>
 
         <Text
@@ -1839,9 +2118,7 @@ const noScaleText = {
             !isDark && { color: "#8A5A1F" },
           ]}
         >
-          {premium
-            ? "Spravuj své předplatné"
-            : "Odemkni více výzev, připomínek, přátel a společných výzev."}
+          {premium ? p.manageSubscription : p.unlockMore}
         </Text>
       </View>
     </LinearGradient>
@@ -1891,7 +2168,7 @@ const noScaleText = {
               !isDark && { color: "#64748B" },
             ]}
           >
-            Základní verze zdarma
+            {p.freeVersion}
           </Text>
         </View>
       </View>
@@ -1916,7 +2193,7 @@ const noScaleText = {
               !isDark && { color: "#1E293B" },
             ]}
           >
-            Výzvy
+            {lang === "cs" ? "Výzvy" : "Challenges"}
           </Text>
           <Text
             {...noScaleText}
@@ -1944,7 +2221,7 @@ const noScaleText = {
               !isDark && { color: "#1E293B" },
             ]}
           >
-            Připomínky
+            {lang === "cs" ? "Připomínky" : "Reminders"}
           </Text>
           <Text
             {...noScaleText}
@@ -1972,7 +2249,7 @@ const noScaleText = {
               !isDark && { color: "#1E293B" },
             ]}
           >
-            Historie výzev
+            {p.history}
           </Text>
           <Text
             {...noScaleText}
@@ -2000,7 +2277,7 @@ const noScaleText = {
               !isDark && { color: "#1E293B" },
             ]}
           >
-            Přátelé
+            {p.friends}
           </Text>
           <Text
             {...noScaleText}
@@ -2023,7 +2300,7 @@ const noScaleText = {
               !isDark && { color: "#1E293B" },
             ]}
           >
-            Společné výzvy
+            {p.sharedChallenges}
           </Text>
           <Text
             {...noScaleText}
@@ -2066,7 +2343,7 @@ const noScaleText = {
         ]}
       >
         <Text {...noScaleText} style={styles.pmBestBadgeText}>
-          NEJLEPŠÍ VOLBA
+          {p.bestChoice}
         </Text>
       </View>
 
@@ -2085,7 +2362,7 @@ const noScaleText = {
             Premium
           </Text>
           <Text {...noScaleText} style={styles.pmPlanSubtitlePremium}>
-            Pro maximální výsledky
+            {p.premiumForResults}
           </Text>
         </View>
       </View>
@@ -2094,35 +2371,35 @@ const noScaleText = {
         <View style={styles.pmFeatureRow}>
           <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
-            Neomezené výzvy
+            {p.unlimitedChallenges}
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
           <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
-            Neomezené připomínky
+            {p.unlimitedReminders}
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
           <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
-            Plná historie výzev
+            {p.fullHistory}
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
           <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
-            Neomezeně přátel
+            {p.unlimitedFriends}
           </Text>
         </View>
 
         <View style={styles.pmFeatureRow}>
           <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
           <Text {...noScaleText} style={styles.pmFeatureText}>
-            Neomezené společné výzvy
+            {p.unlimitedSharedChallenges}
           </Text>
         </View>
       </View>
@@ -2143,7 +2420,7 @@ const noScaleText = {
       onPress={() => setInfoScreen("paywall")}
     >
       <Text {...noScaleText} style={styles.pmCtaButtonText}>
-        {premium ? "Spravovat Premium" : "Získat Premium"}
+        {premium ? p.managePremium : p.getPremium}
       </Text>
       <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
     </Pressable>
@@ -2159,7 +2436,7 @@ const noScaleText = {
             !isDark && { color: "#374151" },
           ]}
         >
-          Bezpečná platba
+          {p.securePayment}
         </Text>
       </View>
 
@@ -2173,7 +2450,7 @@ const noScaleText = {
             !isDark && { color: "#374151" },
           ]}
         >
-          Zrušení kdykoliv
+          {p.cancelAnytime}
         </Text>
       </View>
 
@@ -2187,7 +2464,7 @@ const noScaleText = {
             !isDark && { color: "#374151" },
           ]}
         >
-          Podporuješ vývoj
+          {p.supportDevelopment}
         </Text>
       </View>
     </View>
@@ -2200,19 +2477,17 @@ const noScaleText = {
                     { borderColor: UI.stroke, backgroundColor: UI.card },
                   ]}
                 >
-                  <Text style={[styles.infoTitle, { color: UI.text }]}>Premium</Text>
+                  <Text style={[styles.infoTitle, { color: UI.text }]}>{p.premium}</Text>
                   <Text style={[styles.infoText, { color: UI.sub }]}>
-                    {premium
-                      ? "Premium je aktivní. Můžeš ho kdykoliv zrušit nebo zkusit obnovit stav."
-                      : "Odemkni Premium a získej neomezené výzvy, připomínky a přátele."}
+                    {premium ? p.activePremiumInfo : p.unlockPremiumInfo}
                   </Text>
 
                   <View style={{ marginTop: 12, gap: 8 }}>
                     {[
-                      "Neomezené výzvy",
-                      "Neomezené připomínky (notifikace)",
-                      "Neomezené propojení s přáteli",
-                      "Další odměny a drobné vychytávky (postupně)",
+                      p.unlimitedChallenges,
+                      p.unlimitedRemindersNotif,
+                      p.unlimitedFriendsLink,
+                      p.moreRewards,
                     ].map((t) => (
                       <View
                         key={t}
@@ -2232,7 +2507,7 @@ const noScaleText = {
 
                   <View style={{ marginTop: 14 }}>
                     <Text style={{ color: UI.sub, fontWeight: "700" }}>
-                      Cena: zobrazí se po napojení nabídky (Offering) v RevenueCat.
+                      {p.priceInfo}
                     </Text>
                   </View>
 
@@ -2249,7 +2524,7 @@ const noScaleText = {
                       {premiumBusy ? (
                         <ActivityIndicator />
                       ) : (
-                        <Text style={styles.primaryBtnText}>Koupit Premium</Text>
+                        <Text style={styles.primaryBtnText}>{p.premiumBuy}</Text>
                       )}
                     </Pressable>
                   ) : (
@@ -2262,7 +2537,7 @@ const noScaleText = {
                         pressed && !premiumBusy && { opacity: 0.9 },
                       ]}
                     >
-                      <Text style={styles.dangerText}>Zrušit předplatné</Text>
+                      <Text style={styles.dangerText}>{p.premiumCancel}</Text>
                     </Pressable>
                   )}
 
@@ -2277,7 +2552,7 @@ const noScaleText = {
                   ]}
                 >
                   <Text style={[styles.infoTitle, { color: UI.text }]}>
-                    Ochrana soukromí
+                    {p.privacy}
                   </Text>
 
                   <Pressable
@@ -2288,7 +2563,7 @@ const noScaleText = {
                       pressed && { opacity: 0.9 },
                     ]}
                   >
-                    <Text style={styles.primaryBtnText}>Otevřít</Text>
+                    <Text style={styles.primaryBtnText}>{p.open}</Text>
                   </Pressable>
                 </View>
               )}
@@ -2301,7 +2576,7 @@ const noScaleText = {
                   ]}
                 >
                   <Text style={[styles.infoTitle, { color: UI.text }]}>
-                    Podmínky používání
+                    {p.terms}
                   </Text>
 
                   <Pressable
@@ -2312,7 +2587,7 @@ const noScaleText = {
                       pressed && { opacity: 0.9 },
                     ]}
                   >
-                    <Text style={styles.primaryBtnText}>Otevřít</Text>
+                    <Text style={styles.primaryBtnText}>{p.open}</Text>
                   </Pressable>
                 </View>
               )}
@@ -2329,12 +2604,12 @@ const noScaleText = {
                   </Text>
 
                   <Text style={[styles.smallLabel, { color: UI.sub }]}>
-                    E-mail pro odpověď
+                    {p.supportReplyEmail}
                   </Text>
                   <TextInput
                     value={supportEmail}
                     onChangeText={setSupportEmail}
-                    placeholder="tvuj@email.cz"
+                    placeholder={p.supportPlaceholder}
                     placeholderTextColor={UI.sub}
                     autoCapitalize="none"
                     keyboardType="email-address"
@@ -2348,11 +2623,11 @@ const noScaleText = {
                     ]}
                   />
 
-                  <Text style={[styles.smallLabel, { color: UI.sub }]}>Předmět</Text>
+                  <Text style={[styles.smallLabel, { color: UI.sub }]}>{p.subject}</Text>
                   <TextInput
                     value={supportSubject}
                     onChangeText={setSupportSubject}
-                    placeholder="Např. Problém s notifikacemi"
+                    placeholder={p.supportSubjectPlaceholder}
                     placeholderTextColor={UI.sub}
                     style={[
                       styles.input,
@@ -2364,11 +2639,11 @@ const noScaleText = {
                     ]}
                   />
 
-                  <Text style={[styles.smallLabel, { color: UI.sub }]}>Zpráva</Text>
+                  <Text style={[styles.smallLabel, { color: UI.sub }]}>{p.message}</Text>
                   <TextInput
                     value={supportMessage}
                     onChangeText={setSupportMessage}
-                    placeholder="Popiš prosím svůj dotaz…"
+                    placeholder={p.supportMessagePlaceholder}
                     placeholderTextColor={UI.sub}
                     multiline
                     style={[
@@ -2394,10 +2669,10 @@ const noScaleText = {
                     {supportSending ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                         <ActivityIndicator />
-                        <Text style={styles.primaryBtnText}>Odesílám…</Text>
+                        <Text style={styles.primaryBtnText}>{p.sending}</Text>
                       </View>
                     ) : (
-                      <Text style={styles.primaryBtnText}>Odeslat</Text>
+                      <Text style={styles.primaryBtnText}>{p.send}</Text>
                     )}
                   </Pressable>
                 </View>
@@ -2538,7 +2813,7 @@ const noScaleText = {
       pressed && { opacity: 0.85 },
     ]}
   >
-    <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+    <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
   </Pressable>
 </View>
 
@@ -2599,7 +2874,7 @@ const noScaleText = {
       pressed && { opacity: 0.9 },
     ]}
   >
-    <Text style={styles.smallBtnText}>+ Přidat</Text>
+    <Text style={styles.smallBtnText}>{p.addShort}</Text>
   </Pressable>
 </View>
 
@@ -2644,7 +2919,7 @@ const noScaleText = {
               pressed && { opacity: 0.9 },
             ]}
           >
-            <Text style={styles.smallBtnText}>Vyzvat</Text>
+            <Text style={styles.smallBtnText}>{p.invite}</Text>
           </Pressable>
 
           <Pressable
@@ -2666,7 +2941,7 @@ const noScaleText = {
               pressed && { opacity: 0.9 },
             ]}
           >
-            <Text style={styles.smallBtnGhostText}>Odebrat</Text>
+            <Text style={styles.smallBtnGhostText}>{p.remove}</Text>
           </Pressable>
         </View>
       </View>
@@ -2733,7 +3008,7 @@ const noScaleText = {
                                     pressed && { opacity: 0.9 },
                                   ]}
                                 >
-                                  <Text style={styles.smallBtnText}>Přijmout</Text>
+                                  <Text style={styles.smallBtnText}>{p.accept}</Text>
                                 </Pressable>
                                 <Pressable
                                   onPress={async () => {
@@ -2754,7 +3029,7 @@ const noScaleText = {
                                     pressed && { opacity: 0.9 },
                                   ]}
                                 >
-                                  <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
+                                  <Text style={styles.smallBtnGhostText}>{p.decline}</Text>
                                 </Pressable>
                               </View>
                             </View>
@@ -2807,7 +3082,7 @@ const noScaleText = {
                                   pressed && { opacity: 0.9 },
                                 ]}
                               >
-                                <Text style={styles.smallBtnGhostText}>Zrušit</Text>
+                                <Text style={styles.smallBtnGhostText}>{p.cancel}</Text>
                               </Pressable>
                             </View>
                           ))}
@@ -2858,7 +3133,7 @@ const noScaleText = {
                     ]}
                   >
                     <Text style={[styles.infoTitle, { color: UI.text }]}>
-                      Výzvy
+                      {lang === "cs" ? "Výzvy" : "Challenges"}
                     </Text>
                     <Text style={[styles.infoText, { color: UI.sub }]}>
                       Zatím tu nemáš žádné nepřijaté společné výzvy.
@@ -2888,10 +3163,10 @@ const noScaleText = {
                       <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
                         Cíl: {item.targetPerDay}×{" "}
                         {item.period === "daily"
-                          ? "denně"
+                          ? p.daily
                           : item.period === "every2"
-                            ? "obden"
-                            : "ve vybrané dny"}
+                            ? p.every2
+                            : p.selectedDays}
                       </Text>
 
                       <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
@@ -2904,7 +3179,7 @@ const noScaleText = {
                             friendsBusy && { opacity: 0.6 },
                           ]}
                         >
-                          <Text style={styles.smallBtnText}>Přijmout</Text>
+                          <Text style={styles.smallBtnText}>{p.accept}</Text>
                         </Pressable>
 
                        <Pressable
@@ -2916,7 +3191,7 @@ const noScaleText = {
     friendsBusy && { opacity: 0.6 },
   ]}
 >
-  <Text style={styles.smallBtnGhostText}>Odmítnout</Text>
+  <Text style={styles.smallBtnGhostText}>{p.decline}</Text>
 </Pressable>
                       </View>
                     </View>
@@ -2961,7 +3236,7 @@ const noScaleText = {
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
             </Pressable>
           </View>
 
@@ -2990,7 +3265,7 @@ const noScaleText = {
                 <TextInput
                   value={addUsername}
                   onChangeText={setAddUsername}
-                  placeholder="username"
+                  placeholder={p.usernamePlaceholder}
                   placeholderTextColor={UI.sub}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -3012,7 +3287,7 @@ const noScaleText = {
                       const me = auth.currentUser.uid;
                       const username = addUsername.trim();
                       if (!username) {
-                        Alert.alert("Přátelé", "Zadej uživatelské jméno.");
+                        Alert.alert(p.friends, lang === "cs" ? "Zadej uživatelské jméno." : "Enter a username.");
                         return;
                       }
 
@@ -3021,8 +3296,8 @@ const noScaleText = {
                       ).length;
                       if (!premium && acceptedCount >= 1) {
                         Alert.alert(
-                          "Přátelé",
-                          "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium."
+                          p.friends,
+                          lang === "cs" ? "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium." : "In the Free version you can have only 1 friend. Premium is required for more."
                         );
                         return;
                       }
@@ -3031,23 +3306,23 @@ const noScaleText = {
                       const otherUid = await resolveUidByUsername(username);
                       if (!otherUid) {
                         Alert.alert(
-                          "Přátelé",
-                          "Uživatel s tímto username nebyl nalezen."
+                          p.friends,
+                          lang === "cs" ? "Uživatel s tímto username nebyl nalezen." : "No user with this username was found."
                         );
                         return;
                       }
                       if (otherUid === me) {
-                        Alert.alert("Přátelé", "Nemůžeš přidat sám sebe 🙂");
+                        Alert.alert(p.friends, lang === "cs" ? "Nemůžeš přidat sám sebe 🙂" : "You can’t add yourself 🙂");
                         return;
                       }
                       await sendFriendRequest(otherUid);
                   setAddUsername("");
 setAddFriendOpen(false);
-showPwdPopup("success", "Přátelé", "Žádost odeslána.");
+showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Request sent.");
                     } catch (e: any) {
                       Alert.alert(
-                        "Přátelé",
-                        e?.message ?? "Nepodařilo se odeslat žádost."
+                        p.friends,
+                        e?.message ?? (lang === "cs" ? "Nepodařilo se odeslat žádost." : "Could not send the request.")
                       );
                     } finally {
                       setFriendsBusy(false);
@@ -3059,7 +3334,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
                     friendsBusy && { opacity: 0.6 },
                   ]}
                 >
-                  <Text style={styles.smallBtnText}>Přidat</Text>
+                  <Text style={styles.smallBtnText}>{p.add}</Text>
                 </Pressable>
               </View>
             </View>
@@ -3101,7 +3376,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
             </Pressable>
           </View>
 
@@ -3120,11 +3395,11 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
               </Text>
 
               <Text style={[styles.infoText, { color: UI.sub, marginTop: -2 }]}>
-                Vyber až {MAX_SHARED_MEMBERS - 1} přátel do jedné výzvy.
+                {p.selectUpToFriends.replace("{count}", String(MAX_SHARED_MEMBERS - 1))}
               </Text>
 
               <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
-                Přátelé
+                {p.friends}
               </Text>
 
               <View style={styles.challengePills}>
@@ -3177,7 +3452,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
               <TextInput
                 value={challengeInviteTitle}
                 onChangeText={setChallengeInviteTitle}
-                placeholder="Např. Kliky"
+                placeholder={p.challengeNamePlaceholder}
                 placeholderTextColor={UI.sub}
                 autoCapitalize="sentences"
                 style={[
@@ -3372,7 +3647,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
                 pressed && { opacity: 0.85 },
               ]}
             >
-              <Text style={[styles.closeText, { color: UI.text }]}>Zavřít</Text>
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
             </Pressable>
           </View>
 
@@ -3493,7 +3768,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
               ]}
             >
               <Text style={[styles.versionChipText, { color: UI.text }]}>
-                {premium ? "Premium" : "Free"}
+                {premium ? p.noScalePremium : p.noScaleFree}
               </Text>
             </View>
 
@@ -3502,7 +3777,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
                 onPress={openPayments}
                 style={({ pressed }) => [styles.upgradeChip, pressed && { opacity: 0.92 }]}
               >
-                <Text style={styles.upgradeChipText}>Upgradovat</Text>
+                <Text style={styles.upgradeChipText}>{p.upgrade}</Text>
               </Pressable>
             )}
           </View>
@@ -3516,7 +3791,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
             pressed && { opacity: 0.88 },
           ]}
         >
-          <Text style={[styles.bigItemText, { color: UI.text }]}>Účet</Text>
+          <Text style={[styles.bigItemText, { color: UI.text }]}>{p.account}</Text>
           <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
         </Pressable>
 
@@ -3531,7 +3806,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
             pressed && { opacity: 0.88 },
           ]}
         >
-          <Text style={[styles.bigItemText, { color: UI.text }]}>Informace</Text>
+          <Text style={[styles.bigItemText, { color: UI.text }]}>{p.info}</Text>
           <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
         </Pressable>
 
@@ -3546,7 +3821,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
             pressed && { opacity: 0.88 },
           ]}
         >
-          <Text style={[styles.bigItemText, { color: UI.text }]}>Přátelé</Text>
+          <Text style={[styles.bigItemText, { color: UI.text }]}>{p.friendsLabel}</Text>
           <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
         </Pressable>
       </ScrollView>
@@ -3584,7 +3859,7 @@ showPwdPopup("success", "Přátelé", "Žádost odeslána.");
               onPress={() => setPwdPopupOpen(false)}
               style={({ pressed }) => [styles.popupBtn, pressed && { opacity: 0.9 }]}
             >
-              <Text style={styles.popupBtnText}>OK</Text>
+              <Text style={styles.popupBtnText}>{p.ok}</Text>
             </Pressable>
           </View>
         </View>

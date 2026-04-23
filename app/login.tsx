@@ -19,6 +19,7 @@ import { Alert } from "../lib/appAlert";
 import { auth } from "../lib/firebase";
 import { revenueCatLogin } from "../lib/revenuecat";
 import { useTheme } from "../lib/theme";
+import { useI18n } from "../lib/i18n";
 
 const SAVED_LOGIN_KEY = "onemore_saved_login";
 const REMEMBER_ME_KEY = "onemore_remember_me";
@@ -29,7 +30,7 @@ const APP_LOGO = require("../assets/brand/flame_plus1.png");
 export default function LoginScreen() {
   const router = useRouter();
   const { UI, isDark, toggle } = useTheme();
-  // lang toggle disabled
+  const { lang, setLang, t } = useI18n();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -68,7 +69,10 @@ export default function LoginScreen() {
     };
   }, []);
 
-  const gradientColors = useMemo(() => (isDark ? [UI.bg, UI.bg, UI.bg] : [UI.bg, UI.bg, UI.bg]), [UI.bg, isDark]);
+  const gradientColors = useMemo(
+    () => (isDark ? [UI.bg, UI.bg, UI.bg] : [UI.bg, UI.bg, UI.bg]),
+    [UI.bg, isDark]
+  );
 
   const isEmailValid = (v: string) => {
     const s = v.trim();
@@ -101,17 +105,20 @@ export default function LoginScreen() {
     const passTrim = password.trim();
 
     if (!isEmailValid(emailTrim)) {
-      Alert.alert("Neplatný e-mail", "Zadej prosím platný e-mail.");
+      Alert.alert(t.login.invalidEmailTitle, t.login.invalidEmailText);
       return;
     }
     if (!passTrim) {
-      Alert.alert("Chybí heslo", "Zadej prosím heslo.");
+      Alert.alert(t.login.missingPasswordTitle, t.login.missingPasswordText);
       return;
     }
 
     setLoading(true);
     try {
-      const cred = await withTimeout(signInWithEmailAndPassword(auth, emailTrim, passTrim), 9000);
+      const cred = await withTimeout(
+        signInWithEmailAndPassword(auth, emailTrim, passTrim),
+        9000
+      );
 
       // ✅ propojit RevenueCat s účtem (UID) – důležité pro premium/restore
       await revenueCatLogin(cred.user.uid);
@@ -120,7 +127,10 @@ export default function LoginScreen() {
 
       await AsyncStorage.setItem(REMEMBER_ME_KEY, remember ? "1" : "0");
       if (remember) {
-        await AsyncStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ email: emailTrim, password: passTrim }));
+        await AsyncStorage.setItem(
+          SAVED_LOGIN_KEY,
+          JSON.stringify({ email: emailTrim, password: passTrim })
+        );
       } else {
         await AsyncStorage.removeItem(SAVED_LOGIN_KEY);
       }
@@ -129,23 +139,21 @@ export default function LoginScreen() {
     } catch (e: any) {
       const code = e?.code ?? "";
       if (code.includes("auth/user-not-found")) {
-        Alert.alert("Účet nenalezen", "Zkontroluj e-mail nebo se registruj.");
-      } else if (code.includes("auth/wrong-password") || code.includes("auth/invalid-credential")) {
-        Alert.alert("Přihlášení selhalo", "Špatný e-mail nebo heslo.");
+        Alert.alert(t.login.accountNotFoundTitle, t.login.accountNotFoundText);
+      } else if (
+        code.includes("auth/wrong-password") ||
+        code.includes("auth/invalid-credential")
+      ) {
+        Alert.alert(t.login.loginFailedTitle, t.login.loginFailedText);
       } else if (code.includes("auth/invalid-email")) {
-        Alert.alert("Neplatný e-mail", "Zkontroluj prosím formát e-mailu.");
+        Alert.alert(t.login.invalidEmailTitle, t.login.invalidEmailText);
       } else if (code.includes("auth/timeout")) {
-        Alert.alert(
-          "Trvá to moc dlouho",
-          "Přihlášení se zaseklo (slabý signál / Firebase nedostupné). Zkus to prosím znovu."
-        );
+        Alert.alert(t.login.timeoutTitle, t.login.timeoutText);
       } else {
         console.log("LOGIN ERROR:", e?.code, e?.message, e);
         Alert.alert(
-          "Chyba",
-          `Nepodařilo se přihlásit. Zkus to prosím znovu.
-
-(${code || "unknown"})`
+          t.login.genericErrorTitle,
+          `${t.login.genericErrorText}\n\n(${code || "unknown"})`
         );
       }
     } finally {
@@ -183,12 +191,11 @@ export default function LoginScreen() {
               style={[
                 styles.logoCircle,
                 {
-                  backgroundColor: isDark ? UI.card : UI.card2, // fallback
+                  backgroundColor: isDark ? UI.card : UI.card2,
                   borderColor: UI.stroke,
                 },
               ]}
             >
-              {/* ✅ jemný oranžový nádech uvnitř kruhu */}
               <LinearGradient
                 pointerEvents="none"
                 colors={
@@ -207,17 +214,68 @@ export default function LoginScreen() {
 
           {/* TITLE */}
           <Text style={[styles.title, { color: UI.text }]}>
-            Vítej v <Text style={[styles.titleAccent, { color: UI.accent }]}>OneMore!</Text>
+            {t.login.welcome}{" "}
+            <Text style={[styles.titleAccent, { color: UI.accent }]}>OneMore!</Text>
           </Text>
-          <Text style={[styles.subtitle, { color: UI.sub }]}>Jeden krok dnes, velká změna zítra.</Text>
+          <Text style={[styles.subtitle, { color: UI.sub }]}>{t.login.subtitle}</Text>
+
+          {/* LANGUAGE SWITCH */}
+          <View style={styles.langRow}>
+            <Pressable
+              onPress={() => void setLang("cs")}
+              style={({ pressed }) => [
+                styles.langBtn,
+                {
+                  borderColor: UI.stroke,
+                  backgroundColor: lang === "cs" ? UI.accent : UI.card,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.langBtnText,
+                  { color: lang === "cs" ? "#0B1220" : UI.text },
+                ]}
+              >
+                CZ
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => void setLang("en")}
+              style={({ pressed }) => [
+                styles.langBtn,
+                {
+                  borderColor: UI.stroke,
+                  backgroundColor: lang === "en" ? UI.accent : UI.card,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.langBtnText,
+                  { color: lang === "en" ? "#0B1220" : UI.text },
+                ]}
+              >
+                EN
+              </Text>
+            </Pressable>
+          </View>
 
           {/* INPUTS */}
           <View style={{ marginTop: 22 }}>
-            <View style={[styles.inputWrap, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
+            <View
+              style={[
+                styles.inputWrap,
+                { backgroundColor: UI.card, borderColor: UI.stroke },
+              ]}
+            >
               <TextInput
                 value={email}
                 onChangeText={setEmail}
-                placeholder="E-mail"
+                placeholder={t.login.email}
                 placeholderTextColor={UI.sub}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -240,7 +298,7 @@ export default function LoginScreen() {
               <TextInput
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Heslo"
+                placeholder={t.login.password}
                 placeholderTextColor={UI.sub}
                 secureTextEntry={!showPass}
                 autoCapitalize="none"
@@ -255,7 +313,9 @@ export default function LoginScreen() {
                 style={({ pressed }) => [styles.eyeBtn, { opacity: pressed ? 0.75 : 1 }]}
                 hitSlop={10}
               >
-                <Text style={[styles.eyeText, { color: UI.sub }]}>{showPass ? "👁️" : "👁️‍🗨️"}</Text>
+                <Text style={[styles.eyeText, { color: UI.sub }]}>
+                  {showPass ? "👁️" : "👁️‍🗨️"}
+                </Text>
               </Pressable>
             </View>
 
@@ -276,11 +336,11 @@ export default function LoginScreen() {
                 >
                   {remember ? <Text style={[styles.checkMark, { color: UI.bg }]}>✓</Text> : null}
                 </View>
-                <Text style={[styles.rememberText, { color: UI.sub }]}>Zapamatovat</Text>
+                <Text style={[styles.rememberText, { color: UI.sub }]}>{t.login.remember}</Text>
               </Pressable>
 
               <Pressable onPress={onForgot} style={({ pressed }) => [pressed && { opacity: 0.85 }]}>
-                <Text style={[styles.forgotText, { color: UI.sub }]}>Zapomenuté heslo?</Text>
+                <Text style={[styles.forgotText, { color: UI.sub }]}>{t.login.forgot}</Text>
               </Pressable>
             </View>
 
@@ -302,23 +362,26 @@ export default function LoginScreen() {
               {loading ? (
                 <View style={styles.loginLoadingRow}>
                   <ActivityIndicator />
-                  <Text style={styles.loginBtnText}>PŘIHLAŠUJI…</Text>
+                  <Text style={styles.loginBtnText}>{t.login.loggingIn}</Text>
                 </View>
               ) : (
-                <Text style={styles.loginBtnText}>PŘIHLÁSIT</Text>
+                <Text style={styles.loginBtnText}>{t.login.login}</Text>
               )}
             </Pressable>
 
             {/* REGISTER */}
             <View style={styles.registerRow}>
-              <Text style={[styles.registerText, { color: UI.sub }]}>Ještě nemáš účet?</Text>
+              <Text style={[styles.registerText, { color: UI.sub }]}>{t.login.noAccount}</Text>
               <Pressable onPress={onRegister} style={({ pressed }) => [pressed && { opacity: 0.85 }]}>
-                <Text style={[styles.registerLink, { color: UI.accent }]}>{" "}Zaregistrujte se zde</Text>
+                <Text style={[styles.registerLink, { color: UI.accent }]}>
+                  {" "}
+                  {t.login.registerHere}
+                </Text>
               </Pressable>
             </View>
           </View>
 
-          {/* Tmavý/Světlý režim – ikonka vpravo dole (jediná) */}
+          {/* Tmavý/Světlý režim */}
           <View style={styles.darkToggleWrap} pointerEvents="box-none">
             <Pressable
               onPress={() => void toggle()}
@@ -333,7 +396,7 @@ export default function LoginScreen() {
               ]}
             >
               <Text style={[styles.darkToggleText, { color: UI.text }]}>
-                {isDark ? "☀️  Světlý režim" : "🌙  Tmavý režim"}
+                {isDark ? t.login.lightMode : t.login.darkMode}
               </Text>
             </Pressable>
           </View>
@@ -388,6 +451,26 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  langRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 14,
+  },
+
+  langBtn: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minWidth: 58,
+    alignItems: "center",
+  },
+
+  langBtnText: {
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   inputWrap: {

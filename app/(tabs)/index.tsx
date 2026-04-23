@@ -59,6 +59,7 @@ import {
   type MedalTier,
 } from "../../lib/medals";
 import * as Haptics from "expo-haptics";
+import { useI18n } from "../../lib/i18n";
 
 const FLAME_IMG = require("../../assets/images/flame.png");
 
@@ -869,6 +870,152 @@ export default function Index() {
   const router = useRouter();
 
   const { UI, mode } = useTheme();
+  const { lang } = useI18n();
+  const TXT = useMemo(
+    () =>
+      lang === "en"
+        ? {
+            welcomeBack: "Welcome back",
+            premium: "Premium",
+            free: "Free",
+            upgrade: "Upgrade",
+            keepsGoing: "You’ve been going for",
+            dontStop: "Don’t stop!",
+            quote: "A small step today, a big change tomorrow",
+            addTitle: "Add challenge",
+            close: "Close",
+            namePlaceholder: "Challenge name",
+            add: "Add",
+            manageTitle: "Manage challenge",
+            active: "Active",
+            perDayCount: "Count per day",
+            period: "Period",
+            daily: "Daily",
+            every2: "Every other day",
+            customDays: "Custom days",
+            chooseDaysHint: "Choose the days when the challenge is active.",
+            notifications: "Notifications",
+            saveNotifications: "Save notifications",
+            challengeHistory: "Challenge history",
+            deleteChallenge: "Delete challenge",
+            historyOfChallenge: "Challenge history",
+            currentMedal: "Current medal",
+            bestStreakOfChallenge: "Best streak of this challenge",
+            completed: "Completed",
+            skipped: "Skipped",
+            freeDay: "Free day",
+            notCompleted: "Not completed",
+            nothingHereYet: "Nothing here yet",
+            addChallengeAndStart: "Add a challenge and start today.",
+            sharedChallenges: "Shared challenges",
+            waitingForAccept: "Waiting for acceptance",
+            sharedChallenge: "Shared challenge",
+            withFriend: "With friend",
+            withFriends: "With friends",
+            todayTarget: "Today's target",
+            todayIsFree: "Today is a free day",
+            leave: "Leave",
+            done: "Done",
+            complete: "Complete",
+            acceptChallenge: "Accept challenge",
+            waitingForOthers: "Waiting for other members",
+            loadingSharedPrompt: "This shared challenge was sent to you by a friend. Accept it first.",
+            alreadyAcceptedWaiting: "You have already accepted this challenge. Waiting for the others",
+            accountNotLogged: "You are not signed in.",
+            challengeNotAccepted: "This challenge has not been accepted by all members yet.",
+            couldNotSaveCompletion: "Could not save completion.",
+            challengeAccepted: "Challenge accepted.",
+            couldNotAcceptChallenge: "Could not accept challenge.",
+            leaveQuestion: "Leave challenge?",
+            reallyLeave: "Do you really want to leave?",
+            yes: "Yes",
+            no: "No",
+            couldNotLeave: "Could not leave challenge.",
+            freeVersionMaxChallengesTitle: "Unlock Premium",
+            freeVersionMaxChallenges: "In the Free version you can have a maximum of 2 challenges. Unlock Premium for unlimited challenges.",
+            stayFree: "Stay Free",
+            unlockPremium: "Unlock Premium",
+            notificationFreeLimit: "In the free version, you can only have notifications for one challenge. Turn them off on another challenge first.",
+            expoGoNotifications: "Notifications do not work in Expo Go. Since Expo SDK 53, notifications are disabled in Expo Go. A development build (EAS) is required.",
+            notificationsFailed: "Could not set notifications.",
+            deleteQuestion: "Delete challenge?",
+            deleteQuestionText: "This action cannot be undone.",
+            delete: "Delete",
+            freeRelax: "Relax :)",
+            addTodayCount: "Completed",
+          }
+        : {
+            welcomeBack: "Vítej zpět",
+            premium: "Premium",
+            free: "Free",
+            upgrade: "Upgradovat",
+            keepsGoing: "Držíš se už",
+            dontStop: "Nezastavuj!",
+            quote: "Malý krok dnes, velká změna zítra",
+            addTitle: "Přidat výzvu",
+            close: "Zavřít",
+            namePlaceholder: "Název výzvy",
+            add: "Přidat",
+            manageTitle: "Správa výzvy",
+            active: "Aktivní",
+            perDayCount: "Počet výzev za den",
+            period: "Perioda",
+            daily: "Denně",
+            every2: "Obden",
+            customDays: "Vlastní dny",
+            chooseDaysHint: "Vyber dny, kdy je výzva aktivní.",
+            notifications: "Notifikace",
+            saveNotifications: "Uložit notifikace",
+            challengeHistory: "Historie výzvy",
+            deleteChallenge: "Smazat výzvu",
+            historyOfChallenge: "Historie výzvy",
+            currentMedal: "Aktuální medaile",
+            bestStreakOfChallenge: "Nejlepší streak této výzvy",
+            completed: "Splněno",
+            skipped: "Přeskočeno",
+            freeDay: "Volný den",
+            notCompleted: "Nesplněno",
+            nothingHereYet: "Zatím tu nic není",
+            addChallengeAndStart: "Přidej si výzvu a začni dnes.",
+            sharedChallenges: "Společné výzvy",
+            waitingForAccept: "Čeká na přijetí",
+            sharedChallenge: "Společná výzva",
+            withFriend: "S kamarádem",
+            withFriends: "S přáteli",
+            todayTarget: "Cíl dnes",
+            todayIsFree: "Dnes je volný den",
+            leave: "Odejít",
+            done: "Splněno",
+            complete: "Splnit",
+            acceptChallenge: "Přijmout výzvu",
+            waitingForOthers: "Čeká se na ostatní členy",
+            loadingSharedPrompt: "Tuto společnou výzvu ti poslal kamarád. Nejprve ji přijmi.",
+            alreadyAcceptedWaiting: "Ty už jsi výzvu přijal. Čeká se na ostatní",
+            accountNotLogged: "Nejsi přihlášený.",
+            challengeNotAccepted: "Tato výzva ještě nebyla přijata všemi členy.",
+            couldNotSaveCompletion: "Nepodařilo se uložit splnění.",
+            challengeAccepted: "Výzva byla přijata.",
+            couldNotAcceptChallenge: "Nepodařilo se přijmout výzvu.",
+            leaveQuestion: "Odejít z výzvy?",
+            reallyLeave: "Opravdu odejít?",
+            yes: "Ano",
+            no: "Ne",
+            couldNotLeave: "Nepodařilo se odejít z výzvy.",
+            freeVersionMaxChallengesTitle: "Odemkni Premium",
+            freeVersionMaxChallenges: "Ve Free verzi můžeš mít maximálně 2 výzvy. Odemkni Premium pro neomezený počet výzev.",
+            stayFree: "Zůstat ve Free",
+            unlockPremium: "Odemknout Premium",
+            notificationFreeLimit: "Ve free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy.",
+            expoGoNotifications: "Notifikace v Expo Go nefungují. Od Expo SDK 53 byly notifikace v Expo Go vypnuté. Je potřeba development build (EAS).",
+            notificationsFailed: "Nepodařilo se nastavit notifikace.",
+            deleteQuestion: "Smazat výzvu?",
+            deleteQuestionText: "Tahle akce nejde vrátit zpět.",
+            delete: "Smazat",
+            freeRelax: "Relaxuj :)",
+            addTodayCount: "Splněno",
+          },
+    [lang]
+  );
   const styles = useMemo(() => makeStyles(UI), [UI]);
   const insets = useSafeAreaInsets();
 
@@ -1127,12 +1274,12 @@ export default function Index() {
       const total = (appState?.challenges ?? []).length;
       if (total >= FREE_MAX) {
         Alert.alert(
-          "Odemkni Premium",
-          `Ve Free verzi můžeš mít maximálně ${FREE_MAX} výzvy. Odemkni Premium pro neomezený počet výzev.`,
+          TXT.freeVersionMaxChallengesTitle,
+          TXT.freeVersionMaxChallenges,
           [
-            { text: "Zůstat ve Free", style: "cancel" },
+            { text: TXT.stayFree, style: "cancel" },
             {
-              text: "Odemknout Premium",
+              text: TXT.unlockPremium,
               onPress: () => {
                 setAddModalOpen(false);
                 setAddModalText("");
@@ -1276,10 +1423,7 @@ export default function Index() {
     if (!premium && manageRemEnabled) {
       const activeId = getFreeActiveReminderChallengeId(appState as any);
       if (activeId && String(activeId) !== id) {
-        Alert.alert(
-          "Notifikace ve free verzi",
-          "Ve free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy."
-        );
+        Alert.alert(TXT.notifications, TXT.notificationFreeLimit);
         return;
       }
     }
@@ -1308,11 +1452,11 @@ export default function Index() {
       const msg = String(e?.message ?? "");
       if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
         Alert.alert(
-          "Notifikace v Expo Go nefungují",
-          "Od Expo SDK 53 byly notifikace v Expo Go vypnuté. Pro připomínky je potřeba development build (EAS)."
+          TXT.notifications,
+          TXT.expoGoNotifications
         );
       } else {
-        Alert.alert("Notifikace", "Nepodařilo se nastavit notifikace.");
+        Alert.alert(TXT.notifications, TXT.notificationsFailed);
       }
     }
   }, [manageId, manageTarget, manageRemTimes, manageRemCount, manageRemEnabled, premium, appState, persist]);
@@ -1321,8 +1465,8 @@ export default function Index() {
     if (!manageId) return;
     const id = String(manageId);
 
-    Alert.alert("Smazat výzvu?", "Tahle akce nejde vrátit zpět.", [
-      { text: "Zrušit", style: "cancel" },
+    Alert.alert(TXT.deleteQuestion, TXT.deleteQuestionText, [
+      { text: TXT.close, style: "cancel" },
       {
         text: "Smazat",
         style: "destructive",
@@ -1505,10 +1649,10 @@ export default function Index() {
     const otherNames = getSharedOtherUids(item).map((uid) => sharedFriendNames[uid] || uid);
 
     if (!otherNames.length) return "Společná výzva";
-    if (otherNames.length === 1) return `S kamarádem: ${otherNames[0]}`;
-    if (otherNames.length === 2) return `S přáteli: ${otherNames[0]}, ${otherNames[1]}`;
+    if (otherNames.length === 1) return `${TXT.withFriend}: ${otherNames[0]}`;
+    if (otherNames.length === 2) return `${TXT.withFriends}: ${otherNames[0]}, ${otherNames[1]}`;
 
-    return `S přáteli: ${otherNames.slice(0, 2).join(", ")} +${otherNames.length - 2}`;
+    return `${TXT.withFriends}: ${otherNames.slice(0, 2).join(", ")} +${otherNames.length - 2}`;
   }
 
   function getSharedUserCompletedCount(item: SharedChallenge, uid: string): number {
@@ -1543,17 +1687,17 @@ export default function Index() {
   async function markSharedDoneToday(item: SharedChallenge) {
     const me = auth.currentUser?.uid;
     if (!me) {
-      Alert.alert("Společná výzva", "Nejsi přihlášený.");
+      Alert.alert(TXT.sharedChallenge, TXT.accountNotLogged);
       return;
     }
 
     if (item.status !== "active") {
-      Alert.alert("Společná výzva", "Tato výzva ještě nebyla přijata všemi členy.");
+      Alert.alert(TXT.sharedChallenge, TXT.challengeNotAccepted);
       return;
     }
 
     if (!isSharedChallengeActiveOnDate(item, getSharedTodayISO())) {
-      Alert.alert("Volný den", "Dnes je podle periody volno. Relaxuj :)");
+      Alert.alert(TXT.freeDay, TXT.freeRelax);
       return;
     }
 
@@ -1585,24 +1729,24 @@ export default function Index() {
 
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (e: any) {
-      Alert.alert("Společná výzva", e?.message ?? "Nepodařilo se uložit splnění.");
+      Alert.alert(TXT.sharedChallenge, e?.message ?? TXT.couldNotSaveCompletion);
     }
   }
 
   async function acceptPendingShared(item: SharedChallenge) {
     try {
       await acceptSharedChallenge(item.id);
-      Alert.alert("Společná výzva", "Výzva byla přijata.");
+      Alert.alert(TXT.sharedChallenge, TXT.challengeAccepted);
     } catch (e: any) {
-      Alert.alert("Společná výzva", e?.message ?? "Nepodařilo se přijmout výzvu.");
+      Alert.alert(TXT.sharedChallenge, e?.message ?? TXT.couldNotAcceptChallenge);
     }
   }
 
   function confirmLeaveShared(item: SharedChallenge) {
-    Alert.alert("Odejít z výzvy?", "Opravdu odejít?", [
-      { text: "Ne", style: "cancel" },
+    Alert.alert(TXT.leaveQuestion, TXT.reallyLeave, [
+      { text: TXT.no, style: "cancel" },
       {
-        text: "Ano",
+        text: TXT.yes,
         style: "destructive",
         onPress: async () => {
           try {
@@ -1611,7 +1755,7 @@ export default function Index() {
               setExpandedSharedId(null);
             }
           } catch (e: any) {
-            Alert.alert("Společná výzva", e?.message ?? "Nepodařilo se odejít z výzvy.");
+            Alert.alert(TXT.sharedChallenge, e?.message ?? TXT.couldNotLeave);
           }
         },
       },
@@ -1785,7 +1929,7 @@ useEffect(() => {
 
     const challenge = (appState.challenges ?? []).find((c) => String(c.id) === String(challengeId));
     if (challenge && !isChallengeActiveToday(challenge)) {
-      Alert.alert("Volný den", "Dnes je podle periody volno. Relaxuj :)");
+      Alert.alert(TXT.freeDay, TXT.freeRelax);
       return;
     }
     const target = Number((challenge as any)?.targetPerDay ?? 1);
@@ -1920,7 +2064,7 @@ useEffect(() => {
       )}
 
       <View style={[styles.topWrap, { paddingTop: insets.top + 10 }]}>
-        <Text style={styles.welcomeSmall}>Vítej zpět</Text>
+        <Text style={styles.welcomeSmall}>{TXT.welcomeBack}</Text>
         <Text style={styles.welcomeName} numberOfLines={1} ellipsizeMode="tail">
           {auth.currentUser?.displayName?.trim() || ""}
         </Text>
@@ -1928,12 +2072,12 @@ useEffect(() => {
         <View style={styles.premiumRow}>
           {premium ? (
             <View style={styles.premiumRowInner}>
-              <Text style={styles.premiumTag}>Premium</Text>
+              <Text style={styles.premiumTag}>{TXT.premium}</Text>
             </View>
           ) : (
             <View style={styles.premiumRowInner}>
               <View style={styles.freeRow}>
-                <Text style={styles.premiumTag}>Free</Text>
+                <Text style={styles.premiumTag}>{TXT.free}</Text>
 
                 <Pressable
                   onPress={() =>
@@ -1945,7 +2089,7 @@ useEffect(() => {
                   hitSlop={10}
                   style={({ pressed }) => [pressed && { opacity: 0.85 }]}
                 >
-                  <Text style={styles.upgradeText}>Upgradovat</Text>
+                  <Text style={styles.upgradeText}>{TXT.upgrade}</Text>
                 </Pressable>
               </View>
             </View>
@@ -2064,10 +2208,10 @@ useEffect(() => {
             style={styles.heroGradient}
           />
           <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>Držíš se už</Text>
+            <Text style={styles.heroTitle}>{TXT.keepsGoing}</Text>
             <Text style={styles.heroBig}>{Math.max(0, bestStreak)}. den</Text>
-            <Text style={styles.heroSub}>Nezastavuj!</Text>
-            <Text style={styles.heroQuote}>„Malý krok dnes, velká změna zítra“</Text>
+            <Text style={styles.heroSub}>{TXT.dontStop}</Text>
+            <Text style={styles.heroQuote}>„{TXT.quote}“</Text>
           </View>
 
           <Pressable onPress={() => setAddModalOpen(true)} style={({ pressed }) => [styles.heroPlus, pressed && { opacity: 0.9 }]}>
@@ -2109,7 +2253,7 @@ useEffect(() => {
         >
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: UI.accent }]}>Přidat výzvu</Text>
+              <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.addTitle}</Text>
               <Pressable
                 onPress={() => {
                   setAddModalOpen(false);
@@ -2117,7 +2261,7 @@ useEffect(() => {
                 }}
                 style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}
               >
-                <Text style={styles.closeText}>Zavřít</Text>
+                <Text style={styles.closeText}>{TXT.close}</Text>
               </Pressable>
             </View>
 
@@ -2125,7 +2269,7 @@ useEffect(() => {
               <TextInput
                 value={addModalText}
                 onChangeText={setAddModalText}
-                placeholder="Název výzvy"
+                placeholder={TXT.namePlaceholder}
                 placeholderTextColor={UI.sub}
                 style={[styles.input, { color: UI.text, borderColor: UI.stroke }]}
                 autoCapitalize="sentences"
@@ -2144,7 +2288,7 @@ useEffect(() => {
                   pressed && { opacity: 0.9 },
                 ]}
               >
-                <Text style={styles.primaryBtnText}>Přidat</Text>
+                <Text style={styles.primaryBtnText}>{TXT.add}</Text>
               </Pressable>
             </ScrollView>
           </Pressable>
@@ -2155,9 +2299,9 @@ useEffect(() => {
         <Pressable style={styles.backdrop} onPress={closeManage}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: UI.accent }]}>Správa výzvy</Text>
+              <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.manageTitle}</Text>
               <Pressable onPress={closeManage} style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}>
-                <Text style={styles.closeText}>Zavřít</Text>
+                <Text style={styles.closeText}>{TXT.close}</Text>
               </Pressable>
             </View>
 
@@ -2165,13 +2309,13 @@ useEffect(() => {
               <TextInput
                 value={manageRename}
                 onChangeText={setManageRename}
-                placeholder="Název výzvy"
+                placeholder={TXT.namePlaceholder}
                 placeholderTextColor={UI.sub}
                 style={[styles.input, { color: UI.text, borderColor: UI.stroke }]}
               />
 
               <View style={styles.modalRow}>
-                <Text style={[styles.modalLabel, { color: UI.text }]}>Aktivní</Text>
+                <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.active}</Text>
                 <Switch
                   value={manageEnabled}
                   onValueChange={(v) => {
@@ -2182,7 +2326,7 @@ useEffect(() => {
               </View>
 
               <View style={styles.modalRow}>
-                <Text style={[styles.modalLabel, { color: UI.text }]}>Počet výzev za den</Text>
+                <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.perDayCount}</Text>
                 <View style={styles.countRow}>
                   <Pressable
                     onPress={() => {
@@ -2209,13 +2353,13 @@ useEffect(() => {
               </View>
 
               <View style={styles.modalRow}>
-                <Text style={[styles.modalLabel, { color: UI.text }]}>Perioda</Text>
+                <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.period}</Text>
                 <Pressable
                   onPress={() => setPeriodPickerOpen(true)}
                   style={({ pressed }) => [styles.pickerBox, { borderColor: UI.stroke, backgroundColor: UI.card2 }, pressed && { opacity: 0.9 }]}
                 >
                   <Text style={[styles.pickerBoxText, { color: UI.text }]}>
-                    {managePeriod === "daily" ? "Denně" : managePeriod === "every2" ? "Obden" : "Vlastní dny"}
+                    {managePeriod === "daily" ? TXT.daily : managePeriod === "every2" ? TXT.every2 : TXT.customDays}
                   </Text>
                   <Ionicons name="chevron-down" size={18} color={UI.text} />
                 </Pressable>
@@ -2223,7 +2367,7 @@ useEffect(() => {
 
               {managePeriod === "custom" && (
                 <View style={{ marginTop: 8, marginBottom: 2 }}>
-                  <Text style={styles.modalHint}>Vyber dny, kdy je výzva aktivní.</Text>
+                  <Text style={styles.modalHint}>{TXT.chooseDaysHint}</Text>
                   <View style={styles.pills}>
                     {[
                       { k: 0, t: "Po" },
@@ -2255,7 +2399,7 @@ useEffect(() => {
               )}
 
               <View style={styles.modalRow}>
-                <Text style={[styles.modalLabel, { color: UI.text }]}>Notifikace</Text>
+                <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.notifications}</Text>
                 <Switch
                   value={manageRemEnabled}
                   onValueChange={(v) => {
@@ -2321,7 +2465,7 @@ useEffect(() => {
                   })}
 
                   <Pressable onPress={() => void applyManageReminders()} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}>
-                    <Text style={styles.primaryBtnText}>Uložit notifikace</Text>
+                    <Text style={styles.primaryBtnText}>{TXT.saveNotifications}</Text>
                   </Pressable>
                 </>
               )}
@@ -2345,13 +2489,13 @@ useEffect(() => {
                   style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.88 }]}
                 >
                   <Ionicons name="time" size={18} color={UI.text} />
-                  <Text style={styles.secondaryBtnText}>Historie výzvy</Text>
+                  <Text style={styles.secondaryBtnText}>{TXT.challengeHistory}</Text>
                 </Pressable>
               )}
 
               <Pressable onPress={deleteManagedChallenge} style={({ pressed }) => [styles.dangerBtn, pressed && { opacity: 0.88 }]}>
                 <Ionicons name="trash" size={18} color="#fff" />
-                <Text style={styles.dangerBtnText}>Smazat výzvu</Text>
+                <Text style={styles.dangerBtnText}>{TXT.deleteChallenge}</Text>
               </Pressable>
             </ScrollView>
 
@@ -2445,7 +2589,7 @@ useEffect(() => {
         >
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: UI.accent }]}>Historie výzvy</Text>
+              <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.historyOfChallenge}</Text>
               <Pressable
                 onPress={() => {
                   setHistoryOpen(false);
@@ -2453,7 +2597,7 @@ useEffect(() => {
                 }}
                 style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}
               >
-                <Text style={styles.closeText}>Zavřít</Text>
+                <Text style={styles.closeText}>{TXT.close}</Text>
               </Pressable>
             </View>
 
@@ -2507,12 +2651,12 @@ useEffect(() => {
                       <Text style={styles.historyDate}>{d.date}</Text>
                       <Text style={styles.historyStatus}>
                         {d.status === "completed"
-                          ? `Splněno ${d.done ?? 0}/${d.target ?? 1}${d.time ? ` • ${d.time}` : ""}`
+                          ? `${TXT.completed} ${d.done ?? 0}/${d.target ?? 1}${d.time ? ` • ${d.time}` : ""}`
                           : d.status === "skipped"
-                            ? "Přeskočeno"
+                            ? TXT.skipped
                             : d.status === "free"
-                              ? "Volný den"
-                              : "Nesplněno"}
+                              ? TXT.freeDay
+                              : TXT.notCompleted}
                       </Text>
                     </View>
                   ))}
@@ -2535,8 +2679,8 @@ useEffect(() => {
             <Ionicons name="search" size={54} color="#FFFFFF" />
           </View>
 
-          <Text style={styles.emptyTitle}>Zatím tu nic není</Text>
-          <Text style={styles.emptyText}>Přidej si výzvu a začni dnes.</Text>
+          <Text style={styles.emptyTitle}>{TXT.nothingHereYet}</Text>
+          <Text style={styles.emptyText}>{TXT.addChallengeAndStart}</Text>
         </View>
       ) : (
         <View style={{ flex: 1 }}>
@@ -2549,7 +2693,7 @@ useEffect(() => {
               <>
                 {!!visibleSharedChallenges.length && (
                   <View style={styles.sharedWrap}>
-                    <Text style={styles.sharedSectionTitle}>Společné výzvy</Text>
+                    <Text style={styles.sharedSectionTitle}>{TXT.sharedChallenges}</Text>
 
                     {visibleSharedChallenges.map((item) => {
                       const me = auth.currentUser?.uid ?? "";
@@ -2579,7 +2723,7 @@ useEffect(() => {
                               <View style={styles.sharedCompactLeft}>
                                 <View style={styles.sharedBadge}>
                                   <Text style={styles.sharedBadgeText}>
-                                    {pending ? "Čeká na přijetí" : "Společná výzva"}
+                                    {pending ? TXT.waitingForAccept : TXT.sharedChallenge}
                                   </Text>
                                 </View>
 
@@ -2615,8 +2759,8 @@ useEffect(() => {
                                   <View style={styles.sharedPendingBox}>
                                     <Text style={styles.sharedPendingText}>
                                       {!iAccepted
-                                        ? "Tuto společnou výzvu ti poslal kamarád. Nejprve ji přijmi."
-                                        : `Ty už jsi výzvu přijal. Čeká se na ostatní (${item.acceptedBy.length}/${item.memberUids.length}).`}
+                                        ? TXT.loadingSharedPrompt
+                                        : `${TXT.alreadyAcceptedWaiting} (${item.acceptedBy.length}/${item.memberUids.length}).`}
                                     </Text>
 
                                     {!iAccepted ? (
@@ -2627,12 +2771,12 @@ useEffect(() => {
                                           pressed && { opacity: 0.9 },
                                         ]}
                                       >
-                                        <Text style={styles.primaryBtnText}>Přijmout výzvu</Text>
+                                        <Text style={styles.primaryBtnText}>{TXT.acceptChallenge}</Text>
                                       </Pressable>
                                     ) : (
                                       <View style={[styles.modalRow, { marginTop: 0 }]}>
                                         <Text style={[styles.modalLabel, { color: UI.text }]}>
-                                          Čeká se na ostatní členy
+                                          {TXT.waitingForOthers}
                                         </Text>
                                       </View>
                                     )}
@@ -2642,7 +2786,7 @@ useEffect(() => {
                                     <View style={styles.sharedTopRow}>
                                       <View style={{ flex: 1, minWidth: 0 }}>
                                         <Text style={styles.sharedSubtitle}>
-                                          {activeToday ? `Cíl dnes: ${item.targetPerDay}×` : "Dnes je volný den"}
+                                          {activeToday ? `${TXT.todayTarget}: ${item.targetPerDay}×` : TXT.todayIsFree}
                                         </Text>
                                       </View>
 
@@ -2654,7 +2798,7 @@ useEffect(() => {
                                             pressed && { opacity: 0.9 },
                                           ]}
                                         >
-                                          <Text style={styles.sharedLeaveBtnText}>Odejít</Text>
+                                          <Text style={styles.sharedLeaveBtnText}>{TXT.leave}</Text>
                                         </Pressable>
 
                                         <Pressable
@@ -2680,7 +2824,7 @@ useEffect(() => {
                                               (myDoneToday || !activeToday) && { color: UI.sub },
                                             ]}
                                           >
-                                            {myDoneToday ? "Splněno" : !activeToday ? "Volný den" : "Splnit"}
+                                            {myDoneToday ? TXT.done : !activeToday ? TXT.freeDay : TXT.complete}
                                           </Text>
                                         </Pressable>
                                       </View>
@@ -2721,7 +2865,7 @@ useEffect(() => {
         </View>
 
         <Text style={styles.sharedMemberCount}>
-          {activeToday ? `${member.done}/${item.targetPerDay}` : "Volno"}
+          {activeToday ? `${member.done}/${item.targetPerDay}` : TXT.freeDay}
         </Text>
 
         <View style={styles.sharedBarTrack}>
@@ -2814,7 +2958,7 @@ useEffect(() => {
                             </Text>
 
                             <Text style={styles.rowDoneSmall}>
-                              {activeToday ? `Splněno ${done}/${Math.max(1, target)}` : "Relaxuj :)"}
+                              {activeToday ? `${TXT.addTodayCount} ${done}/${Math.max(1, target)}` : TXT.freeRelax}
                             </Text>
                           </View>
                         </View>
@@ -2856,7 +3000,7 @@ useEffect(() => {
                           onPress={() => {
                             if (item.enabled === false) return;
                             if (!activeToday) {
-                              Alert.alert("Volný den", "Dnes je podle periody volno. Relaxuj :)");
+                              Alert.alert(TXT.freeDay, TXT.freeRelax);
                               return;
                             }
                             if (isCompleteToday) return;
@@ -2891,7 +3035,7 @@ useEffect(() => {
                           <Text
                             style={[styles.rowDoneBtnText, (isCompleteToday || !activeToday) && { color: UI.sub }]}
                           >
-                            {isCompleteToday ? "Splněno" : !activeToday ? "Volný den" : "Splnit"}
+                            {isCompleteToday ? TXT.done : !activeToday ? TXT.freeDay : TXT.complete}
                           </Text>
                         </Pressable>
                       )}
