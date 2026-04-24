@@ -526,23 +526,27 @@ function makeStyles(UI: any) {
       borderWidth: 1,
     },
     pickerBoxText: { fontSize: 15, fontWeight: "900" },
-    pickerSheet: {
-      position: "absolute",
-      left: 16,
-      right: 16,
-      bottom: 24,
-      borderRadius: 16,
-      borderWidth: 1,
-      overflow: "hidden",
-    },
-    pickerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: 14,
-      paddingHorizontal: 14,
-      borderTopWidth: 1,
-    },
+pickerSheet: {
+  position: "absolute",
+  left: 16,
+  right: 16,
+  bottom: 24,
+  borderRadius: 16,
+  borderWidth: 1,
+  overflow: "hidden",
+  backgroundColor: "#111827",
+  borderColor: "#374151",
+},
+pickerRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  paddingVertical: 14,
+  paddingHorizontal: 14,
+  borderTopWidth: 1,
+  borderTopColor: "#374151",
+  backgroundColor: "#1F2937",
+},
     pickerRowText: { fontSize: 15, fontWeight: "900" },
 
     primaryBtn: {
@@ -881,7 +885,7 @@ export default function Index() {
             upgrade: "Upgrade",
             keepsGoing: "You’ve been going for",
             dontStop: "Don’t stop!",
-            quote: "A small step today, a big change tomorrow",
+            quote: "A small step today, a Big change",
             addTitle: "Add challenge",
             close: "Close",
             namePlaceholder: "Challenge name",
@@ -2209,7 +2213,9 @@ useEffect(() => {
           />
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>{TXT.keepsGoing}</Text>
-            <Text style={styles.heroBig}>{Math.max(0, bestStreak)}. den</Text>
+         <Text style={styles.heroBig}>
+  {bestStreak}. {lang === "en" ? "day" : "den"}
+</Text>
             <Text style={styles.heroSub}>{TXT.dontStop}</Text>
             <Text style={styles.heroQuote}>„{TXT.quote}“</Text>
           </View>
@@ -2370,14 +2376,15 @@ useEffect(() => {
                   <Text style={styles.modalHint}>{TXT.chooseDaysHint}</Text>
                   <View style={styles.pills}>
                     {[
-                      { k: 0, t: "Po" },
-                      { k: 1, t: "Út" },
-                      { k: 2, t: "St" },
-                      { k: 3, t: "Čt" },
-                      { k: 4, t: "Pá" },
-                      { k: 5, t: "So" },
-                      { k: 6, t: "Ne" },
-                    ].map((d) => {
+  { k: 0, t: lang === "en" ? "Mon" : "Po" },
+  { k: 1, t: lang === "en" ? "Tue" : "Út" },
+  { k: 2, t: lang === "en" ? "Wed" : "St" },
+  { k: 3, t: lang === "en" ? "Thu" : "Čt" },
+  { k: 4, t: lang === "en" ? "Fri" : "Pá" },
+  { k: 5, t: lang === "en" ? "Sat" : "So" },
+  { k: 6, t: lang === "en" ? "Sun" : "Ne" },
+]
+.map((d) => {
                       const active = manageCustomDays.includes(d.k);
                       return (
                         <Pressable
@@ -2509,12 +2516,13 @@ useEffect(() => {
                 style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.5)" }]}
                 onPress={() => setPeriodPickerOpen(false)}
               />
-              <View style={[styles.pickerSheet, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
+              <View style={styles.pickerSheet}>
                 {[
-                  { k: "daily" as const, t: "Denně" },
-                  { k: "every2" as const, t: "Obden" },
-                  { k: "custom" as const, t: "Vlastní dny" },
-                ].map((opt) => {
+  { k: "daily" as const, t: TXT.daily },
+  { k: "every2" as const, t: TXT.every2 },
+  { k: "custom" as const, t: TXT.customDays },
+]
+                .map((opt) => {
                   const active = managePeriod === opt.k;
                   return (
                     <Pressable

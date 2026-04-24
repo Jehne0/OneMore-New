@@ -6,6 +6,7 @@ import { InteractionManager } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../lib/theme";
 import { ensureFastKeys } from "../../lib/storage";
+import { useI18n } from "../../lib/i18n";
 
 
 export default function TabsLayout() {
@@ -23,6 +24,7 @@ export default function TabsLayout() {
   const tabBg = isDark ? UI.tabBg : UI.accent;
   const tabActive = isDark ? UI.tabActive : UI.bg;
   const tabInactive = isDark ? UI.tabInactive : "rgba(255,255,255,0.78)";
+  const { lang } = useI18n();
 
   return (
     <Tabs
@@ -80,7 +82,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarLabel: "Profil",
+          tabBarLabel: lang === "en" ? "Profile" : "Profil",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "person" : "person-outline"}

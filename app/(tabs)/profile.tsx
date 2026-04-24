@@ -121,8 +121,9 @@ const PROFILE_STRINGS = {
     managePremium: "Spravovat Premium",
     logout: "Odhlásit se",
     deleteAccount: "Odstranit účet",
-    info: "Informace",
+    info: "Informace a historie",
     sendQuestion: "Poslat dotaz",
+    querySubject: "Poslat dotaz",
     streaksMedals: "Ohýnky & medaile",
     freePremium: "Free & Premium",
     privacy: "Ochrana soukromí",
@@ -158,6 +159,7 @@ const PROFILE_STRINGS = {
     loadingFriends: "Načítám přátele...",
     noFriendsYet: "Zatím žádní přátelé.",
     loadingChallenges: "Načítám výzvy...",
+    noRequests: "Zatím tu nemáš žádné žádosti.",
     noPendingChallenges: "Zatím tu nemáš žádné nepřijaté společné výzvy.",
     from: "Od",
     participants: "Účastníci",
@@ -218,14 +220,14 @@ const PROFILE_STRINGS = {
     unlimitedRemindersNotif: "Neomezené připomínky (notifikace)",
     unlimitedFriendsLink: "Neomezené propojení s přáteli",
     moreRewards: "Další odměny a drobné vychytávky (postupně)",
-    querySubject: "Poslat dotaz",
-    profileTitleFriends: "Přátelé",
+      profileTitleFriends: "Přátelé",
     profileTitleInfo: "Informace",
     passwordPlaceholder: "heslo",
     usernamePlaceholder: "username",
     noScalePremium: "Premium",
     noScaleFree: "Free",
     premiumFriendsOnly: "Společné výzvy s přáteli jsou dostupné jen v Premium verzi.",
+    freeFriendsLimit: "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium.",
     medalNone: "Žádná",
     medalPotato: "Bramborová",
     medalSteel: "Ocelová",
@@ -233,145 +235,155 @@ const PROFILE_STRINGS = {
     medalSilver: "Stříbrná",
     medalGold: "Zlatá",
     medalDiamond: "Diamantová",
+    cancelRequestFailed: "Nepodařilo se zrušit.",
+    declineFriendFailed: "Nepodařilo se odmítnout.",
+    acceptFriendFailed: "Nepodařilo se přijmout.",
+    removeFriendFailed: "Nepodařilo se odebrat.",
   },
   en: {
-    deleteAccountTitle: "Delete account?",
-    deleteAccountText: "This action is irreversible. Your account will be deleted.",
-    enterPassword: "Enter password",
-    cancel: "Cancel",
-    deleteAccountAction: "Delete my account",
-    deletingAccount: "Deleting account…",
-    changePassword: "Change password",
-    close: "Close",
-    passwordResetInfo: "We will send you an email with a password reset link.",
-    email: "Email",
-    sendLink: "Send link",
-    sending: "Sending…",
-    changeUsername: "Change username",
-    newUsername: "New username",
-    saveChange: "Save changes",
-    saving: "Saving…",
-    account: "Account",
-    darkMode: "Dark mode",
-    shareAchievements: "Share my achievements with friends",
-    language: "Language",
-    premium: "Premium",
-    managePremium: "Manage Premium",
-    logout: "Log out",
-    deleteAccount: "Delete account",
-    info: "Info",
-    sendQuestion: "Send a question",
-    streaksMedals: "Streaks & medals",
-    freePremium: "Free & Premium",
-    privacy: "Privacy policy",
-    terms: "Terms of use",
-    limitsBenefits: "Limits & benefits",
-    streaksRewards: "Streaks & rewards",
-    history: "Challenge history",
-    historySubtitle: "Completion and streak overview",
-    flames: "Flames",
-    medals: "Medals",
-    premiumBuy: "Buy Premium",
-    premiumCancel: "Cancel subscription",
-    open: "Open",
-    subject: "Subject",
-    message: "Message",
-    send: "Send",
-    friends: "Friends",
-    requests: "Requests",
-    challenges: "Challenges",
-    addFriend: "Add friend",
-    addByUsername: "Add by username",
-    addByUsernameHelp: "Enter the username of the person you want to add.",
-    add: "Add",
-    myFriends: "My friends",
-    addShort: "+ Add",
-    invite: "Invite",
-    remove: "Remove",
-    accept: "Accept",
-    decline: "Decline",
-    sentRequests: "Sent requests",
-    incomingRequests: "Incoming requests",
-    blocked: "Blocked",
-    loadingFriends: "Loading friends...",
-    noFriendsYet: "No friends yet.",
-    loadingChallenges: "Loading challenges...",
-    noPendingChallenges: "You have no pending shared challenges right now.",
-    from: "From",
-    participants: "Participants",
-    target: "Target",
-    daily: "daily",
-    every2: "every other day",
-    selectedDays: "on selected days",
-    newSharedChallenge: "New shared challenge",
-    sharedChallenge: "Shared challenge",
-    selectUpToFriends: "Select up to {count} friends for one challenge.",
-    friendsLabel: "Friends",
-    challengeName: "Challenge name",
-    challengeNamePlaceholder: "For example: Push-ups",
-    countPerDay: "Count per day",
-    period: "Period",
-    dailyCap: "Daily",
-    every2Cap: "Every other day",
-    customDays: "Custom days",
-    chooseDays: "Choose days",
-    submit: "Send",
-    friendProfile: "Friend profile",
-    loadingStats: "Loading stats...",
-    userNotSharing: "This user is not sharing achievements.",
-    statsUnavailable: "Stats are not available.",
-    longestStreak: "🔥 Longest streak",
-    medalsCount: "🏅 Medal count",
-    highestMedal: "💎 Highest medal",
-    activeChallenges: "✅ Active challenges",
-    upgrade: "Upgrade",
-    ok: "OK",
-    supportReplyEmail: "Reply email",
-    supportPlaceholder: "your@email.com",
-    supportSubjectPlaceholder: "For example: Notification issue",
-    supportMessagePlaceholder: "Describe your issue…",
-    freeVersion: "Basic version for free",
-    bestChoice: "BEST VALUE",
-    premiumForResults: "For maximum results",
-    unlimitedChallenges: "Unlimited challenges",
-    unlimitedReminders: "Unlimited reminders",
-    fullHistory: "Full challenge history",
-    unlimitedFriends: "Unlimited friends",
-    unlimitedSharedChallenges: "Unlimited shared challenges",
-    getPremium: "Get Premium",
-    securePayment: "Secure payment",
-    cancelAnytime: "Cancel anytime",
-    supportDevelopment: "You support development",
-    free: "Free",
-    oneMoreFree: "OneMore for free. Premium without limits.",
-    premiumActiveShort: "Premium is active.",
-    manageSubscription: "Manage your subscription",
-    unlockMore: "Unlock more challenges, reminders, friends, and shared challenges.",
-    reminders: "Reminders",
-    historyChallenges: "Challenge history",
-    sharedChallenges: "Shared challenges",
-    activePremiumInfo: "Premium is active. You can cancel it anytime or try restoring the status.",
-    unlockPremiumInfo: "Unlock Premium and get unlimited challenges, reminders, and friends.",
-    priceInfo: "Price will appear after the RevenueCat offering is connected.",
-    unlimitedRemindersNotif: "Unlimited reminders (notifications)",
-    unlimitedFriendsLink: "Unlimited friend connections",
-    moreRewards: "More rewards and small extras (coming gradually)",
-    querySubject: "Send a question",
-    profileTitleFriends: "Friends",
-    profileTitleInfo: "Info",
-    passwordPlaceholder: "password",
-    usernamePlaceholder: "username",
-    noScalePremium: "Premium",
-    noScaleFree: "Free",
-    premiumFriendsOnly: "Shared challenges with friends are available only in Premium.",
-    medalNone: "None",
-    medalPotato: "Potato",
-    medalSteel: "Steel",
-    medalBronze: "Bronze",
-    medalSilver: "Silver",
-    medalGold: "Gold",
-    medalDiamond: "Diamond",
-  },
+  deleteAccountTitle: "Delete account?",
+  deleteAccountText: "This action is irreversible. Your account will be deleted.",
+  enterPassword: "Enter password",
+  cancel: "Cancel",
+  deleteAccountAction: "Delete my account",
+  deletingAccount: "Deleting account…",
+  changePassword: "Change password",
+  close: "Close",
+  passwordResetInfo: "We will send you an email with a password reset link.",
+  email: "Email",
+  sendLink: "Send link",
+  sending: "Sending…",
+  changeUsername: "Change username",
+  newUsername: "New username",
+  saveChange: "Save changes",
+  saving: "Saving…",
+  account: "Account",
+  darkMode: "Dark mode",
+  shareAchievements: "Share my achievements with friends",
+  language: "Language",
+  premium: "Premium",
+  managePremium: "Manage Premium",
+  logout: "Log out",
+  deleteAccount: "Delete account",
+  info: "Information & History",
+  sendQuestion: "Contact support",
+  querySubject: "Contact support",
+  streaksMedals: "Streaks & medals",
+  freePremium: "Free & Premium",
+  privacy: "Privacy policy",
+  terms: "Terms of use",
+  limitsBenefits: "Limits & benefits",
+  streaksRewards: "Streaks & rewards",
+  history: "Challenge history",
+  historySubtitle: "Completion and streak overview",
+  flames: "Flames",
+  medals: "Medals",
+  premiumBuy: "Buy Premium",
+  premiumCancel: "Cancel subscription",
+  open: "Open",
+  subject: "Subject",
+  message: "Message",
+  send: "Send",
+  friends: "Friends",
+  requests: "Requests",
+  challenges: "Challenges",
+  addFriend: "Add friend",
+  addByUsername: "Add by username",
+  addByUsernameHelp: "Enter the username of the person you want to add.",
+  add: "Add",
+  myFriends: "My friends",
+  addShort: "+ Add",
+  invite: "Invite",
+  remove: "Remove",
+  accept: "Accept",
+  decline: "Decline",
+  sentRequests: "Sent requests",
+  incomingRequests: "Incoming requests",
+  blocked: "Blocked",
+  loadingFriends: "Loading friends...",
+  noFriendsYet: "No friends yet.",
+  loadingChallenges: "Loading challenges...",
+  noRequests: "You have no requests yet.",
+  noPendingChallenges: "You have no pending shared challenges right now.",
+  from: "From",
+  participants: "Participants",
+  target: "Target",
+  daily: "daily",
+  every2: "every other day",
+  selectedDays: "on selected days",
+  newSharedChallenge: "New shared challenge",
+  sharedChallenge: "Shared challenge",
+  selectUpToFriends: "Select up to {count} friends for one challenge.",
+  friendsLabel: "Friends",
+  challengeName: "Challenge name",
+  challengeNamePlaceholder: "For example: Push-ups",
+  countPerDay: "Count per day",
+  period: "Period",
+  dailyCap: "Daily",
+  every2Cap: "Every other day",
+  customDays: "Custom days",
+  chooseDays: "Choose days",
+  submit: "Send",
+  friendProfile: "Friend profile",
+  loadingStats: "Loading stats...",
+  userNotSharing: "This user is not sharing achievements.",
+  statsUnavailable: "Stats are not available.",
+  longestStreak: "🔥 Longest streak",
+  medalsCount: "🏅 Medal count",
+  highestMedal: "💎 Highest medal",
+  activeChallenges: "✅ Active challenges",
+  upgrade: "Upgrade",
+  ok: "OK",
+  supportReplyEmail: "Reply email",
+  supportPlaceholder: "your@email.com",
+  supportSubjectPlaceholder: "For example: Notification issue",
+  supportMessagePlaceholder: "Describe your issue…",
+  freeVersion: "Basic version for free",
+  bestChoice: "BEST VALUE",
+  premiumForResults: "For maximum results",
+  unlimitedChallenges: "Unlimited challenges",
+  unlimitedReminders: "Unlimited reminders",
+  fullHistory: "Full challenge history",
+  unlimitedFriends: "Unlimited friends",
+  unlimitedSharedChallenges: "Unlimited shared challenges",
+  getPremium: "Get Premium",
+  securePayment: "Secure payment",
+  cancelAnytime: "Cancel anytime",
+  supportDevelopment: "You support development",
+  free: "Free",
+  oneMoreFree: "OneMore for free. Premium without limits.",
+  premiumActiveShort: "Premium is active.",
+  manageSubscription: "Manage your subscription",
+  unlockMore: "Unlock more challenges, reminders, friends, and shared challenges.",
+  reminders: "Reminders",
+  historyChallenges: "Challenge history",
+  sharedChallenges: "Shared challenges",
+  activePremiumInfo: "Premium is active. You can cancel it anytime or try restoring the status.",
+  unlockPremiumInfo: "Unlock Premium and get unlimited challenges, reminders, and friends.",
+  priceInfo: "Price will appear after the RevenueCat offering is connected.",
+  unlimitedRemindersNotif: "Unlimited reminders (notifications)",
+  unlimitedFriendsLink: "Unlimited friend connections",
+  moreRewards: "More rewards and small extras (coming gradually)",
+  profileTitleFriends: "Friends",
+  profileTitleInfo: "Information",
+  passwordPlaceholder: "password",
+  usernamePlaceholder: "username",
+  noScalePremium: "Premium",
+  noScaleFree: "Free",
+  premiumFriendsOnly: "Shared challenges with friends are available only in Premium.",
+  freeFriendsLimit: "In the free version you can have only 1 friend. Upgrade to Premium for more.",
+  medalNone: "None",
+  medalPotato: "Potato",
+  medalSteel: "Steel",
+  medalBronze: "Bronze",
+  medalSilver: "Silver",
+  medalGold: "Gold",
+  medalDiamond: "Diamond",
+  removeFriendFailed: "Could not remove friend.",
+  acceptFriendFailed: "Could not accept request.",
+  declineFriendFailed: "Could not decline request.",
+  cancelRequestFailed: "Could not cancel request.",
+},
 } as const;
 
 export default function ProfileTabScreen() {
@@ -666,19 +678,20 @@ await Promise.all(
 
   const email = (auth.currentUser?.email ?? "").trim();
 
-  const getShownFriendName = (uid: string) => {
-    const v = friendNames[uid];
-    if (typeof v === "string" && v.trim()) return v.trim();
-    return lang === "cs" ? "Načítám..." : "Loading...";
-  };
-  const pendingInviteCount = sharedInvites.length;
+ const getShownFriendName = (uid: string) => {
+  const v = friendNames[uid];
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return p.loadingFriends;
+};
 
-  const getInviteCreatorName = (challenge: SharedChallenge) => {
-    const creatorUid = String(challenge.createdBy ?? "");
-    const v = friendNames[creatorUid];
-    if (typeof v === "string" && v.trim()) return v.trim();
-    return lang === "cs" ? "Kamarád" : "Friend";
-  };
+const pendingInviteCount = sharedInvites.length;
+
+const getInviteCreatorName = (challenge: SharedChallenge) => {
+  const creatorUid = String(challenge.createdBy ?? "");
+  const v = friendNames[creatorUid];
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return p.friends;
+};
 
   const medalLabel = (tier: FriendPreviewStats["highestMedal"]) => {
     switch (tier) {
@@ -1712,9 +1725,9 @@ const noScaleText = {
                   pressed && { opacity: 0.88 },
                 ]}
               >
-                <Text style={[styles.modalLinkText, { color: UI.text }]}>
-                  Spravovat Premium
-                </Text>
+          <Text style={[styles.modalLinkText, { color: UI.text }]}>
+  {p.managePremium}
+</Text>
                 <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
               </Pressable>
             )}
@@ -1954,9 +1967,9 @@ const noScaleText = {
                   >
                     <Ionicons name="mail" size={24} color={UI.accent} />
                   </View>
-                  <Text style={[styles.iconTileText, { color: UI.text }]}>
-                    Poslat dotaz
-                  </Text>
+           <Text style={[styles.iconTileText, { color: UI.text }]}>
+  {p.sendQuestion}
+</Text>
                 </Pressable>
               </View>
             </View>
@@ -2599,11 +2612,7 @@ const noScaleText = {
                     { borderColor: UI.stroke, backgroundColor: UI.card },
                   ]}
                 >
-                  <Text style={[styles.infoTitle, { color: UI.text }]}>
-                    Poslat dotaz
-                  </Text>
-
-                  <Text style={[styles.smallLabel, { color: UI.sub }]}>
+                              <Text style={[styles.smallLabel, { color: UI.sub }]}>
                     {p.supportReplyEmail}
                   </Text>
                   <TextInput
@@ -2725,7 +2734,7 @@ const noScaleText = {
           { color: friendsTab === "friends" ? "#0B1220" : UI.text },
         ]}
       >
-        Přátelé
+       {p.friends}
       </Text>
     </Pressable>
 
@@ -2746,7 +2755,7 @@ const noScaleText = {
           { color: friendsTab === "requests" ? "#0B1220" : UI.text },
         ]}
       >
-        Žádosti
+        {p.requests}
       </Text>
     </Pressable>
 
@@ -2770,7 +2779,7 @@ const noScaleText = {
           { color: friendsTab === "invites" ? "#0B1220" : UI.text },
         ]}
       >
-        Výzvy
+        {p.challenges}
       </Text>
 
       {pendingInviteCount > 0 && (
@@ -2863,9 +2872,9 @@ const noScaleText = {
     gap: 12,
   }}
 >
-  <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 0 }]}>
-    Moji přátelé
-  </Text>
+ <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 0 }]}>
+  {p.myFriends}
+</Text>
 
   <Pressable
     onPress={() => setAddFriendOpen(true)}
@@ -2928,10 +2937,10 @@ const noScaleText = {
                 setFriendsBusy(true);
                 await removeFriend(e.otherUid);
               } catch (err: any) {
-                Alert.alert(
-                  "Přátelé",
-                  err?.message ?? "Nepodařilo se odebrat."
-                );
+               Alert.alert(
+  p.friends,
+  err?.message ?? p.removeFriendFailed
+);
               } finally {
                 setFriendsBusy(false);
               }
@@ -2986,19 +2995,19 @@ const noScaleText = {
                                         (x) => x.status === "accepted"
                                       ).length;
                                       if (!premium && acceptedCount >= 1) {
-                                        Alert.alert(
-                                          "Přátelé",
-                                          "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium."
-                                        );
+                                       Alert.alert(
+  p.friends,
+  p.freeFriendsLimit
+);
                                         return;
                                       }
                                       setFriendsBusy(true);
                                       await acceptFriend(e.otherUid);
                                     } catch (err: any) {
                                       Alert.alert(
-                                        "Přátelé",
-                                        err?.message ?? "Nepodařilo se přijmout."
-                                      );
+  p.friends,
+  err?.message ?? p.acceptFriendFailed
+);
                                     } finally {
                                       setFriendsBusy(false);
                                     }
@@ -3017,9 +3026,9 @@ const noScaleText = {
                                       await declineFriend(e.otherUid);
                                     } catch (err: any) {
                                       Alert.alert(
-                                        "Přátelé",
-                                        err?.message ?? "Nepodařilo se odmítnout."
-                                      );
+  p.friends,
+  err?.message ?? p.declineFriendFailed
+);
                                     } finally {
                                       setFriendsBusy(false);
                                     }
@@ -3069,10 +3078,10 @@ const noScaleText = {
                                     setFriendsBusy(true);
                                     await declineFriend(e.otherUid);
                                   } catch (err: any) {
-                                    Alert.alert(
-                                      "Přátelé",
-                                      err?.message ?? "Nepodařilo se zrušit."
-                                    );
+                                  Alert.alert(
+  p.friends,
+  err?.message ?? p.cancelRequestFailed
+);
                                   } finally {
                                     setFriendsBusy(false);
                                   }
@@ -3115,6 +3124,23 @@ const noScaleText = {
                 })()}
               </ScrollView>
             )
+            ) : friendsTab === "requests" ? (
+  <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
+    <View
+      style={[
+        styles.infoCard,
+        { borderColor: UI.stroke, backgroundColor: UI.card },
+      ]}
+    >
+      <Text style={[styles.infoTitle, { color: UI.text }]}>
+        {p.requests}
+      </Text>
+
+      <Text style={[styles.infoText, { color: UI.sub }]}>
+        {p.noRequests}
+      </Text>
+    </View>
+  </ScrollView>
           ) : sharedInvitesLoading ? (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
               <ActivityIndicator size="large" />
@@ -3133,11 +3159,11 @@ const noScaleText = {
                     ]}
                   >
                     <Text style={[styles.infoTitle, { color: UI.text }]}>
-                      {lang === "cs" ? "Výzvy" : "Challenges"}
-                    </Text>
-                    <Text style={[styles.infoText, { color: UI.sub }]}>
-                      Zatím tu nemáš žádné nepřijaté společné výzvy.
-                    </Text>
+  {p.challenges}
+</Text>
+                   <Text style={[styles.infoText, { color: UI.sub }]}>
+  {p.noPendingChallenges}
+</Text>
                   </View>
                 ) : (
                   sharedInvites.map((item) => (

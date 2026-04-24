@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { loadChallengesFast, loadChallengeStatsFast } from "../lib/storage";
 import { useTheme } from "../lib/theme";
+import { useI18n } from "../lib/i18n";
 
 type StatRow = {
   id: string;
@@ -27,6 +28,49 @@ type SummaryStats = {
   totalCompleted: number;
   activeChallenges: number;
 };
+
+const HISTORY_STRINGS = {
+  cs: {
+    back: "‹ Zpět",
+    title: "Historie výzev",
+    loading: "Načítám historii…",
+    bestStreak: "Nejlepší série",
+    completedTotal: "Splněno celkem",
+    activeChallenges: "Aktivní výzvy",
+    shown: "Zobrazeno",
+    of: "z",
+    loadingMore: "Načítám další…",
+    scrollForMore: "Sjeď dolů pro další",
+    empty: "Zatím tu nic není. Splň první výzvu a historie se začne plnit.",
+    noTitle: "(bez názvu)",
+    active: "Aktivní",
+    disabled: "Vypnutá",
+    completed: "Splněno",
+    skipped: "Vynecháno",
+    streak: "Série",
+    last: "Naposledy:",
+  },
+  en: {
+    back: "‹ Back",
+    title: "Challenge history",
+    loading: "Loading history…",
+    bestStreak: "Best streak",
+    completedTotal: "Completed total",
+    activeChallenges: "Active challenges",
+    shown: "Shown",
+    of: "of",
+    loadingMore: "Loading more…",
+    scrollForMore: "Scroll down for more",
+    empty: "Nothing here yet. Complete your first challenge and history will start filling up.",
+    noTitle: "(no title)",
+    active: "Active",
+    disabled: "Disabled",
+    completed: "Completed",
+    skipped: "Skipped",
+    streak: "Streak",
+    last: "Last:",
+  },
+} as const;
 
 const PAGE_SIZE = 50;
 
@@ -68,9 +112,11 @@ function formatDateCZ(iso?: string) {
 const HistoryCard = React.memo(function HistoryCard({
   r,
   UI,
+  p,
 }: {
   r: StatRow;
   UI: any;
+  p: typeof HISTORY_STRINGS["cs"] | typeof HISTORY_STRINGS["en"];
 }) {
   return (
     <View
@@ -84,7 +130,7 @@ const HistoryCard = React.memo(function HistoryCard({
           style={[styles.cardTitle, { color: UI.text }]}
           numberOfLines={1}
         >
-          {r.text || "(bez názvu)"}
+          {r.text || p.noTitle}
         </Text>
 
         <View
@@ -106,7 +152,7 @@ const HistoryCard = React.memo(function HistoryCard({
               { color: r.enabled ? "#22c55e" : UI.sub },
             ]}
           >
-            {r.enabled ? "Aktivní" : "Vypnutá"}
+            {r.enabled ? p.active : p.disabled}
           </Text>
         </View>
       </View>
@@ -119,7 +165,7 @@ const HistoryCard = React.memo(function HistoryCard({
           ]}
         >
           <Text style={[styles.metricMiniLabel, { color: UI.sub }]}>
-            Splněno
+            {p.completed}
           </Text>
           <Text style={[styles.metricMiniValue, { color: UI.text }]}>
             {r.completed}
@@ -133,7 +179,7 @@ const HistoryCard = React.memo(function HistoryCard({
           ]}
         >
           <Text style={[styles.metricMiniLabel, { color: UI.sub }]}>
-            Vynecháno
+            {p.skipped}
           </Text>
           <Text style={[styles.metricMiniValue, { color: UI.text }]}>
             {r.skipped}
@@ -147,7 +193,7 @@ const HistoryCard = React.memo(function HistoryCard({
           ]}
         >
           <Text style={[styles.metricMiniLabel, { color: UI.sub }]}>
-            Série
+            {p.streak}
           </Text>
           <Text style={[styles.metricMiniValue, { color: UI.text }]}>
             {r.streak}
@@ -156,7 +202,7 @@ const HistoryCard = React.memo(function HistoryCard({
       </View>
 
       <Text style={[styles.lastDateText, { color: UI.sub }]} numberOfLines={1}>
-        Naposledy:{" "}
+        {p.last}{" "}
         <Text style={{ color: UI.text, fontWeight: "900" }}>
           {formatDateCZ(r.lastCompleted)}
         </Text>
@@ -168,6 +214,8 @@ const HistoryCard = React.memo(function HistoryCard({
 export default function HistoryScreen() {
   const router = useRouter();
   const { UI, isDark } = useTheme();
+  const { lang } = useI18n();
+  const p = HISTORY_STRINGS[lang];
 
   const [rows, setRows] = useState<StatRow[]>(() => MEM_ROWS ?? []);
   const [visibleCount, setVisibleCount] = useState(() =>
@@ -292,10 +340,10 @@ export default function HistoryScreen() {
           onPress={() => router.back()}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.85 }]}
         >
-          <Text style={{ color: UI.text, fontWeight: "900" }}>‹ Zpět</Text>
+          <Text style={{ color: UI.text, fontWeight: "900" }}>{p.back}</Text>
         </Pressable>
 
-        <Text style={[styles.title, { color: UI.text }]}>Historie výzev</Text>
+        <Text style={[styles.title, { color: UI.text }]}>{p.title}</Text>
 
         <View style={{ width: 54 }} />
       </View>
@@ -304,7 +352,7 @@ export default function HistoryScreen() {
         data={rows}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.container}
-        renderItem={({ item }) => <HistoryCard r={item} UI={UI} />}
+        renderItem={({ item }) => <HistoryCard r={item} UI={UI} p={p} />}
         initialNumToRender={14}
         maxToRenderPerBatch={14}
         windowSize={8}
@@ -320,7 +368,7 @@ export default function HistoryScreen() {
               <View style={{ paddingVertical: 10 }}>
                 <ActivityIndicator />
                 <Text style={{ color: UI.sub, textAlign: "center", marginTop: 6 }}>
-                  Načítám historii…
+                  {p.loading}
                 </Text>
               </View>
             ) : totalCount > 0 ? (
@@ -336,7 +384,7 @@ export default function HistoryScreen() {
                       {summary.bestStreak}
                     </Text>
                     <Text style={[styles.summaryLabel, { color: UI.sub }]}>
-                      Nejlepší série
+                      {p.bestStreak}
                     </Text>
                   </View>
 
@@ -350,7 +398,7 @@ export default function HistoryScreen() {
                       {summary.totalCompleted}
                     </Text>
                     <Text style={[styles.summaryLabel, { color: UI.sub }]}>
-                      Splněno celkem
+                      {p.completedTotal}
                     </Text>
                   </View>
 
@@ -364,7 +412,7 @@ export default function HistoryScreen() {
                       {summary.activeChallenges}
                     </Text>
                     <Text style={[styles.summaryLabel, { color: UI.sub }]}>
-                      Aktivní výzvy
+                      {p.activeChallenges}
                     </Text>
                   </View>
                 </View>
@@ -378,7 +426,7 @@ export default function HistoryScreen() {
                     fontWeight: "700",
                   }}
                 >
-                  Zobrazeno {Math.min(rows.length, totalCount)} z {totalCount}
+                  {p.shown} {Math.min(rows.length, totalCount)} {p.of} {totalCount}
                 </Text>
               </>
             ) : null}
@@ -389,7 +437,7 @@ export default function HistoryScreen() {
             <View style={{ paddingVertical: 12 }}>
               {loadingMore ? <ActivityIndicator /> : null}
               <Text style={{ color: UI.sub, textAlign: "center", marginTop: 6 }}>
-                {loadingMore ? "Načítám další…" : "Sjeď dolů pro další"}
+                {loadingMore ? p.loadingMore : p.scrollForMore}
               </Text>
             </View>
           ) : null
@@ -397,7 +445,7 @@ export default function HistoryScreen() {
         ListEmptyComponent={
           !loading ? (
             <Text style={{ color: UI.sub, textAlign: "center", marginTop: 30 }}>
-              Zatím tu nic není. Splň první výzvu a historie se začne plnit.
+              {p.empty}
             </Text>
           ) : null
         }
