@@ -50,6 +50,12 @@
     "androidStatusBar": {
       "backgroundColor": "#0B1220",
       "barStyle": "light-content"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a81fe687-0040-4f78-ad9c-090d243d8a91"
+      }
     }
   }
 }

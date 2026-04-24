@@ -29,8 +29,6 @@ function emit(v: boolean) {
 }
 
 export async function isPremiumActive(): Promise<boolean> {
-  return true;
-
   try {
     const v = await AsyncStorage.getItem(PREMIUM_KEY);
     return v === "1";

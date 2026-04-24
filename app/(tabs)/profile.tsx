@@ -3786,27 +3786,49 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
             </Text>
           )}
 
-          <View style={styles.versionRow}>
-            <View
-              style={[
-                styles.versionChip,
-                { borderColor: UI.stroke, backgroundColor: UI.card },
-              ]}
-            >
-              <Text style={[styles.versionChipText, { color: UI.text }]}>
-                {premium ? p.noScalePremium : p.noScaleFree}
-              </Text>
-            </View>
+       <View style={styles.versionRow}>
+  <View
+    style={[
+      styles.versionChip,
+      {
+        borderColor: premium ? UI.accent : UI.stroke,
+        backgroundColor: premium
+          ? "rgba(255,138,31,0.18)"
+          : UI.card,
+      },
+    ]}
+  >
+    {premium ? (
+      <MaterialCommunityIcons
+        name="crown"
+        size={15}
+        color={UI.accent}
+        style={{ marginRight: 6 }}
+      />
+    ) : null}
 
-            {!premium && (
-              <Pressable
-                onPress={openPayments}
-                style={({ pressed }) => [styles.upgradeChip, pressed && { opacity: 0.92 }]}
-              >
-                <Text style={styles.upgradeChipText}>{p.upgrade}</Text>
-              </Pressable>
-            )}
-          </View>
+    <Text
+      style={[
+        styles.versionChipText,
+        { color: premium ? UI.accent : UI.text },
+      ]}
+    >
+      {premium ? p.noScalePremium : p.noScaleFree}
+    </Text>
+  </View>
+
+  {!premium && (
+    <Pressable
+      onPress={openPayments}
+      style={({ pressed }) => [
+        styles.upgradeChip,
+        pressed && { opacity: 0.92 },
+      ]}
+    >
+      <Text style={styles.upgradeChipText}>{p.upgrade}</Text>
+    </Pressable>
+  )}
+</View>
         </View>
 
         <Pressable
@@ -3917,12 +3939,14 @@ function makeStyles(UI: any) {
       alignItems: "center",
       gap: 12,
     },
-    versionChip: {
-      borderWidth: 1,
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
+   versionChip: {
+  borderWidth: 1,
+  borderRadius: 999,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  flexDirection: "row",
+  alignItems: "center",
+},
     versionChipText: { fontSize: 14, fontWeight: "900" },
     upgradeChip: {
       backgroundColor: UI.accent,

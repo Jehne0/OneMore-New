@@ -120,8 +120,13 @@ export default function LoginScreen() {
         9000
       );
 
-      // ✅ propojit RevenueCat s účtem (UID) – důležité pro premium/restore
-      await revenueCatLogin(cred.user.uid);
+      // ✅ propojit RevenueCat s účtem (UID)
+// Nesmí blokovat přihlášení – když RevenueCat selže, uživatel se má i tak dostat do appky.
+try {
+  await revenueCatLogin(cred.user.uid);
+} catch (rcErr: any) {
+  console.log("REVENUECAT LOGIN ERROR:", rcErr?.code, rcErr?.message, rcErr);
+}
 
       // ✅ Email verification vypnuto – neblokujeme přihlášení a nic nezobrazujeme.
 
