@@ -1570,11 +1570,15 @@ export default function Index() {
     setListData(visibleChallenges as any[]);
   }, [visibleChallenges]);
 
-  const count = visibleChallenges.length;
-  const sidePadding = 18;
-  const visibleSharedChallenges = useMemo(() => {
-    return sharedChallenges.filter((x) => x.enabled !== false);
-  }, [sharedChallenges]);
+const visibleSharedChallenges = useMemo(() => {
+  return sharedChallenges.filter(
+    (x) => x.enabled !== false && x.status === "active"
+  );
+  
+}, [sharedChallenges]);
+
+const count = visibleChallenges.length;
+const sidePadding = 18;
 
   const dayIndex = useMemo(() => {
     const byChallenge = new Map<string, Map<string, { completed: number; skipped: boolean; lastTime?: string }>>();

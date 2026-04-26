@@ -425,6 +425,7 @@ export default function ProfileTabScreen() {
 // ✅ Přátelé modal – Přátelé / Výzvy
 const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
 const [sharedInvites, setSharedInvites] = useState<SharedChallenge[]>([]);
+const [sentSharedInvites, setSentSharedInvites] = useState<SharedChallenge[]>([]);
 const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
 const [sharedInvitesLoading, setSharedInvitesLoading] = useState(false);
 
@@ -631,6 +632,13 @@ await Promise.all(
           return isPending && iAmMember && !iAlreadyAccepted && !createdByMe;
         });
 
+        const outgoingPending = items.filter((item) => {
+  const isPending = item.status === "pending";
+  const createdByMe = String(item.createdBy) === String(uid);
+
+  return isPending && createdByMe;
+});
+
         const extraUids = Array.from(
           new Set(
             incomingPending.flatMap((item) => item.memberUids)
@@ -661,7 +669,9 @@ await Promise.all(
           ...prev,
           ...nextNames,
         }));
+
         setSharedInvites(incomingPending);
+        setSentSharedInvites(outgoingPending);
         setSharedInvitesLoading(false);
       },
       () => {
@@ -685,20 +695,23 @@ await Promise.all(
   return p.loadingFriends;
 };
 
-const pendingInviteCount = sharedInvites.length;
+const pendingInviteCount = sharedInvites.length + sentSharedInvites.length;
 
 const myUid = auth.currentUser?.uid ?? "";
 
-const activeSharedChallengeCount = sharedChallenges.filter((item) => {
+const sharedChallengeLimitCount = sharedChallenges.filter((item) => {
   const isMine = item.memberUids.includes(myUid);
   const notLeft = !(item.leftBy ?? []).includes(myUid);
-  const isActive = item.status === "active" && item.enabled !== false;
+  const enabled = item.enabled !== false;
 
-  return isMine && notLeft && isActive;
+  const blocksFreeLimit =
+    item.status === "active" || item.status === "pending";
+
+  return isMine && notLeft && enabled && blocksFreeLimit;
 }).length;
 
 const freeSharedLimitReached =
-  !premium && activeSharedChallengeCount >= 1;
+  !premium && sharedChallengeLimitCount >= 1;
 
   
 
@@ -792,8 +805,19 @@ const getInviteCreatorName = (challenge: SharedChallenge) => {
     return `${names[0]}, ${names[1]} +${names.length - 2}`;
   };
 
-  async function acceptSharedInviteFromFriends(challengeId: string) {
-      if (freeSharedLimitReached) {
+async function acceptSharedInviteFromFriends(challengeId: string) {
+  const blockingCountExceptThis = sharedChallenges.filter((item) => {
+    const isSameChallenge = String(item.id) === String(challengeId);
+    const isMine = item.memberUids.includes(myUid);
+    const notLeft = !(item.leftBy ?? []).includes(myUid);
+    const enabled = item.enabled !== false;
+    const blocksFreeLimit =
+      item.status === "active" || item.status === "pending";
+
+    return !isSameChallenge && isMine && notLeft && enabled && blocksFreeLimit;
+  }).length;
+
+  if (!premium && blockingCountExceptThis >= 1) {
     Alert.alert(
       p.premium,
       lang === "cs"
@@ -802,20 +826,28 @@ const getInviteCreatorName = (challenge: SharedChallenge) => {
     );
     return;
   }
-    try {
-      setFriendsBusy(true);
-      await acceptSharedChallenge(challengeId);
-      showPwdPopup("success", p.challenges, lang === "cs" ? "Výzva byla přijata." : "Challenge was accepted.");
-    } catch (e: any) {
-      showPwdPopup(
-        "error",
-        p.challenges,
-        e?.message ?? (lang === "cs" ? "Nepodařilo se přijmout výzvu." : "Could not accept the challenge.")
-      );
-    } finally {
-      setFriendsBusy(false);
-    }
+
+  try {
+    setFriendsBusy(true);
+    await acceptSharedChallenge(challengeId);
+    showPwdPopup(
+      "success",
+      p.challenges,
+      lang === "cs" ? "Výzva byla přijata." : "Challenge was accepted."
+    );
+  } catch (e: any) {
+    showPwdPopup(
+      "error",
+      p.challenges,
+      e?.message ??
+        (lang === "cs"
+          ? "Nepodařilo se přijmout výzvu."
+          : "Could not accept the challenge.")
+    );
+  } finally {
+    setFriendsBusy(false);
   }
+}
 
 async function declineSharedInviteFromFriends(challengeId: string) {
   try {
@@ -3173,78 +3205,118 @@ const incomingCount = incoming.length;
           ) : (
             <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
               <View style={{ gap: 12 }}>
-                {!sharedInvites.length ? (
-                  <View
-                    style={[
-                      styles.infoCard,
-                      { borderColor: UI.stroke, backgroundColor: UI.card },
-                    ]}
-                  >
-                    <Text style={[styles.infoTitle, { color: UI.text }]}>
-  {p.challenges}
-</Text>
-                   <Text style={[styles.infoText, { color: UI.sub }]}>
-  {p.noPendingChallenges}
-</Text>
-                  </View>
-                ) : (
-                  sharedInvites.map((item) => (
-                    <View
-                      key={item.id}
-                      style={[
-                        styles.infoCard,
-                        { borderColor: UI.stroke, backgroundColor: UI.card },
-                      ]}
-                    >
-                      <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 6 }]}>
-                        {item.title}
-                      </Text>
+             {!sharedInvites.length && !sentSharedInvites.length ? (
+  <View
+    style={[
+      styles.infoCard,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+    ]}
+  >
+    <Text style={[styles.infoTitle, { color: UI.text }]}>
+      {p.challenges}
+    </Text>
+    <Text style={[styles.infoText, { color: UI.sub }]}>
+      {p.noPendingChallenges}
+    </Text>
+  </View>
+) : (
+  <>
+    {sharedInvites.map((item) => (
+      <View
+        key={item.id}
+        style={[
+          styles.infoCard,
+          { borderColor: UI.stroke, backgroundColor: UI.card },
+        ]}
+      >
+        <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 6 }]}>
+          {item.title}
+        </Text>
 
-                      <Text style={[styles.infoText, { color: UI.sub }]}>
-                        Od: {getInviteCreatorName(item)}
-                      </Text>
+        <Text style={[styles.infoText, { color: UI.sub }]}>
+          Od: {getInviteCreatorName(item)}
+        </Text>
 
-                      <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
-                        Účastníci: {getInviteMembersLabel(item)}
-                      </Text>
+        <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
+          Účastníci: {getInviteMembersLabel(item)}
+        </Text>
 
-                      <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
-                        Cíl: {item.targetPerDay}×{" "}
-                        {item.period === "daily"
-                          ? p.daily
-                          : item.period === "every2"
-                            ? p.every2
-                            : p.selectedDays}
-                      </Text>
+        <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
+          Cíl: {item.targetPerDay}×{" "}
+          {item.period === "daily"
+            ? p.daily
+            : item.period === "every2"
+              ? p.every2
+              : p.selectedDays}
+        </Text>
 
-                      <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-                        <Pressable
-                          disabled={friendsBusy}
-                          onPress={() => void acceptSharedInviteFromFriends(item.id)}
-                          style={({ pressed }) => [
-                            styles.smallBtn,
-                            pressed && { opacity: 0.9 },
-                            friendsBusy && { opacity: 0.6 },
-                          ]}
-                        >
-                          <Text style={styles.smallBtnText}>{p.accept}</Text>
-                        </Pressable>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+          <Pressable
+            disabled={friendsBusy}
+            onPress={() => void acceptSharedInviteFromFriends(item.id)}
+            style={({ pressed }) => [
+              styles.smallBtn,
+              pressed && { opacity: 0.9 },
+              friendsBusy && { opacity: 0.6 },
+            ]}
+          >
+            <Text style={styles.smallBtnText}>{p.accept}</Text>
+          </Pressable>
 
-                       <Pressable
-  disabled={friendsBusy}
-  onPress={() => void declineSharedInviteFromFriends(item.id)}
-  style={({ pressed }) => [
-    styles.smallBtnGhost,
-    pressed && { opacity: 0.9 },
-    friendsBusy && { opacity: 0.6 },
-  ]}
->
-  <Text style={styles.smallBtnGhostText}>{p.decline}</Text>
-</Pressable>
-                      </View>
-                    </View>
-                  ))
-                )}
+          <Pressable
+            disabled={friendsBusy}
+            onPress={() => void declineSharedInviteFromFriends(item.id)}
+            style={({ pressed }) => [
+              styles.smallBtnGhost,
+              pressed && { opacity: 0.9 },
+              friendsBusy && { opacity: 0.6 },
+            ]}
+          >
+            <Text style={styles.smallBtnGhostText}>{p.decline}</Text>
+          </Pressable>
+        </View>
+      </View>
+    ))}
+
+    {sentSharedInvites.map((item) => (
+      <View
+        key={"sent_" + item.id}
+        style={[
+          styles.infoCard,
+          { borderColor: UI.stroke, backgroundColor: UI.card },
+        ]}
+      >
+        <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 6 }]}>
+          {item.title}
+        </Text>
+
+        <Text style={[styles.infoText, { color: UI.sub }]}>
+          {lang === "cs" ? "Odesláno pro" : "Sent to"}: {getInviteMembersLabel(item)}
+        </Text>
+
+        <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
+          {lang === "cs" ? "Čeká na přijetí." : "Waiting for acceptance."}
+        </Text>
+
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+          <Pressable
+            disabled={friendsBusy}
+            onPress={() => void declineSharedInviteFromFriends(item.id)}
+            style={({ pressed }) => [
+              styles.smallBtnGhost,
+              pressed && { opacity: 0.9 },
+              friendsBusy && { opacity: 0.6 },
+            ]}
+          >
+            <Text style={styles.smallBtnGhostText}>
+              {lang === "cs" ? "Zrušit" : "Cancel"}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    ))}
+  </>
+)}
               </View>
             </ScrollView>
           )}
