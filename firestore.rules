@@ -11,40 +11,44 @@ service cloud.firestore {
       allow write: if isMe(uid);
     }
 
+    // Public profiles
+    match /publicProfiles/{uid} {
+      allow read: if signedIn();
+      allow write: if isMe(uid);
+    }
+
     // Friends graph (read-only from client; writes only via Cloud Functions)
     match /friends/{uid}/list/{otherUid} {
       allow read: if isMe(uid);
       allow write: if false;
     }
 
-    // Username registry: usernames/{usernameLower} -> { uid }
+    // Username registry
     match /usernames/{uname} {
       allow read: if signedIn();
 
-      // create: only owner can create
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
 
-      // update: only owner, and uid cannot be changed
       allow update: if signedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == request.auth.uid;
 
-      // delete: request.resource doesn't exist for deletes, use existing resource
-      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
     }
 
-    // Friend invites (write only via Cloud Functions)
+    // Friend invites
     match /friendInvites/{inviteId} {
       allow read, write: if false;
     }
 
     // Shared challenges
     match /sharedChallenges/{challengeId} {
-      // Číst mohou jen členové výzvy
-      allow read: if signedIn() && request.auth.uid in resource.data.memberUids;
 
-      // Vytvořit může jen přihlášený uživatel, který je createdBy
-      // a zároveň je členem výzvy; povoleno 2 až 10 členů
+      allow read: if signedIn()
+        && request.auth.uid in resource.data.memberUids;
+
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.memberUids is list
@@ -52,8 +56,7 @@ service cloud.firestore {
         && request.resource.data.memberUids.size() <= 10
         && request.auth.uid in request.resource.data.memberUids;
 
-      // 🔥 JEDINÁ ZMĚNA – zjednodušený update (aby fungovalo odejít)
-     allow update: if signedIn()
+      allow update: if signedIn()
         && (
           request.auth.uid in resource.data.memberUids
           || (
@@ -65,12 +68,15 @@ service cloud.firestore {
         && request.resource.data.memberUids is list
         && request.resource.data.acceptedBy is list;
 
-      // Progress pro konkrétní dny
       match /progress/{dateISO} {
-        allow read: if signedIn() && request.auth.uid in get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids;
+
+        allow read: if signedIn()
+          && request.auth.uid in
+            get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids;
 
         allow create, update: if signedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids
+          && request.auth.uid in
+            get(/databases/$(database)/documents/sharedChallenges/$(challengeId)).data.memberUids
           && request.resource.data.date == dateISO
           && request.resource.data.users is map
           && request.resource.data.users[request.auth.uid] is map;
@@ -78,11 +84,10 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // Mazání z klienta necháme zakázané
       allow delete: if false;
     }
 
-    // Legacy invites (nepoužívat; ponecháno kvůli zpětné kompatibilitě)
+    // Legacy invites
     match /invites/{token} {
       allow read, write: if false;
     }

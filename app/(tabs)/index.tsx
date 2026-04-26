@@ -2729,21 +2729,56 @@ useEffect(() => {
                           <View style={styles.sharedCardInner}>
                             <View style={styles.sharedCompactRow}>
                               <View style={styles.sharedCompactLeft}>
-                                <View style={styles.sharedBadge}>
-                                  <Text style={styles.sharedBadgeText}>
-                                    {pending ? TXT.waitingForAccept : TXT.sharedChallenge}
-                                  </Text>
-                                </View>
+                                
 
                                 <Text style={styles.sharedTitle} numberOfLines={1}>
                                   {item.title}
                                 </Text>
 
                                 <Text style={styles.sharedCompactMeta} numberOfLines={1}>
-                                  {getSharedCompactLabel(item)}
+                                 {`S: ${getSharedDisplayName(
+  item.memberUids.find((uid) => String(uid) !== String(auth.currentUser?.uid ?? "")) ?? ""
+)}`}
                                 </Text>
                               </View>
+<View style={styles.sharedActionsRow}>
+  <Pressable
+    onPress={() => confirmLeaveShared(item)}
+    style={({ pressed }) => [
+      styles.sharedLeaveBtn,
+      pressed && { opacity: 0.9 },
+    ]}
+  >
+    <Text style={styles.sharedLeaveBtnText}>{TXT.leave}</Text>
+  </Pressable>
 
+  <Pressable
+    onPress={() => void markSharedDoneToday(item)}
+    style={({ pressed }) => [
+      styles.sharedDoneBtn,
+      myDoneToday && {
+        backgroundColor: UI.card2,
+        borderColor: UI.stroke,
+        opacity: 0.78,
+      },
+      !activeToday && {
+        backgroundColor: UI.card2,
+        borderColor: UI.stroke,
+        opacity: 0.78,
+      },
+      pressed && !myDoneToday && activeToday && { opacity: 0.9 },
+    ]}
+  >
+    <Text
+      style={[
+        styles.sharedDoneBtnText,
+        (myDoneToday || !activeToday) && { color: UI.sub },
+      ]}
+    >
+      {myDoneToday ? TXT.done : !activeToday ? TXT.freeDay : TXT.complete}
+    </Text>
+  </Pressable>
+</View>
                               <Pressable
                                 onPress={() =>
                                   setExpandedSharedId((prev) => (prev === item.id ? null : item.id))
@@ -2798,44 +2833,7 @@ useEffect(() => {
                                         </Text>
                                       </View>
 
-                                      <View style={styles.sharedActionsRow}>
-                                        <Pressable
-                                          onPress={() => confirmLeaveShared(item)}
-                                          style={({ pressed }) => [
-                                            styles.sharedLeaveBtn,
-                                            pressed && { opacity: 0.9 },
-                                          ]}
-                                        >
-                                          <Text style={styles.sharedLeaveBtnText}>{TXT.leave}</Text>
-                                        </Pressable>
-
-                                        <Pressable
-                                          onPress={() => void markSharedDoneToday(item)}
-                                          style={({ pressed }) => [
-                                            styles.sharedDoneBtn,
-                                            myDoneToday && {
-                                              backgroundColor: UI.card2,
-                                              borderColor: UI.stroke,
-                                              opacity: 0.78,
-                                            },
-                                            !activeToday && {
-                                              backgroundColor: UI.card2,
-                                              borderColor: UI.stroke,
-                                              opacity: 0.78,
-                                            },
-                                            pressed && !myDoneToday && activeToday && { opacity: 0.9 },
-                                          ]}
-                                        >
-                                          <Text
-                                            style={[
-                                              styles.sharedDoneBtnText,
-                                              (myDoneToday || !activeToday) && { color: UI.sub },
-                                            ]}
-                                          >
-                                            {myDoneToday ? TXT.done : !activeToday ? TXT.freeDay : TXT.complete}
-                                          </Text>
-                                        </Pressable>
-                                      </View>
+                                      
                                     </View>
 
      <View style={styles.sharedMembersGrid}>

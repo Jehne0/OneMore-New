@@ -227,7 +227,7 @@ export async function declineSharedChallenge(challengeId: string) {
 
   const nextMemberUids = challenge.memberUids.filter((memberUid) => memberUid !== uid);
   const nextAcceptedBy = (challenge.acceptedBy ?? []).filter((memberUid) => memberUid !== uid);
-  const nextLeftBy = (challenge.leftBy ?? []).filter((memberUid) => memberUid !== uid);
+ const nextLeftBy = Array.from(new Set([...(challenge.leftBy ?? []), uid]));
 
   const ref = doc(db, "sharedChallenges", String(challengeId));
 

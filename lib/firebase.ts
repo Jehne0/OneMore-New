@@ -15,13 +15,6 @@ const firebaseConfig = {
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-/**
- * Expo + React Native:
- * - Nepoužíváme `firebase/auth/react-native` (Metro u některých verzí Firebase/Expo zlobí na subpath exports).
- * - `getAuth(app)` funguje v Expo/Metro bez deep importů.
- *
- * Pozn.: Persistenci přihlášení drží Firebase dle platformy; cloud sync pro výzvy je řešen přes Firestore.
- */
 export const auth = getAuth(app);
 
 export const db = getFirestore(app);

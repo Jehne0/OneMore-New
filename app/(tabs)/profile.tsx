@@ -422,12 +422,13 @@ export default function ProfileTabScreen() {
   const [addUsername, setAddUsername] = useState("");
   const [friendsBusy, setFriendsBusy] = useState(false);
 
-  // ✅ Přátelé modal – Přátelé / Výzvy
-  const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
-  const [sharedInvites, setSharedInvites] = useState<SharedChallenge[]>([]);
-  const [sharedInvitesLoading, setSharedInvitesLoading] = useState(false);
+// ✅ Přátelé modal – Přátelé / Výzvy
+const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
+const [sharedInvites, setSharedInvites] = useState<SharedChallenge[]>([]);
+const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
+const [sharedInvitesLoading, setSharedInvitesLoading] = useState(false);
 
-    const [shareAchievementsWithFriends, setShareAchievementsWithFriends] = useState(true);
+const [shareAchievementsWithFriends, setShareAchievementsWithFriends] = useState(true);
 
   const [friendStatsOpen, setFriendStatsOpen] = useState(false);
   const [selectedFriendName, setSelectedFriendName] = useState("");
@@ -547,8 +548,7 @@ export default function ProfileTabScreen() {
 
   // ✅ Přátelé: live list z Firestore + rovnou jména bez preblikávání
   useEffect(() => {
-    if (!friendsOpen) return;
-
+    
     const uid = auth.currentUser?.uid;
     if (!uid) {
       setFriendEdges([]);
@@ -605,8 +605,7 @@ await Promise.all(
   
     // ✅ Nepřijaté společné výzvy pro mě
   useEffect(() => {
-    if (!friendsOpen) return;
-
+   
     const uid = auth.currentUser?.uid;
     if (!uid) {
       setSharedInvites([]);
@@ -621,6 +620,8 @@ await Promise.all(
       async (items) => {
         if (cancelled) return;
 
+        setSharedChallenges(items);
+    
         const incomingPending = items.filter((item) => {
           const isPending = item.status === "pending";
           const iAmMember = item.memberUids.includes(uid);
@@ -685,6 +686,29 @@ await Promise.all(
 };
 
 const pendingInviteCount = sharedInvites.length;
+
+const myUid = auth.currentUser?.uid ?? "";
+
+const activeSharedChallengeCount = sharedChallenges.filter((item) => {
+  const isMine = item.memberUids.includes(myUid);
+  const notLeft = !(item.leftBy ?? []).includes(myUid);
+  const isActive = item.status === "active" && item.enabled !== false;
+
+  return isMine && notLeft && isActive;
+}).length;
+
+const freeSharedLimitReached =
+  !premium && activeSharedChallengeCount >= 1;
+
+  
+
+const me = auth.currentUser?.uid ?? "";
+
+const pendingFriendRequestCount = friendEdges.filter(
+  (e) =>
+    e.status === "pending" &&
+    String(e.initiatedBy) !== String(me)
+).length;
 
 const getInviteCreatorName = (challenge: SharedChallenge) => {
   const creatorUid = String(challenge.createdBy ?? "");
@@ -769,6 +793,15 @@ const getInviteCreatorName = (challenge: SharedChallenge) => {
   };
 
   async function acceptSharedInviteFromFriends(challengeId: string) {
+      if (freeSharedLimitReached) {
+    Alert.alert(
+      p.premium,
+      lang === "cs"
+        ? "Ve Free verzi můžeš mít jen 1 společnou výzvu. Pro více je potřeba Premium."
+        : "In the Free version you can have only 1 shared challenge. Upgrade to Premium for more."
+    );
+    return;
+  }
     try {
       setFriendsBusy(true);
       await acceptSharedChallenge(challengeId);
@@ -1127,14 +1160,16 @@ const noScaleText = {
     setChallengeInviteBusy(false);
   }
 
-  function openChallengeInvite(friendUid: string) {
-    if (!premium) {
-      Alert.alert(
-        "Premium",
-        "Společné výzvy s přáteli jsou dostupné jen v Premium verzi."
-      );
-      return;
-    }
+function openChallengeInvite(friendUid: string) {
+    if (freeSharedLimitReached) {
+    Alert.alert(
+      p.premium,
+      lang === "cs"
+        ? "Ve Free verzi můžeš mít jen 1 společnou výzvu. Pro více je potřeba Premium."
+        : "In the Free version you can have only 1 shared challenge. Upgrade to Premium for more."
+    );
+    return;
+  }
 
     setChallengeInviteFriendUids([String(friendUid)]);
     setChallengeInviteTitle("");
@@ -1152,15 +1187,7 @@ const noScaleText = {
 
   async function submitChallengeInvite() {
     try {
-      if (!premium) {
-        showPwdPopup(
-          "error",
-          p.premium,
-          p.premiumFriendsOnly
-        );
-        return;
-      }
-
+ 
       const friendUids = Array.from(
         new Set(
           (challengeInviteFriendUids ?? [])
@@ -1242,6 +1269,12 @@ const noScaleText = {
         return p.info;
     }
   }, [infoScreen]);
+
+const incomingCount = friendEdges.filter(
+  (e) =>
+    e.status === "pending" &&
+    String(e.initiatedBy) !== String(myUid)
+).length;
 
   return (
     <View style={[styles.screen, { backgroundColor: UI.bg }]}>
@@ -2738,26 +2771,54 @@ const noScaleText = {
       </Text>
     </Pressable>
 
-    <Pressable
-      onPress={() => setFriendsTab("requests")}
-      style={({ pressed }) => [
-        styles.closeBtn,
-        {
-          borderColor: friendsTab === "requests" ? UI.accent : UI.stroke,
-          backgroundColor: friendsTab === "requests" ? UI.accent : UI.card2,
-        },
-        pressed && { opacity: 0.85 },
-      ]}
+<Pressable
+  onPress={() => setFriendsTab("requests")}
+  style={({ pressed }) => [
+    styles.closeBtn,
+    {
+      borderColor: friendsTab === "requests" ? UI.accent : UI.stroke,
+      backgroundColor: friendsTab === "requests" ? UI.accent : UI.card2,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    pressed && { opacity: 0.85 },
+  ]}
+>
+  <Text
+    style={[
+      styles.closeText,
+      { color: friendsTab === "requests" ? "#0B1220" : UI.text },
+    ]}
+  >
+    {p.requests}
+  </Text>
+
+  {incomingCount > 0 && (
+    <View
+      style={{
+        minWidth: 22,
+        height: 22,
+        borderRadius: 11,
+        paddingHorizontal: 6,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor:
+          friendsTab === "requests" ? "rgba(11,18,32,0.16)" : UI.accent,
+      }}
     >
       <Text
-        style={[
-          styles.closeText,
-          { color: friendsTab === "requests" ? "#0B1220" : UI.text },
-        ]}
+        style={{
+          fontSize: 12,
+          fontWeight: "900",
+          color: "#0B1220",
+        }}
       >
-        {p.requests}
+        +{incomingCount}
       </Text>
-    </Pressable>
+    </View>
+  )}
+</Pressable>
 
     <Pressable
       onPress={() => setFriendsTab("invites")}
@@ -2920,14 +2981,14 @@ const noScaleText = {
         </Pressable>
 
         <View style={{ flexDirection: "row", gap: 10 }}>
-          <Pressable
-            onPress={() => openChallengeInvite(e.otherUid)}
-            style={({ pressed }) => [
-              styles.smallBtn,
-              !premium && { opacity: 0.55 },
-              pressed && { opacity: 0.9 },
-            ]}
-          >
+        <Pressable
+  onPress={() => openChallengeInvite(e.otherUid)}
+style={({ pressed }) => [
+  styles.smallBtn,
+  freeSharedLimitReached && { opacity: 0.55 },
+  pressed && { opacity: 0.9 },
+]}
+>
             <Text style={styles.smallBtnText}>{p.invite}</Text>
           </Pressable>
 
@@ -2961,143 +3022,6 @@ const noScaleText = {
 
                       </View>
 
-                      {!!incoming.length && (
-                        <View
-                          style={[
-                            styles.infoCard,
-                            { borderColor: UI.stroke, backgroundColor: UI.card },
-                          ]}
-                        >
-                          <Text style={[styles.infoTitle, { color: UI.text }]}>
-                            Příchozí žádosti
-                          </Text>
-                          {incoming.map((e) => (
-                            <View
-                              key={"in_" + e.otherUid}
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                marginTop: 10,
-                              }}
-                            >
-                              <Text
-                                style={{ color: UI.text, fontWeight: "900", flex: 1 }}
-                                numberOfLines={1}
-                              >
-                                {getShownFriendName(e.otherUid)}
-                              </Text>
-                              <View style={{ flexDirection: "row", gap: 10 }}>
-                                <Pressable
-                                  onPress={async () => {
-                                    try {
-                                      const acceptedCount = friendEdges.filter(
-                                        (x) => x.status === "accepted"
-                                      ).length;
-                                      if (!premium && acceptedCount >= 1) {
-                                       Alert.alert(
-  p.friends,
-  p.freeFriendsLimit
-);
-                                        return;
-                                      }
-                                      setFriendsBusy(true);
-                                      await acceptFriend(e.otherUid);
-                                    } catch (err: any) {
-                                      Alert.alert(
-  p.friends,
-  err?.message ?? p.acceptFriendFailed
-);
-                                    } finally {
-                                      setFriendsBusy(false);
-                                    }
-                                  }}
-                                  style={({ pressed }) => [
-                                    styles.smallBtn,
-                                    pressed && { opacity: 0.9 },
-                                  ]}
-                                >
-                                  <Text style={styles.smallBtnText}>{p.accept}</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={async () => {
-                                    try {
-                                      setFriendsBusy(true);
-                                      await declineFriend(e.otherUid);
-                                    } catch (err: any) {
-                                      Alert.alert(
-  p.friends,
-  err?.message ?? p.declineFriendFailed
-);
-                                    } finally {
-                                      setFriendsBusy(false);
-                                    }
-                                  }}
-                                  style={({ pressed }) => [
-                                    styles.smallBtnGhost,
-                                    pressed && { opacity: 0.9 },
-                                  ]}
-                                >
-                                  <Text style={styles.smallBtnGhostText}>{p.decline}</Text>
-                                </Pressable>
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
-                      {!!outgoing.length && (
-                        <View
-                          style={[
-                            styles.infoCard,
-                            { borderColor: UI.stroke, backgroundColor: UI.card },
-                          ]}
-                        >
-                          <Text style={[styles.infoTitle, { color: UI.text }]}>
-                            Odeslané žádosti
-                          </Text>
-                          {outgoing.map((e) => (
-                            <View
-                              key={"out_" + e.otherUid}
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                marginTop: 10,
-                              }}
-                            >
-                              <Text
-                                style={{ color: UI.sub, fontWeight: "900", flex: 1 }}
-                                numberOfLines={1}
-                              >
-                                {getShownFriendName(e.otherUid)}
-                              </Text>
-                              <Pressable
-                                onPress={async () => {
-                                  try {
-                                    setFriendsBusy(true);
-                                    await declineFriend(e.otherUid);
-                                  } catch (err: any) {
-                                  Alert.alert(
-  p.friends,
-  err?.message ?? p.cancelRequestFailed
-);
-                                  } finally {
-                                    setFriendsBusy(false);
-                                  }
-                                }}
-                                style={({ pressed }) => [
-                                  styles.smallBtnGhost,
-                                  pressed && { opacity: 0.9 },
-                                ]}
-                              >
-                                <Text style={styles.smallBtnGhostText}>{p.cancel}</Text>
-                              </Pressable>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
                       {!!blocked.length && (
                         <View
                           style={[
@@ -3124,22 +3048,120 @@ const noScaleText = {
                 })()}
               </ScrollView>
             )
-            ) : friendsTab === "requests" ? (
+) : friendsTab === "requests" ? (
   <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
-    <View
-      style={[
-        styles.infoCard,
-        { borderColor: UI.stroke, backgroundColor: UI.card },
-      ]}
-    >
-      <Text style={[styles.infoTitle, { color: UI.text }]}>
-        {p.requests}
-      </Text>
+    {(() => {
+      const me = auth.currentUser?.uid ?? "";
+      const pending = friendEdges.filter((e) => e.status === "pending");
 
-      <Text style={[styles.infoText, { color: UI.sub }]}>
-        {p.noRequests}
-      </Text>
-    </View>
+      const incoming = pending.filter((e) => {
+        if (!me) return true;
+        return String(e.initiatedBy) !== String(me);
+      });
+
+      const outgoing = pending.filter((e) => {
+        if (!me) return false;
+        return String(e.initiatedBy) === String(me);
+      });
+
+const incomingCount = incoming.length;
+
+      if (!incomingCount && !outgoing.length) {
+        return (
+          <View style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
+            <Text style={[styles.infoTitle, { color: UI.text }]}>{p.requests}</Text>
+            <Text style={[styles.infoText, { color: UI.sub }]}>{p.noRequests}</Text>
+          </View>
+        );
+      }
+
+      return (
+        <View style={{ gap: 12 }}>
+          {!!incomingCount && (
+            <View style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
+              <Text style={[styles.infoTitle, { color: UI.text }]}>{p.incomingRequests}</Text>
+
+              {incoming.map((e) => (
+                <View key={"in_" + e.otherUid} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                  <Text style={{ color: UI.text, fontWeight: "900", flex: 1 }} numberOfLines={1}>
+                    {getShownFriendName(e.otherUid)}
+                  </Text>
+
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <Pressable
+                      onPress={async () => {
+                        try {
+                          const acceptedCount = friendEdges.filter((x) => x.status === "accepted").length;
+                          if (!premium && acceptedCount >= 1) {
+                            Alert.alert(p.friends, p.freeFriendsLimit);
+                            return;
+                          }
+                          setFriendsBusy(true);
+                          await acceptFriend(e.otherUid);
+                        } catch (err: any) {
+                          Alert.alert(p.friends, err?.message ?? p.acceptFriendFailed);
+                        } finally {
+                          setFriendsBusy(false);
+                        }
+                      }}
+                      style={({ pressed }) => [styles.smallBtn, pressed && { opacity: 0.9 }]}
+                    >
+                      <Text style={styles.smallBtnText}>{p.accept}</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={async () => {
+                        try {
+                          setFriendsBusy(true);
+                          await declineFriend(e.otherUid);
+                        } catch (err: any) {
+                          Alert.alert(p.friends, err?.message ?? p.declineFriendFailed);
+                        } finally {
+                          setFriendsBusy(false);
+                        }
+                      }}
+                      style={({ pressed }) => [styles.smallBtnGhost, pressed && { opacity: 0.9 }]}
+                    >
+                      <Text style={styles.smallBtnGhostText}>{p.decline}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {!!outgoing.length && (
+            <View style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
+              <Text style={[styles.infoTitle, { color: UI.text }]}>{p.sentRequests}</Text>
+
+              {outgoing.map((e) => (
+                <View key={"out_" + e.otherUid} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                  <Text style={{ color: UI.sub, fontWeight: "900", flex: 1 }} numberOfLines={1}>
+                    {getShownFriendName(e.otherUid)}
+                  </Text>
+
+                  <Pressable
+                    onPress={async () => {
+                      try {
+                        setFriendsBusy(true);
+                        await declineFriend(e.otherUid);
+                      } catch (err: any) {
+                        Alert.alert(p.friends, err?.message ?? p.cancelRequestFailed);
+                      } finally {
+                        setFriendsBusy(false);
+                      }
+                    }}
+                    style={({ pressed }) => [styles.smallBtnGhost, pressed && { opacity: 0.9 }]}
+                  >
+                    <Text style={styles.smallBtnGhostText}>{p.cancel}</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      );
+    })()}
   </ScrollView>
           ) : sharedInvitesLoading ? (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
