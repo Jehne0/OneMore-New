@@ -2,22 +2,23 @@
   "expo": {
     "name": "OneMore",
     "slug": "OneMore",
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#0B1220",
-          "dark": {
-            "backgroundColor": "#0B1220"
-          }
-        }
-      ],
-      "expo-font"
-    ],
+ "plugins": [
+  "expo-router",
+  [
+    "expo-splash-screen",
+    {
+      "image": "./assets/images/splash-icon.png",
+      "imageWidth": 200,
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1220",
+      "dark": {
+        "backgroundColor": "#0B1220"
+      }
+    }
+  ],
+  "expo-font",
+  "expo-notifications"
+],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon/icon.png",

@@ -22,7 +22,9 @@ import {
   FlatList,
   Image,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -1568,6 +1570,12 @@ const TXT = useMemo(() => {
   }, [manageOpen, manageId, managed?.text, manageRename, saveRenameImmediate]);
 
   const applyManageReminders = useCallback(async () => {
+    console.log("REMINDER SAVE CLICKED", {
+  manageId,
+  manageRemEnabled,
+  manageRemTimes,
+  manageRemCount,
+});
     if (!manageId) return;
     const id = String(manageId);
 
@@ -1595,15 +1603,25 @@ const TXT = useMemo(() => {
       return { ...latest, challenges: nextChallenges } as any;
     });
 
-    try {
-      if (manageRemEnabled && times.length) {
-        const latest = await loadState();
-        const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
-        await setDailyRemindersForChallenge(id, String(c?.text ?? "OneMore"), times);
-      } else {
-        await clearDailyRemindersForChallenge(id);
-      }
-    } catch (e: any) {
+   try {
+  if (manageRemEnabled && times.length) {
+    const latest = await loadState();
+    const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
+    await setDailyRemindersForChallenge(id, String(c?.text ?? "OneMore"), times);
+
+    Alert.alert(
+      TXT.notifications,
+      "Notifikace byly uloženy."
+    );
+  } else {
+    await clearDailyRemindersForChallenge(id);
+
+    Alert.alert(
+      TXT.notifications,
+      "Notifikace byly vypnuty."
+    );
+  }
+} catch (e: any) {
       const msg = String(e?.message ?? "");
       if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
         Alert.alert(
@@ -2396,22 +2414,21 @@ useEffect(() => {
         )}
       </View>
 
-      <Modal
-        visible={addModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setAddModalOpen(false);
-          setAddModalText("");
-        }}
-      >
-        <Pressable
-          style={styles.backdrop}
-          onPress={() => {
-            setAddModalOpen(false);
-            setAddModalText("");
-          }}
-        >
+   <Modal
+  visible={addModalOpen}
+  transparent
+  animationType="fade"
+  onRequestClose={() => {
+    setAddModalOpen(false);
+    setAddModalText("");
+  }}
+>
+  <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={0}
+  >
+    <Pressable style={styles.backdrop}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.addTitle}</Text>
@@ -2453,8 +2470,9 @@ useEffect(() => {
               </Pressable>
             </ScrollView>
           </Pressable>
-        </Pressable>
-      </Modal>
+           </Pressable>
+  </KeyboardAvoidingView>
+</Modal>
 
       <Modal visible={manageOpen} transparent animationType="fade" onRequestClose={closeManage}>
         <Pressable style={styles.backdrop} onPress={closeManage}>

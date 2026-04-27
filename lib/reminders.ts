@@ -18,17 +18,12 @@ function isExpoGo(): boolean {
 }
 
 // ---------------- PREMIUM GATE ----------------
-// Free verze: 1 připomínka celkem
 let _premiumEnabled = false;
 
-// Limity počtu notifikací za den
 const FREE_MAX_TIMES = 3;
 const PREMIUM_MAX_TIMES = 10;
+const REMINDER_CHANNEL_ID = "reminders_high_v1";
 
-/**
- * Zavolej někde při startu appky / po načtení profilu:
- * setRemindersPremiumEnabled(true) pro premium uživatele
- */
 export function setRemindersPremiumEnabled(v: boolean) {
   _premiumEnabled = !!v;
 }
@@ -44,12 +39,13 @@ let handlerSet = false;
 async function ensureHandler() {
   if (handlerSet) return;
   if (isExpoGo()) return;
+
   const Notifications = await N();
 
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
-      shouldPlaySound: false,
+      shouldPlaySound: true,
       shouldSetBadge: false,
       shouldShowBanner: true,
       shouldShowList: true,
@@ -66,22 +62,23 @@ async function ensureAndroidChannel() {
 
   const Notifications = await N();
 
-  try {
-    await Notifications.setNotificationChannelAsync("reminders", {
-      name: "Reminders",
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  } catch {
-    // když se nepovede, nepadáme – jen nebude channel
-  }
+  await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
+    name: "OneMore reminders",
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: "default",
+    vibrationPattern: [0, 250, 250, 250],
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  });
 
   channelReady = true;
 }
 
 export async function ensureReminderPermissions(): Promise<boolean> {
   if (isExpoGo()) return false;
+
   const Notifications = await N();
   await ensureHandler();
+  await ensureAndroidChannel();
 
   const settings = await Notifications.getPermissionsAsync();
 
@@ -95,13 +92,6 @@ export async function ensureReminderPermissions(): Promise<boolean> {
 
 // ---------------- API ----------------
 
-/**
- * Nastaví denní připomínky v daných časech (HH:mm) pro konkrétní výzvu.
- * - Free: povolena 1 výzva s připomínkami celkem (při nastavování nové se ostatní vypnou)
- * - Premium: neomezeně výzev + více časů na výzvu
- *
- * Pozn.: V Expo Go (SDK 53+) plánování notifikací nejde → vyhodí NOTIFICATIONS_EXPO_GO_UNSUPPORTED
- */
 export async function setDailyRemindersForChallenge(
   challengeId: string,
   challengeText: string,
@@ -111,33 +101,32 @@ export async function setDailyRemindersForChallenge(
     throw new Error("NOTIFICATIONS_EXPO_GO_UNSUPPORTED");
   }
 
-  // clamp podle plánu (free/premium)
   const maxTimes = _premiumEnabled ? PREMIUM_MAX_TIMES : FREE_MAX_TIMES;
-  const times = (timesHHMM ?? []).filter(Boolean).slice(0, maxTimes);
+  const times = Array.from(new Set((timesHHMM ?? []).filter(Boolean))).slice(0, maxTimes);
   if (!times.length) return;
 
   const Notifications = await N();
+
   await ensureHandler();
   await ensureAndroidChannel();
 
   const ok = await ensureReminderPermissions();
   if (!ok) return;
 
-  // validace + parse
   const parsed = times
     .map((t) => ({ t, p: parseHHMM(t) }))
     .filter((x) => !!x.p) as { t: string; p: { hour: number; minute: number } }[];
+
   if (!parsed.length) return;
 
-  // FREE limit: jen 1 výzva s připomínkou → při nastavování nové přesuneme (zrušíme ostatní)
   if (!_premiumEnabled) {
     const latest = getCachedState() ?? (await loadState());
     const map = { ...(latest.reminderNotifIds ?? {}) };
 
-    // zrušit všechny ostatní naplánované notifikace (u jiných výzev)
     for (const [cid, nids] of Object.entries(map)) {
       if (String(cid) === String(challengeId)) continue;
-      for (const nid of (nids ?? [])) {
+
+      for (const nid of nids ?? []) {
         try {
           await Notifications.cancelScheduledNotificationAsync(nid);
         } catch {}
@@ -153,14 +142,15 @@ export async function setDailyRemindersForChallenge(
 
       const keepOld = (s.reminderNotifIds ?? {})[String(challengeId)] ?? [];
       const nextMap: Record<string, string[]> = {};
+
       if (keepOld.length) nextMap[String(challengeId)] = keepOld;
 
       return { ...s, challenges: nextChallenges, reminderNotifIds: nextMap };
     });
   }
 
-  // 1) zrušit staré notifikace této výzvy
   let oldIds: string[] = [];
+
   await updateState((s) => {
     oldIds = (s.reminderNotifIds?.[String(challengeId)] ?? []) as string[];
     return s;
@@ -172,20 +162,22 @@ export async function setDailyRemindersForChallenge(
     } catch {}
   }
 
-  // 2) naplánovat nové notifikace pro každý čas
   const newIds: string[] = [];
-  for (const { p, t } of parsed) {
+
+  for (const { p } of parsed) {
     const trigger = {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour: p.hour,
       minute: p.minute,
-      repeats: true,
     } as any;
 
     const newId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "OneMore",
         body: challengeText || "Připomínka výzvy",
-        ...(Platform.OS === "android" ? { channelId: "reminders" } : {}),
+        sound: "default",
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+        ...(Platform.OS === "android" ? { channelId: REMINDER_CHANNEL_ID } : {}),
       },
       trigger,
     });
@@ -193,7 +185,6 @@ export async function setDailyRemindersForChallenge(
     newIds.push(newId);
   }
 
-  // 3) uložit mapu a challenge flags
   await updateState((s) => ({
     ...s,
     challenges: (s.challenges ?? []).map((c) =>
@@ -201,19 +192,23 @@ export async function setDailyRemindersForChallenge(
         ? { ...c, reminderEnabled: true, reminderTimes: parsed.map((x) => x.t) }
         : c
     ),
-    reminderNotifIds: { ...(s.reminderNotifIds ?? {}), [String(challengeId)]: newIds },
+    reminderNotifIds: {
+      ...(s.reminderNotifIds ?? {}),
+      [String(challengeId)]: newIds,
+    },
   }));
 }
 
-/**
- * Vypnutí všech připomínek pro výzvu.
- */
 export async function clearDailyRemindersForChallenge(challengeId: string): Promise<void> {
   if (isExpoGo()) return;
+
   const Notifications = await N();
+
   await ensureHandler();
+  await ensureAndroidChannel();
 
   let oldIds: string[] = [];
+
   await updateState((s) => {
     oldIds = (s.reminderNotifIds?.[String(challengeId)] ?? []) as string[];
     return s;
@@ -239,17 +234,19 @@ export async function clearDailyRemindersForChallenge(challengeId: string): Prom
   });
 }
 
-/**
- * Helper: ve free zjistí, která výzva má aktivní připomínky.
- */
 export function getFreeActiveReminderChallengeId(state: any): string | null {
   if (_premiumEnabled) return null;
+
   const ch = (state?.challenges ?? []) as any[];
   const active = ch.find((c) => c?.reminderEnabled);
+
   return active ? String(active.id) : null;
 }
 
-// Backward-compatible aliases (pokud někde zůstane starý import)
-export const setDailyReminderForChallenge = async (challengeId: string, challengeText: string, timeHHMM: string) =>
-  setDailyRemindersForChallenge(challengeId, challengeText, [timeHHMM]);
+export const setDailyReminderForChallenge = async (
+  challengeId: string,
+  challengeText: string,
+  timeHHMM: string
+) => setDailyRemindersForChallenge(challengeId, challengeText, [timeHHMM]);
+
 export const clearDailyReminderForChallenge = clearDailyRemindersForChallenge;

@@ -12,6 +12,9 @@ const TEST_API_KEY = "test_xYHcUmOjDUuuTuZcuFxAMynxvKe";
 const ANDROID_API_KEY = "goog_xxxxxxxxx";
 const IOS_API_KEY = "appl_xxxxxxxxx";
 
+// ✅ Pro preview build pro lidi necháme vypnuto
+const USE_REVENUECAT_TEST_STORE = false;
+
 let configured = false;
 let listenerAdded = false;
 
@@ -20,6 +23,7 @@ function ensureCustomerInfoListener() {
 
   Purchases.addCustomerInfoUpdateListener(async (info) => {
     const active = !!info.entitlements.active[ENTITLEMENT_ID];
+
     if (active) await activatePremium();
     else await cancelPremium();
   });
@@ -30,8 +34,13 @@ function ensureCustomerInfoListener() {
 export async function configureRevenueCat() {
   if (configured) return;
 
-  // vyber správný klíč
-  const apiKey = __DEV__
+  // 🔴 RevenueCat dočasně vypnutý pro preview buildy bez Google Play setupu
+  if (!USE_REVENUECAT_TEST_STORE) {
+    configured = true;
+    return;
+  }
+
+  const apiKey = USE_REVENUECAT_TEST_STORE
     ? TEST_API_KEY
     : Platform.OS === "android"
       ? ANDROID_API_KEY
@@ -41,14 +50,11 @@ export async function configureRevenueCat() {
 
   const uid = auth.currentUser?.uid;
 
-  // ⚠️ Pokud ještě nemáme UID (auth se teprve načítá), NESHazuj premium dolů.
-  // Sync + listener připojíme až po revenueCatLogin(uid).
   if (!uid) {
     configured = true;
     return;
   }
 
-  // Máme UID → přihlásit do RevenueCat a teprve pak sync
   try {
     await Purchases.logIn(uid);
   } catch {}
@@ -60,43 +66,58 @@ export async function configureRevenueCat() {
 }
 
 export async function syncPremiumFromRevenueCat() {
+  if (!USE_REVENUECAT_TEST_STORE) return;
+
   const info = await Purchases.getCustomerInfo();
   const active = !!info.entitlements.active[ENTITLEMENT_ID];
+
   if (active) await activatePremium();
   else await cancelPremium();
 }
 
 export async function getOfferingPackages() {
+  if (!USE_REVENUECAT_TEST_STORE) return [];
+
   const offerings = await Purchases.getOfferings();
   const current = offerings.current;
+
   return current?.availablePackages ?? [];
 }
 
 export async function purchasePackage(pkg: any) {
+  if (!USE_REVENUECAT_TEST_STORE) return;
+
   const res = await Purchases.purchasePackage(pkg);
   const active = !!res.customerInfo.entitlements.active[ENTITLEMENT_ID];
+
   if (active) await activatePremium();
   else await cancelPremium();
 }
 
 export async function restorePurchases() {
+  if (!USE_REVENUECAT_TEST_STORE) return;
+
   const info = await Purchases.restorePurchases();
   const active = !!info.entitlements.active[ENTITLEMENT_ID];
+
   if (active) await activatePremium();
   else await cancelPremium();
 }
 
-// ✅ otevře systémovou správu předplatného (zrušení se dělá jen přes Store)
+// ✅ otevře systémovou správu předplatného
 export async function openCancelSubscription() {
   if (Platform.OS === "android") {
     await Linking.openURL("https://play.google.com/store/account/subscriptions");
     return;
   }
+
   await Linking.openURL("https://apps.apple.com/account/subscriptions");
 }
 
 // ✅ Zavolej po úspěšném Firebase loginu
 export async function revenueCatLogin(uid: string) {
+  if (!USE_REVENUECAT_TEST_STORE) return;
+
   try {
     await Purchases.logIn(uid);
   } catch {}
@@ -107,6 +128,11 @@ export async function revenueCatLogin(uid: string) {
 
 // ✅ Zavolej při logout
 export async function revenueCatLogout() {
+  if (!USE_REVENUECAT_TEST_STORE) {
+    await cancelPremium();
+    return;
+  }
+
   try {
     await Purchases.logOut();
   } catch {}
