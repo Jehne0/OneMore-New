@@ -46,7 +46,7 @@ const HISTORY_STRINGS = {
     active: "Aktivní",
     disabled: "Vypnutá",
     completed: "Splněno",
-    skipped: "Vynecháno",
+    skipped: "Volný den",
     streak: "Série",
     last: "Naposledy:",
   },
@@ -66,9 +66,49 @@ const HISTORY_STRINGS = {
     active: "Active",
     disabled: "Disabled",
     completed: "Completed",
-    skipped: "Skipped",
+    skipped: "Free day",
     streak: "Streak",
     last: "Last:",
+  },
+  pl: {
+    back: "‹ Wstecz",
+    title: "Historia wyzwań",
+    loading: "Ładuję historię…",
+    bestStreak: "Najlepsza seria",
+    completedTotal: "Ukończono łącznie",
+    activeChallenges: "Aktywne wyzwania",
+    shown: "Pokazano",
+    of: "z",
+    loadingMore: "Ładuję kolejne…",
+    scrollForMore: "Przewiń w dół po więcej",
+    empty: "Na razie nic tu nie ma. Wykonaj pierwsze wyzwanie, a historia zacznie się zapełniać.",
+    noTitle: "(bez nazwy)",
+    active: "Aktywne",
+    disabled: "Wyłączone",
+    completed: "Ukończono",
+    skipped: "Dzień wolny",
+    streak: "Seria",
+    last: "Ostatnio:",
+  },
+  de: {
+    back: "‹ Zurück",
+    title: "Challenge-Verlauf",
+    loading: "Verlauf wird geladen…",
+    bestStreak: "Beste Serie",
+    completedTotal: "Insgesamt erledigt",
+    activeChallenges: "Aktive Challenges",
+    shown: "Angezeigt",
+    of: "von",
+    loadingMore: "Weitere werden geladen…",
+    scrollForMore: "Nach unten scrollen für mehr",
+    empty: "Hier ist noch nichts. Erledige deine erste Challenge, dann füllt sich der Verlauf.",
+    noTitle: "(ohne Titel)",
+    active: "Aktiv",
+    disabled: "Deaktiviert",
+    completed: "Erledigt",
+    skipped: "Freier Tag",
+    streak: "Serie",
+    last: "Zuletzt:",
   },
 } as const;
 
@@ -116,7 +156,7 @@ const HistoryCard = React.memo(function HistoryCard({
 }: {
   r: StatRow;
   UI: any;
-  p: typeof HISTORY_STRINGS["cs"] | typeof HISTORY_STRINGS["en"];
+  p: (typeof HISTORY_STRINGS)[keyof typeof HISTORY_STRINGS];
 }) {
   return (
     <View
@@ -215,7 +255,12 @@ export default function HistoryScreen() {
   const router = useRouter();
   const { UI, isDark } = useTheme();
   const { lang } = useI18n();
-  const p = HISTORY_STRINGS[lang];
+const historyLang =
+  lang === "cs" || lang === "en" || lang === "pl" || lang === "de"
+    ? lang
+    : "en";
+
+const p = HISTORY_STRINGS[historyLang];
 
   const [rows, setRows] = useState<StatRow[]>(() => MEM_ROWS ?? []);
   const [visibleCount, setVisibleCount] = useState(() =>
@@ -307,7 +352,7 @@ export default function HistoryScreen() {
   );
 
   const hasMore = visibleCount < totalCount;
-
+;
   const loadNextPage = useCallback(() => {
     if (loading || loadingMore) return;
 

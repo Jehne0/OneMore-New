@@ -82,7 +82,14 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarLabel: lang === "en" ? "Profile" : "Profil",
+      tabBarLabel:
+  lang === "en"
+    ? "Profile"
+    : lang === "pl"
+    ? "Profil"
+    : lang === "de"
+    ? "Profil"
+    : "Profil",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "person" : "person-outline"}

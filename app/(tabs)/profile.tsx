@@ -97,6 +97,15 @@ const TERMS_URL = "https://desigame.eu/terms.html";
 
 const PROFILE_STRINGS = {
   cs: {
+    dayMon: "Po",
+dayTue: "Út",
+dayWed: "St",
+dayThu: "Čt",
+dayFri: "Pá",
+daySat: "So",
+daySun: "Ne",
+    streakFlamesInfo: "Ohýnek ukazuje, kolik dní po sobě máš splněno (série).\n\nPokud je výzva v daný den neaktivní nebo má volný den, série se neruší.\nSérie se resetuje jen tehdy, když nesplníš aktivní den výzvy. Výzvu můžeš deaktivovat bez ztráty série.",
+medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:",
     deleteAccountTitle: "Odstranit účet?",
     deleteAccountText: "Tahle akce je nevratná. Účet bude smazán.",
     enterPassword: "Zadej heslo",
@@ -239,8 +248,31 @@ const PROFILE_STRINGS = {
     declineFriendFailed: "Nepodařilo se odmítnout.",
     acceptFriendFailed: "Nepodařilo se přijmout.",
     removeFriendFailed: "Nepodařilo se odebrat.",
+    medalPotatoDesc: "Začátek. 10 dní držíš směr.",
+medalSteelDesc: "30 dní. Pevný základ.",
+medalBronzeDesc: "45 dní. Už vzniká návyk.",
+medalSilverDesc: "90 dní. Disciplína sílí.",
+medalGoldDesc: "180 dní. Výborná výdrž.",
+medalDiamondDesc: "365 dní. Životní styl.",
+historyEmpty: "Žádná historie.",
+historyCompleted: "Splněno",
+historyMissed: "Nesplněno",
+historyFreeDay: "Volný den",
+historyArchived: "Archivovaná výzva",
+historyActive: "Aktivní výzva",
+clearHistory: "Vymazat historii",
+clearHistoryConfirm: "Opravdu chceš smazat historii?",
   },
   en: {
+    dayMon: "Mon",
+dayTue: "Tue",
+dayWed: "Wed",
+dayThu: "Thu",
+dayFri: "Fri",
+daySat: "Sat",
+daySun: "Sun",
+        streakFlamesInfo: "The flame shows how many days in a row you have completed your challenge.\n\nIf a challenge is inactive on a given day or it is a rest day, the streak does not break.\nThe streak resets only when you miss an active challenge day. You can deactivate a challenge without losing the streak.",
+medalsIntro: "Each challenge awards medals based on your longest streak:",
   deleteAccountTitle: "Delete account?",
   deleteAccountText: "This action is irreversible. Your account will be deleted.",
   enterPassword: "Enter password",
@@ -383,7 +415,358 @@ const PROFILE_STRINGS = {
   acceptFriendFailed: "Could not accept request.",
   declineFriendFailed: "Could not decline request.",
   cancelRequestFailed: "Could not cancel request.",
+  medalPotatoDesc: "The beginning. 10 days on track.",
+medalSteelDesc: "30 days. Strong foundation.",
+medalBronzeDesc: "45 days. A habit is forming.",
+medalSilverDesc: "90 days. Discipline grows.",
+medalGoldDesc: "180 days. Excellent consistency.",
+medalDiamondDesc: "365 days. A lifestyle.",
+historyEmpty: "No history.",
+historyCompleted: "Completed",
+historyMissed: "Missed",
+historyFreeDay: "Free day",
+historyArchived: "Archived challenge",
+historyActive: "Active challenge",
+clearHistory: "Clear history",
+clearHistoryConfirm: "Are you sure you want to delete history?",
 },
+
+pl: {
+  dayMon: "Pn",
+dayTue: "Wt",
+dayWed: "Śr",
+dayThu: "Cz",
+dayFri: "Pt",
+daySat: "So",
+daySun: "Nd",
+    upgrade: "Ulepsz",
+unlimitedChallenges: "Nieograniczone wyzwania",
+unlimitedReminders: "Nieograniczone przypomnienia",
+fullHistory: "Pełna historia wyzwań",
+unlimitedFriends: "Nieograniczeni znajomi",
+unlimitedSharedChallenges: "Nieograniczone wspólne wyzwania",
+historyCompleted: "Ukończono",
+historyMissed: "Niewykonano",
+historyFreeDay: "Dzień wolny",
+historyArchived: "Archiwalne wyzwanie",
+historyActive: "Aktywne wyzwanie",
+clearHistory: "Wyczyść historię",
+clearHistoryConfirm: "Czy na pewno chcesz usunąć historię?",
+  streakFlamesInfo: "Płomień pokazuje, ile dni z rzędu udało Ci się wykonać wyzwanie.\n\nJeśli wyzwanie jest w danym dniu nieaktywne albo ma dzień wolny, seria się nie przerywa.\nSeria resetuje się tylko wtedy, gdy nie wykonasz aktywnego dnia wyzwania. Możesz dezaktywować wyzwanie bez utraty serii.",
+medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej serii:",
+  deleteAccountTitle: "Usunąć konto?",
+  deleteAccountText: "Tej akcji nie można cofnąć. Konto zostanie usunięte.",
+  enterPassword: "Wpisz hasło",
+  cancel: "Anuluj",
+  deleteAccountAction: "Chcę usunąć konto",
+  deletingAccount: "Usuwam konto…",
+  changePassword: "Zmiana hasła",
+  close: "Zamknij",
+  passwordResetInfo: "Wyślemy Ci e-mail z linkiem do zmiany hasła.",
+  email: "E-mail",
+  sendLink: "Wyślij link",
+  sending: "Wysyłam…",
+  changeUsername: "Zmiana nazwy użytkownika",
+  newUsername: "Nowa nazwa użytkownika",
+  saveChange: "Zapisz zmianę",
+  saving: "Zapisuję…",
+  account: "Konto",
+  darkMode: "Tryb ciemny",
+  shareAchievements: "Udostępniaj znajomym swoje osiągnięcia",
+  language: "Język",
+  premium: "Premium",
+  managePremium: "Zarządzaj Premium",
+  logout: "Wyloguj się",
+  deleteAccount: "Usuń konto",
+  info: "Informacje i historia",
+  sendQuestion: "Kontakt z pomocą",
+  querySubject: "Kontakt z pomocą",
+  streaksMedals: "Serie i medale",
+  freePremium: "Free & Premium",
+  privacy: "Prywatność",
+  terms: "Warunki korzystania",
+  limitsBenefits: "Limity i korzyści",
+  streaksRewards: "Serie i nagrody",
+  history: "Historia wyzwań",
+  historySubtitle: "Przegląd wykonania i serii",
+  flames: "Płomienie",
+  medals: "Medale",
+  premiumBuy: "Kup Premium",
+  premiumCancel: "Anuluj subskrypcję",
+  open: "Otwórz",
+  subject: "Temat",
+  message: "Wiadomość",
+  send: "Wyślij",
+  friends: "Znajomi",
+  requests: "Prośby",
+  challenges: "Wyzwania",
+  addFriend: "Dodaj znajomego",
+  addByUsername: "Dodaj po nazwie użytkownika",
+  addByUsernameHelp: "Wpisz nazwę użytkownika osoby, którą chcesz dodać.",
+  add: "Dodaj",
+  myFriends: "Moi znajomi",
+  addShort: "+ Dodaj",
+  invite: "Zaproś",
+  remove: "Usuń",
+  accept: "Akceptuj",
+  decline: "Odrzuć",
+  sentRequests: "Wysłane prośby",
+  incomingRequests: "Otrzymane prośby",
+  blocked: "Zablokowani",
+  loadingFriends: "Ładuję znajomych...",
+  noFriendsYet: "Nie masz jeszcze znajomych.",
+  loadingChallenges: "Ładuję wyzwania...",
+  noRequests: "Nie masz jeszcze żadnych próśb.",
+  noPendingChallenges: "Nie masz teraz żadnych oczekujących wspólnych wyzwań.",
+  from: "Od",
+  participants: "Uczestnicy",
+  target: "Cel",
+  daily: "codziennie",
+  every2: "co drugi dzień",
+  selectedDays: "w wybrane dni",
+  newSharedChallenge: "Nowe wspólne wyzwanie",
+  sharedChallenge: "Wspólne wyzwanie",
+  selectUpToFriends: "Wybierz maksymalnie {count} znajomych do jednego wyzwania.",
+  friendsLabel: "Znajomi",
+  challengeName: "Nazwa wyzwania",
+  challengeNamePlaceholder: "Np. Pompki",
+  countPerDay: "Liczba dziennie",
+  period: "Okres",
+  dailyCap: "Codziennie",
+  every2Cap: "Co drugi dzień",
+  customDays: "Własne dni",
+  chooseDays: "Wybierz dni",
+  submit: "Wyślij",
+  friendProfile: "Profil znajomego",
+  loadingStats: "Ładuję statystyki...",
+  userNotSharing: "Ten użytkownik nie udostępnia swoich osiągnięć.",
+  statsUnavailable: "Statystyki są niedostępne.",
+  longestStreak: "🔥 Najdłuższa seria",
+  medalsCount: "🏅 Liczba medali",
+  highestMedal: "💎 Najwyższy medal",
+  activeChallenges: "✅ Aktywne wyzwania",
+  ok: "OK",
+  supportReplyEmail: "E-mail do odpowiedzi",
+  supportPlaceholder: "twoj@email.pl",
+  supportSubjectPlaceholder: "Np. Problem z powiadomieniami",
+  supportMessagePlaceholder: "Opisz proszę swój problem…",
+  freeVersion: "Podstawowa wersja za darmo",
+  bestChoice: "NAJLEPSZY WYBÓR",
+  premiumForResults: "Dla maksymalnych efektów",
+  getPremium: "Zdobądź Premium",
+  securePayment: "Bezpieczna płatność",
+  cancelAnytime: "Anulowanie w dowolnym momencie",
+  supportDevelopment: "Wspierasz rozwój",
+  free: "Free",
+  oneMoreFree: "OneMore za darmo. Premium bez limitów.",
+  premiumActiveShort: "Premium jest aktywne.",
+  manageSubscription: "Zarządzaj subskrypcją",
+  unlockMore: "Odblokuj więcej wyzwań, przypomnień, znajomych i wspólnych wyzwań.",
+  reminders: "Przypomnienia",
+  historyChallenges: "Historia wyzwań",
+  sharedChallenges: "Wspólne wyzwania",
+  activePremiumInfo: "Premium jest aktywne. Możesz je anulować w dowolnym momencie albo spróbować przywrócić status.",
+  unlockPremiumInfo: "Odblokuj Premium i zyskaj nieograniczone wyzwania, przypomnienia i znajomych.",
+  priceInfo: "Cena pojawi się po podłączeniu oferty w RevenueCat.",
+  unlimitedRemindersNotif: "Nieograniczone przypomnienia / powiadomienia",
+  unlimitedFriendsLink: "Nieograniczone połączenia ze znajomymi",
+  moreRewards: "Więcej nagród i drobnych ulepszeń stopniowo",
+  profileTitleFriends: "Znajomi",
+  profileTitleInfo: "Informacje",
+  passwordPlaceholder: "hasło",
+  usernamePlaceholder: "nazwa użytkownika",
+  noScalePremium: "Premium",
+  noScaleFree: "Free",
+  premiumFriendsOnly: "Wspólne wyzwania ze znajomymi są dostępne tylko w Premium.",
+  freeFriendsLimit: "W wersji Free możesz mieć tylko 1 znajomego. Więcej wymaga Premium.",
+  medalNone: "Brak",
+  medalPotato: "Ziemniaczany",
+  medalSteel: "Stalowy",
+  medalBronze: "Brązowy",
+  medalSilver: "Srebrny",
+  medalGold: "Złoty",
+  medalDiamond: "Diamentowy",
+  cancelRequestFailed: "Nie udało się anulować.",
+  declineFriendFailed: "Nie udało się odrzucić.",
+  acceptFriendFailed: "Nie udało się zaakceptować.",
+  removeFriendFailed: "Nie udało się usunąć.",
+  medalPotatoDesc: "Początek. 10 dni trzymasz kierunek.",
+medalSteelDesc: "30 dni. Solidna podstawa. Idziesz dalej.",
+medalBronzeDesc: "45 dni. To zaczyna przypominać rutynę.",
+medalSilverDesc: "Trzy miesiące. Nawyki stają się częścią dnia.",
+medalGoldDesc: "Pół roku. Najwyższa dyscyplina.",
+medalDiamondDesc: "Cały rok. To już styl życia.",
+
+},
+
+de: {
+  dayMon: "Mo",
+dayTue: "Di",
+dayWed: "Mi",
+dayThu: "Do",
+dayFri: "Fr",
+daySat: "Sa",
+daySun: "So",
+  unlimitedChallenges: "Unbegrenzte Herausforderungen",
+unlimitedReminders: "Unbegrenzte Erinnerungen",
+fullHistory: "Herausforderungsverlauf",
+unlimitedFriends: "Unbegrenzte Freunde",
+unlimitedSharedChallenges: "Unbegrenzte gemeinsame Herausforderungen",
+  upgrade: "Upgraden",
+historyEmpty: "Keine Historie.",
+historyCompleted: "Erledigt",
+historyMissed: "Nicht geschafft",
+historyFreeDay: "Freier Tag",
+historyArchived: "Archivierte Herausforderung",
+historyActive: "Aktive Herausforderung",
+clearHistory: "Verlauf löschen",
+clearHistoryConfirm: "Möchtest du den Verlauf wirklich löschen?",
+  streakFlamesInfo: "Die Flamme zeigt, wie viele Tage hintereinander du deine Herausforderung geschafft hast.\n\nWenn eine Herausforderung an einem Tag inaktiv ist oder ein freier Tag ist, wird die Serie nicht unterbrochen.\nDie Serie wird nur zurückgesetzt, wenn du einen aktiven Herausforderung-Tag verpasst. Du kannst eine Herausforderung deaktivieren, ohne die Serie zu verlieren.",
+medalsIntro: "Jede Herausforderung vergibt Medaillen nach deiner längsten Serie:",
+medalPotatoDesc: "Der Anfang. 10 Tage auf Kurs.",
+medalSteelDesc: "30 Tage. Eine stabile Grundlage. Weiter so.",
+medalBronzeDesc: "45 Tage. Es wird langsam zur Routine.",
+medalSilverDesc: "Drei Monate. Gewohnheiten werden Teil deines Tages.",
+medalGoldDesc: "Ein halbes Jahr. Starke Disziplin.",
+medalDiamondDesc: "Ein ganzes Jahr. Das ist ein Lebensstil.",
+  deleteAccountTitle: "Konto löschen?",
+  deleteAccountText: "Diese Aktion kann nicht rückgängig gemacht werden. Das Konto wird gelöscht.",
+  enterPassword: "Passwort eingeben",
+  cancel: "Abbrechen",
+  deleteAccountAction: "Konto löschen",
+  deletingAccount: "Konto wird gelöscht…",
+  changePassword: "Passwort ändern",
+  close: "Zu",
+  passwordResetInfo: "Wir senden dir eine E-Mail mit einem Link zum Ändern des Passworts.",
+  email: "E-Mail",
+  sendLink: "Link senden",
+  sending: "Wird gesendet…",
+  changeUsername: "Benutzernamen ändern",
+  newUsername: "Neuer Benutzername",
+  saveChange: "Änderung speichern",
+  saving: "Speichern…",
+  account: "Konto",
+  darkMode: "Dunkler Modus",
+  shareAchievements: "Erfolge mit Freunden teilen",
+  language: "Sprache",
+  premium: "Premium",
+  managePremium: "Premium verwalten",
+  logout: "Abmelden",
+  deleteAccount: "Konto löschen",
+  info: "Informationen und Verlauf",
+  sendQuestion: "Support kontaktieren",
+  querySubject: "Support kontaktieren",
+  streaksMedals: "Serien & Medaillen",
+  freePremium: "Free & Premium",
+  privacy: "Datenschutz",
+  terms: "Nutzungsbedingungen",
+  limitsBenefits: "Limits & Vorteile",
+  streaksRewards: "Serien & Belohnungen",
+history: "Herausforderungsverlauf",
+  historySubtitle: "Übersicht über Erfüllung und Serien",
+  flames: "Flammen",
+  medals: "Medaillen",
+  premiumBuy: "Premium kaufen",
+  premiumCancel: "Abo kündigen",
+  open: "Öffnen",
+  subject: "Betreff",
+  message: "Nachricht",
+  send: "Senden",
+  friends: "Freunde",
+  requests: "Anfragen",
+  challenges: "Herausforderungen",
+  addFriend: "Freund hinzufügen",
+  addByUsername: "Per Benutzername hinzufügen",
+  addByUsernameHelp: "Gib den Benutzernamen der Person ein, die du hinzufügen möchtest.",
+  add: "Hinzufügen",
+  myFriends: "Meine Freunde",
+  addShort: "+ Hinzufügen",
+  invite: "Einladen",
+  remove: "Entfernen",
+  accept: "Annehmen",
+  decline: "Ablehnen",
+  sentRequests: "Gesendete Anfragen",
+  incomingRequests: "Eingehende Anfragen",
+  blocked: "Blockiert",
+  loadingFriends: "Freunde werden geladen...",
+  noFriendsYet: "Noch keine Freunde.",
+  loadingChallenges: "Challenges werden geladen...",
+  noRequests: "Du hast noch keine Anfragen.",
+  noPendingChallenges: "Du hast momentan keine offenen gemeinsamen Herausforderungen.",
+  from: "Von",
+  participants: "Teilnehmer",
+  target: "Ziel",
+  daily: "täglich",
+  every2: "jeden zweiten Tag",
+  selectedDays: "an ausgewählten Tagen",
+  newSharedChallenge: "Neue gemeinsame Herausforderung",
+  sharedChallenge: "Gemeinsame Herausforderung",
+  selectUpToFriends: "Wähle bis zu {count} Freunde für eine Herausforderung.",
+  friendsLabel: "Freunde",
+  challengeName: "Name der Herausforderung",
+  challengeNamePlaceholder: "Z. B. Liegestütze",
+  countPerDay: "Anzahl pro Tag",
+  period: "Zeitraum",
+  dailyCap: "Täglich",
+  every2Cap: "Jeden zweiten Tag",
+  customDays: "Eigene Tage",
+  chooseDays: "Tage auswählen",
+  submit: "Senden",
+  friendProfile: "Freundesprofil",
+  loadingStats: "Statistiken werden geladen...",
+  userNotSharing: "Dieser Nutzer teilt seine Erfolge nicht.",
+  statsUnavailable: "Statistiken sind nicht verfügbar.",
+  longestStreak: "🔥 Längste Serie",
+  medalsCount: "🏅 Anzahl der Medaillen",
+  highestMedal: "💎 Höchste Medaille",
+  activeChallenges: "✅ Aktive Challenges",
+    ok: "OK",
+  supportReplyEmail: "E-Mail für Antwort",
+  supportPlaceholder: "deine@email.de",
+  supportSubjectPlaceholder: "Z. B. Problem mit Benachrichtigungen",
+  supportMessagePlaceholder: "Beschreibe bitte dein Anliegen…",
+  freeVersion: "Kostenlose Basisversion",
+  bestChoice: "BESTE WAHL",
+  premiumForResults: "Für maximale Ergebnisse",
+  getPremium: "Premium holen",
+  securePayment: "Sichere Zahlung",
+  cancelAnytime: "Jederzeit kündbar",
+  supportDevelopment: "Du unterstützt die Entwicklung",
+  free: "Free",
+  oneMoreFree: "OneMore kostenlos. Premium ohne Limits.",
+  premiumActiveShort: "Premium ist aktiv.",
+  manageSubscription: "Abo verwalten",
+  unlockMore: "Schalte mehr Herausforderungen, Erinnerungen, Freunde und gemeinsame Herausforderungen frei.",
+  reminders: "Erinnerungen",
+  historyChallenges: "Herausforderungen-Verlauf",
+  sharedChallenges: "Gemeinsame Herausforderungen",
+  activePremiumInfo: "Premium ist aktiv. Du kannst es jederzeit kündigen oder den Status wiederherstellen.",
+  unlockPremiumInfo: "Schalte Premium frei und erhalte unbegrenzte Herausforderungen, Erinnerungen und Freunde.",
+  priceInfo: "Der Preis erscheint nach dem Verbinden des Offerings in RevenueCat.",
+  unlimitedRemindersNotif: "Unbegrenzte Erinnerungen / Benachrichtigungen",
+  unlimitedFriendsLink: "Unbegrenzte Verbindungen mit Freunden",
+  moreRewards: "Weitere Belohnungen und kleine Extras schrittweise",
+  profileTitleFriends: "Freunde",
+  profileTitleInfo: "Informationen",
+  passwordPlaceholder: "Passwort",
+  usernamePlaceholder: "Benutzername",
+  noScalePremium: "Premium",
+  noScaleFree: "Free",
+  premiumFriendsOnly: "Gemeinsame Herausforderungen mit Freunden sind nur in Premium verfügbar.",
+  freeFriendsLimit: "In der Free-Version kannst du nur 1 Freund haben. Für mehr brauchst du Premium.",
+  medalNone: "Keine",
+  medalPotato: "Kartoffel",
+  medalSteel: "Stahl",
+  medalBronze: "Bronze",
+  medalSilver: "Silber",
+  medalGold: "Gold",
+  medalDiamond: "Diamant",
+  cancelRequestFailed: "Abbrechen fehlgeschlagen.",
+  declineFriendFailed: "Ablehnen fehlgeschlagen.",
+  acceptFriendFailed: "Annehmen fehlgeschlagen.",
+  removeFriendFailed: "Entfernen fehlgeschlagen.",
+}
+
 } as const;
 
 export default function ProfileTabScreen() {
@@ -392,7 +775,12 @@ export default function ProfileTabScreen() {
   const insets = useSafeAreaInsets();
   const { UI, isDark, toggle } = useTheme();
   const { lang, setLang } = useI18n();
-  const p = PROFILE_STRINGS[lang];
+const profileLang =
+  lang === "cs" || lang === "en" || lang === "pl" || lang === "de"
+    ? lang
+    : "en";
+
+const p = PROFILE_STRINGS[profileLang];
 
 
   // ✅ Změna username
@@ -1688,50 +2076,94 @@ const incomingCount = friendEdges.filter(
             >
               <Text style={[styles.modalLabel, { color: UI.text }]}>{p.language}</Text>
               <View style={styles.langPills}>
-                <Pressable
-                  onPress={() => setLang("cs")}
-                  style={({ pressed }) => [
-                    styles.langPill,
-                    { borderColor: UI.stroke, backgroundColor: UI.card2 },
-                    lang === "cs" && {
-                      backgroundColor: UI.accent,
-                      borderColor: UI.accent,
-                    },
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.langPillText,
-                      { color: lang === "cs" ? "#0B1220" : UI.text },
-                    ]}
-                  >
-                    CZ
-                  </Text>
-                </Pressable>
+  <Pressable
+    onPress={() => setLang("cs")}
+    style={({ pressed }) => [
+      styles.langPill,
+      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+      lang === "cs" && {
+        backgroundColor: UI.accent,
+        borderColor: UI.accent,
+      },
+      pressed && { opacity: 0.9 },
+    ]}
+  >
+    <Text
+      style={[
+        styles.langPillText,
+        { color: lang === "cs" ? "#0B1220" : UI.text },
+      ]}
+    >
+      CZ
+    </Text>
+  </Pressable>
 
-                <Pressable
-                  onPress={() => setLang("en")}
-                  style={({ pressed }) => [
-                    styles.langPill,
-                    { borderColor: UI.stroke, backgroundColor: UI.card2 },
-                    lang === "en" && {
-                      backgroundColor: UI.accent,
-                      borderColor: UI.accent,
-                    },
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.langPillText,
-                      { color: lang === "en" ? "#0B1220" : UI.text },
-                    ]}
-                  >
-                    EN
-                  </Text>
-                </Pressable>
-              </View>
+  <Pressable
+    onPress={() => setLang("en")}
+    style={({ pressed }) => [
+      styles.langPill,
+      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+      lang === "en" && {
+        backgroundColor: UI.accent,
+        borderColor: UI.accent,
+      },
+      pressed && { opacity: 0.9 },
+    ]}
+  >
+    <Text
+      style={[
+        styles.langPillText,
+        { color: lang === "en" ? "#0B1220" : UI.text },
+      ]}
+    >
+      EN
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setLang("pl")}
+    style={({ pressed }) => [
+      styles.langPill,
+      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+      lang === "pl" && {
+        backgroundColor: UI.accent,
+        borderColor: UI.accent,
+      },
+      pressed && { opacity: 0.9 },
+    ]}
+  >
+    <Text
+      style={[
+        styles.langPillText,
+        { color: lang === "pl" ? "#0B1220" : UI.text },
+      ]}
+    >
+      PL
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setLang("de")}
+    style={({ pressed }) => [
+      styles.langPill,
+      { borderColor: UI.stroke, backgroundColor: UI.card2 },
+      lang === "de" && {
+        backgroundColor: UI.accent,
+        borderColor: UI.accent,
+      },
+      pressed && { opacity: 0.9 },
+    ]}
+  >
+    <Text
+      style={[
+        styles.langPillText,
+        { color: lang === "de" ? "#0B1220" : UI.text },
+      ]}
+    >
+      DE
+    </Text>
+  </Pressable>
+</View>
             </View>
 
             <Pressable
@@ -2053,9 +2485,7 @@ const incomingCount = friendEdges.filter(
                 >
                   <Text style={[styles.infoTitle, { color: UI.text }]}>{p.flames}</Text>
                   <Text style={[styles.infoText, { color: UI.sub }]}>
-                    {lang === "cs"
-                      ? "Ohýnek ukazuje, kolik dní po sobě máš splněno (série).\n\nPokud je výzva v daný den neaktivní nebo má volný den, série se neruší.\nSérie se resetuje jen tehdy, když nesplníš aktivní den výzvy. Výzvu můžeš deaktivovat (série se ti neruší)."
-                      : "The flame shows how many days in a row you have completed your challenge (streak).\n\nIf a challenge is inactive on a given day or it is a rest day, the streak does not break.\nThe streak resets only when you miss an active challenge day. You can deactivate a challenge without breaking the streak."}
+                    {p.streakFlamesInfo}
                   </Text>
 
                   <Text style={[styles.infoTitle, { color: UI.text, marginTop: 16 }]}>
@@ -2071,42 +2501,42 @@ const incomingCount = friendEdges.filter(
                         key: "brambora",
                         days: 10,
                         title: lang === "cs" ? "Brambora" : "Potato",
-                        desc: lang === "cs" ? "Začátek. 10 dní držíš směr." : "The beginning. 10 days of staying on track.",
+                        desc: p.medalPotatoDesc,
                         img: require("../../assets/medals/potato_medal.png"),
                       },
                       {
                         key: "steel",
                         days: 30,
                         title: lang === "cs" ? "Ocel" : "Steel",
-                        desc: lang === "cs" ? "30 dní. Pevný základ. Jdeš dál." : "30 days. A solid foundation. Keep going.",
+                       desc: p.medalSteelDesc,
                         img: require("../../assets/medals/steel_medal.png"),
                       },
                       {
                         key: "bronze",
                         days: 45,
                         title: lang === "cs" ? "Bronz" : "Bronze",
-                        desc: lang === "cs" ? "45 dní. Už to nabírá tvar rutiny." : "45 days. It is starting to become a routine.",
+                       desc: p.medalBronzeDesc,
                         img: require("../../assets/medals/bronze_medal.png"),
                       },
                       {
                         key: "silver",
                         days: 90,
                         title: lang === "cs" ? "Stříbro" : "Silver",
-                        desc: lang === "cs" ? "Tři měsíce. Návyky jsou součást dne." : "Three months. Habits are now part of your day.",
+                       desc: p.medalSilverDesc,
                         img: require("../../assets/medals/silver_medal.png"),
                       },
                       {
                         key: "gold",
                         days: 180,
                         title: lang === "cs" ? "Zlato" : "Gold",
-                        desc: lang === "cs" ? "Půl roku. Top disciplína." : "Half a year. Top discipline.",
+                        desc: p.medalGoldDesc,
                         img: require("../../assets/medals/gold_medal.png"),
                       },
                       {
                         key: "diamond",
                         days: 365,
                         title: lang === "cs" ? "Diamant" : "Diamond",
-                        desc: lang === "cs" ? "Celý rok. To už je životní styl." : "A full year. That is a lifestyle.",
+                     desc: p.medalDiamondDesc,
                         img: require("../../assets/medals/diamond_medal.png"),
                       },
                     ].map((m) => (
@@ -2271,7 +2701,7 @@ const incomingCount = friendEdges.filter(
               !isDark && { color: "#1E293B" },
             ]}
           >
-            {lang === "cs" ? "Výzvy" : "Challenges"}
+           {p.challenges}
           </Text>
           <Text
             {...noScaleText}
@@ -2299,7 +2729,7 @@ const incomingCount = friendEdges.filter(
               !isDark && { color: "#1E293B" },
             ]}
           >
-            {lang === "cs" ? "Připomínky" : "Reminders"}
+            {p.reminders}
           </Text>
           <Text
             {...noScaleText}
@@ -3485,7 +3915,7 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
         >
           <View style={styles.sheetHeader}>
             <Text style={[styles.sheetTitle, { color: UI.text }]}>
-              Nová společná výzva
+             {p.newSharedChallenge}
             </Text>
 
             <Pressable
@@ -3511,7 +3941,7 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
               ]}
             >
               <Text style={[styles.infoTitle, { color: UI.text }]}>
-                Společná výzva
+                 {p.sharedChallenge}
               </Text>
 
               <Text style={[styles.infoText, { color: UI.sub, marginTop: -2 }]}>
@@ -3567,7 +3997,7 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
               </View>
 
               <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
-                Název výzvy
+                {p.challengeName}
               </Text>
               <TextInput
                 value={challengeInviteTitle}
@@ -3586,7 +4016,7 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
               />
 
               <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
-                Počet za den
+                {p.countPerDay}
               </Text>
               <View style={styles.challengePills}>
                 {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
@@ -3618,13 +4048,13 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
               </View>
 
               <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
-                Perioda
+                {p.period}
               </Text>
               <View style={styles.challengePills}>
                 {[
-                  { key: "daily", label: "Denně" },
-                  { key: "every2", label: "Obden" },
-                  { key: "custom", label: "Vlastní dny" },
+                 { key: "daily", label: p.dailyCap },
+{ key: "every2", label: p.every2Cap },
+{ key: "custom", label: p.customDays },
                 ].map((opt) => {
                   const active = challengeInvitePeriod === opt.key;
                   return (
@@ -3669,14 +4099,14 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
                   </Text>
                   <View style={styles.challengePills}>
                     {[
-                      { k: 0, t: "Po" },
-                      { k: 1, t: "Út" },
-                      { k: 2, t: "St" },
-                      { k: 3, t: "Čt" },
-                      { k: 4, t: "Pá" },
-                      { k: 5, t: "So" },
-                      { k: 6, t: "Ne" },
-                    ].map((d) => {
+  { k: 0, t: p.dayMon },
+  { k: 1, t: p.dayTue },
+  { k: 2, t: p.dayWed },
+  { k: 3, t: p.dayThu },
+  { k: 4, t: p.dayFri },
+  { k: 5, t: p.daySat },
+  { k: 6, t: p.daySun },
+].map((d) => {
                       const active = challengeInviteCustomDays.includes(d.k);
                       return (
                         <Pressable
@@ -3725,7 +4155,7 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
                 ]}
               >
                 <Text style={styles.primaryBtnText}>
-                  {challengeInviteBusy ? "Odesílám…" : "Odeslat"}
+                 {challengeInviteBusy ? p.sending : p.submit}
                 </Text>
               </Pressable>
             </View>
@@ -4332,15 +4762,17 @@ pmBottomText: {
     modalLinkText: { fontSize: 16, fontWeight: "900" },
 
     langPills: { flexDirection: "row", alignItems: "center", gap: 8 },
-    langPill: {
-      borderWidth: 1,
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      minWidth: 56,
-      alignItems: "center",
-    },
-    langPillText: { fontSize: 14, fontWeight: "900" },
+  langPill: {
+  minWidth: 38,
+  height: 30,
+  paddingHorizontal: 8,
+  borderRadius: 999,
+  borderWidth: 1,
+  alignItems: "center",
+  justifyContent: "center",
+},
+    
+    langPillText: { fontSize: 12, fontWeight: "900" },
 
     dangerBtn: {
       marginTop: 12,

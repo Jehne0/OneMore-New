@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-export type Lang = "cs" | "en";
+export type Lang = "cs" | "en" | "pl" | "de";
 const LANG_KEY = "onemore_lang";
 
 export type Dictionary = {
@@ -16,6 +16,8 @@ export type Dictionary = {
     language: string;
     langCS: string;
     langEN: string;
+    langPL: string;
+    langDE: string;
     account: string;
     close: string;
     darkMode: string;
@@ -26,6 +28,8 @@ export type Dictionary = {
     managePremium: string;
     logout: string;
     deleteAccount: string;
+    upgrade: string;
+    dayWord: string;
   };
   login: {
     welcome: string;
@@ -98,6 +102,8 @@ export const STRINGS: Record<Lang, Dictionary> = {
       language: "Jazyk",
       langCS: "Čeština",
       langEN: "English",
+      langPL: "Polski",
+      langDE: "Deutsch",
       account: "Účet",
       close: "Zavřít",
       darkMode: "Tmavý režim",
@@ -105,9 +111,11 @@ export const STRINGS: Record<Lang, Dictionary> = {
       changePassword: "Změna hesla",
       changeUsername: "Změna uživatelského jména",
       premium: "Premium",
+      upgrade: "Upgradovat",
       managePremium: "Spravovat Premium",
       logout: "Odhlásit se",
       deleteAccount: "Odstranit účet",
+      dayWord: "den",
     },
     login: {
       welcome: "Vítej v",
@@ -179,6 +187,8 @@ export const STRINGS: Record<Lang, Dictionary> = {
       language: "Language",
       langCS: "Czech",
       langEN: "English",
+      langPL: "Polish",
+      langDE: "German",
       account: "Account",
       close: "Close",
       darkMode: "Dark mode",
@@ -186,9 +196,11 @@ export const STRINGS: Record<Lang, Dictionary> = {
       changePassword: "Change password",
       changeUsername: "Change username",
       premium: "Premium",
+      upgrade: "Upgrade",
       managePremium: "Manage Premium",
       logout: "Log out",
       deleteAccount: "Delete account",
+      dayWord: "day",
     },
     login: {
       welcome: "Welcome to",
@@ -247,6 +259,176 @@ export const STRINGS: Record<Lang, Dictionary> = {
       genericErrorText: "Could not register. Please try again.",
     },
   },
+
+  pl: {
+    appSubtitle: "Jeden krok dziś. Wielka zmiana jutro.",
+    tabs: {
+      today: "OneMore",
+      challenges: "Wyzwania",
+      settings: "Ustawienia",
+      profile: "Profil",
+    },
+    settings: {
+      language: "Język",
+      langCS: "Czeski",
+      langEN: "Angielski",
+      langPL: "Polski",
+      langDE: "Niemiecki",
+      account: "Konto",
+      close: "Zamknij",
+      darkMode: "Tryb ciemny",
+      shareAchievements: "Udostępniaj znajomym swoje osiągnięcia",
+      changePassword: "Zmień hasło",
+      changeUsername: "Zmień nazwę użytkownika",
+      premium: "Premium",
+      upgrade: "Ulepsz",
+      managePremium: "Zarządzaj Premium",
+      logout: "Wyloguj się",
+      deleteAccount: "Usuń konto",
+       dayWord: "dzień",
+    },
+    login: {
+      welcome: "Witaj w",
+      subtitle: "Jeden krok dziś, wielka zmiana jutro.",
+      email: "E-mail",
+      password: "Hasło",
+      remember: "Zapamiętaj mnie",
+      forgot: "Nie pamiętasz hasła?",
+      login: "ZALOGUJ SIĘ",
+      loggingIn: "LOGOWANIE…",
+      noAccount: "Nie masz jeszcze konta?",
+      registerHere: "Zarejestruj się tutaj",
+      lightMode: "☀️  Tryb jasny",
+      darkMode: "🌙  Tryb ciemny",
+      invalidEmailTitle: "Nieprawidłowy e-mail",
+      invalidEmailText: "Wpisz poprawny adres e-mail.",
+      missingPasswordTitle: "Brak hasła",
+      missingPasswordText: "Wpisz hasło.",
+      accountNotFoundTitle: "Nie znaleziono konta",
+      accountNotFoundText: "Sprawdź e-mail albo zarejestruj się.",
+      loginFailedTitle: "Logowanie nie powiodło się",
+      loginFailedText: "Nieprawidłowy e-mail lub hasło.",
+      timeoutTitle: "To trwa zbyt długo",
+      timeoutText: "Logowanie się zawiesiło (słaby sygnał / Firebase niedostępne). Spróbuj ponownie.",
+      genericErrorTitle: "Błąd",
+      genericErrorText: "Nie udało się zalogować. Spróbuj ponownie.",
+    },
+    register: {
+      title: "Rejestracja",
+      subtitle: "Utwórz konto i zaczynamy.",
+      username: "Nazwa użytkownika",
+      email: "E-mail",
+      password: "Hasło",
+      createAccount: "UTWÓRZ KONTO",
+      creating: "TWORZENIE…",
+      haveAccount: "Masz już konto?",
+      login: "Zaloguj się",
+      missingNameTitle: "Brak nazwy użytkownika",
+      missingNameText: "Wpisz nazwę użytkownika (min. 2 znaki).",
+      invalidEmailTitle: "Nieprawidłowy e-mail",
+      invalidEmailText: "Wpisz poprawny adres e-mail.",
+      weakPasswordTitle: "Słabe hasło",
+      weakPasswordText: "Hasło musi mieć co najmniej 6 znaków.",
+      usernameTakenTitle: "Nazwa jest zajęta",
+      usernameTakenText: "Spróbuj innej nazwy użytkownika.",
+      cloudAccessTitle: "Brak dostępu do chmury",
+      cloudAccessText: "Reguły Firestore blokują zapis (PERMISSION_DENIED). Sprawdź Firestore Rules i spróbuj ponownie.",
+      cloudErrorTitle: "Błąd chmury",
+      doneTitle: "Gotowe",
+      doneText: "Konto zostało utworzone.",
+      emailExistsTitle: "E-mail już istnieje",
+      emailExistsText: "Ten e-mail jest już zarejestrowany. Spróbuj się zalogować.",
+      timeoutTitle: "To trwa zbyt długo",
+      timeoutText: "Rejestracja się zawiesiła (sygnał / Firebase). Spróbuj ponownie.",
+      genericErrorTitle: "Błąd",
+      genericErrorText: "Nie udało się zarejestrować. Spróbuj ponownie.",
+    },
+  },
+
+  de: {
+    appSubtitle: "Ein Schritt heute. Eine große Veränderung morgen.",
+    tabs: {
+      today: "OneMore",
+      challenges: "Challenges",
+      settings: "Einstellungen",
+      profile: "Profil",
+    },
+    settings: {
+      language: "Sprache",
+      langCS: "Tschechisch",
+      langEN: "Englisch",
+      langPL: "Polnisch",
+      langDE: "Deutsch",
+      account: "Konto",
+      close: "Schließen",
+      darkMode: "Dunkler Modus",
+      shareAchievements: "Meine Erfolge mit Freunden teilen",
+      changePassword: "Passwort ändern",
+      changeUsername: "Benutzernamen ändern",
+      premium: "Premium",
+      upgrade: "Upgraden",
+      managePremium: "Premium verwalten",
+      logout: "Abmelden",
+      deleteAccount: "Konto löschen",
+      dayWord: "Tag",
+    },
+    login: {
+      welcome: "Willkommen bei",
+      subtitle: "Ein Schritt heute, eine große Veränderung morgen.",
+      email: "E-Mail",
+      password: "Passwort",
+      remember: "Merken",
+      forgot: "Passwort vergessen?",
+      login: "ANMELDEN",
+      loggingIn: "ANMELDUNG…",
+      noAccount: "Noch kein Konto?",
+      registerHere: "Hier registrieren",
+      lightMode: "☀️  Heller Modus",
+      darkMode: "🌙  Dunkler Modus",
+      invalidEmailTitle: "Ungültige E-Mail",
+      invalidEmailText: "Bitte gib eine gültige E-Mail-Adresse ein.",
+      missingPasswordTitle: "Passwort fehlt",
+      missingPasswordText: "Bitte gib dein Passwort ein.",
+      accountNotFoundTitle: "Konto nicht gefunden",
+      accountNotFoundText: "Überprüfe deine E-Mail oder registriere dich.",
+      loginFailedTitle: "Anmeldung fehlgeschlagen",
+      loginFailedText: "Falsche E-Mail oder falsches Passwort.",
+      timeoutTitle: "Das dauert zu lange",
+      timeoutText: "Die Anmeldung hängt fest (schwaches Signal / Firebase nicht verfügbar). Bitte versuche es erneut.",
+      genericErrorTitle: "Fehler",
+      genericErrorText: "Anmeldung nicht möglich. Bitte versuche es erneut.",
+    },
+    register: {
+      title: "Registrierung",
+      subtitle: "Erstelle dein Konto und leg los.",
+      username: "Benutzername",
+      email: "E-Mail",
+      password: "Passwort",
+      createAccount: "KONTO ERSTELLEN",
+      creating: "WIRD ERSTELLT…",
+      haveAccount: "Du hast schon ein Konto?",
+      login: "Anmelden",
+      missingNameTitle: "Benutzername fehlt",
+      missingNameText: "Bitte gib einen Benutzernamen ein (min. 2 Zeichen).",
+      invalidEmailTitle: "Ungültige E-Mail",
+      invalidEmailText: "Bitte gib eine gültige E-Mail-Adresse ein.",
+      weakPasswordTitle: "Schwaches Passwort",
+      weakPasswordText: "Das Passwort muss mindestens 6 Zeichen haben.",
+      usernameTakenTitle: "Benutzername ist vergeben",
+      usernameTakenText: "Versuche einen anderen Benutzernamen.",
+      cloudAccessTitle: "Kein Cloud-Zugriff",
+      cloudAccessText: "Firestore-Regeln blockieren den Schreibzugriff (PERMISSION_DENIED). Prüfe die Firestore Rules und versuche es erneut.",
+      cloudErrorTitle: "Cloud-Fehler",
+      doneTitle: "Fertig",
+      doneText: "Das Konto wurde erstellt.",
+      emailExistsTitle: "E-Mail existiert bereits",
+      emailExistsText: "Diese E-Mail ist bereits registriert. Versuche dich anzumelden.",
+      timeoutTitle: "Das dauert zu lange",
+      timeoutText: "Die Registrierung hängt fest (Signal / Firebase). Bitte versuche es erneut.",
+      genericErrorTitle: "Fehler",
+      genericErrorText: "Registrierung nicht möglich. Bitte versuche es erneut.",
+    },
+  },
 };
 
 type I18nValue = {
@@ -266,7 +448,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(LANG_KEY);
-        if (saved === "cs" || saved === "en") setLangState(saved);
+        if (saved === "cs" || saved === "en" || saved === "pl" || saved === "de") {
+          setLangState(saved);
+        }
       } finally {
         setReady(true);
       }

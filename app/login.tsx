@@ -37,6 +37,7 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   // ✅ "Zapamatovat" = uloží e-mail (a volitelně i heslo) pro automatické přihlášení po restartu aplikace.
   // Pozn.: Heslo je uložené lokálně v AsyncStorage (pro nejrychlejší funkčnost v Expo). Pokud budeš chtít později, můžeme to přepnout na SecureStore.
@@ -121,12 +122,12 @@ export default function LoginScreen() {
       );
 
       // ✅ propojit RevenueCat s účtem (UID)
-// Nesmí blokovat přihlášení – když RevenueCat selže, uživatel se má i tak dostat do appky.
-try {
-  await revenueCatLogin(cred.user.uid);
-} catch (rcErr: any) {
-  console.log("REVENUECAT LOGIN ERROR:", rcErr?.code, rcErr?.message, rcErr);
-}
+      // Nesmí blokovat přihlášení – když RevenueCat selže, uživatel se má i tak dostat do appky.
+      try {
+        await revenueCatLogin(cred.user.uid);
+      } catch (rcErr: any) {
+        console.log("REVENUECAT LOGIN ERROR:", rcErr?.code, rcErr?.message, rcErr);
+      }
 
       // ✅ Email verification vypnuto – neblokujeme přihlášení a nic nezobrazujeme.
 
@@ -225,48 +226,106 @@ try {
           <Text style={[styles.subtitle, { color: UI.sub }]}>{t.login.subtitle}</Text>
 
           {/* LANGUAGE SWITCH */}
-          <View style={styles.langRow}>
+          <View style={styles.langDropdownWrap}>
             <Pressable
-              onPress={() => void setLang("cs")}
+              onPress={() => setLangMenuOpen((v) => !v)}
               style={({ pressed }) => [
-                styles.langBtn,
+                styles.langDropdownBtn,
                 {
                   borderColor: UI.stroke,
-                  backgroundColor: lang === "cs" ? UI.accent : UI.card,
+                  backgroundColor: UI.card,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.langBtnText,
-                  { color: lang === "cs" ? "#0B1220" : UI.text },
-                ]}
-              >
-                CZ
+              <Text style={[styles.langBtnText, { color: UI.text }]}>
+                🌍 {lang === "cs" ? "CZ" : lang === "en" ? "EN" : lang === "pl" ? "PL" : "DE"}
+              </Text>
+
+              <Text style={[styles.langBtnText, { color: UI.text }]}>
+                {langMenuOpen ? "⌃" : "⌄"}
               </Text>
             </Pressable>
 
-            <Pressable
-              onPress={() => void setLang("en")}
-              style={({ pressed }) => [
-                styles.langBtn,
-                {
-                  borderColor: UI.stroke,
-                  backgroundColor: lang === "en" ? UI.accent : UI.card,
-                  opacity: pressed ? 0.9 : 1,
-                },
-              ]}
-            >
-              <Text
+            {langMenuOpen && (
+              <View
                 style={[
-                  styles.langBtnText,
-                  { color: lang === "en" ? "#0B1220" : UI.text },
+                  styles.langDropdownMenu,
+                  {
+                    backgroundColor: UI.card,
+                    borderColor: UI.stroke,
+                  },
                 ]}
               >
-                EN
-              </Text>
-            </Pressable>
+                {lang !== "cs" && (
+                  <Pressable
+                    onPress={() => {
+                      void setLang("cs");
+                      setLangMenuOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.langDropdownItem,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={[styles.langDropdownText, { color: UI.text }]}>
+                      CZ · Čeština
+                    </Text>
+                  </Pressable>
+                )}
+
+                {lang !== "en" && (
+                  <Pressable
+                    onPress={() => {
+                      void setLang("en");
+                      setLangMenuOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.langDropdownItem,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={[styles.langDropdownText, { color: UI.text }]}>
+                      EN · English
+                    </Text>
+                  </Pressable>
+                )}
+
+                {lang !== "pl" && (
+                  <Pressable
+                    onPress={() => {
+                      void setLang("pl");
+                      setLangMenuOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.langDropdownItem,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={[styles.langDropdownText, { color: UI.text }]}>
+                      PL · Polski
+                    </Text>
+                  </Pressable>
+                )}
+
+                {lang !== "de" && (
+                  <Pressable
+                    onPress={() => {
+                      void setLang("de");
+                      setLangMenuOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.langDropdownItem,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={[styles.langDropdownText, { color: UI.text }]}>
+                      DE · Deutsch
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
           </View>
 
           {/* INPUTS */}
@@ -414,12 +473,12 @@ try {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
 
-  container: {
-    flex: 1,
-    paddingHorizontal: 22,
-    paddingTop: 54,
-    paddingBottom: 90,
-  },
+container: {
+  flex: 1,
+  paddingHorizontal: 22,
+  paddingTop: 96,
+  paddingBottom: 90,
+},
 
   logoWrap: {
     alignItems: "flex-start",
@@ -476,6 +535,45 @@ const styles = StyleSheet.create({
   langBtnText: {
     fontSize: 13,
     fontWeight: "900",
+  },
+
+langDropdownWrap: {
+  position: "absolute",
+  top: 50,
+  right: 22,
+  zIndex: 50,
+},
+
+  langDropdownBtn: {
+    minWidth: 120,
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  langDropdownMenu: {
+    position: "absolute",
+    top: 44,
+    left: 0,
+    right: 0,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+    zIndex: 100,
+  },
+
+  langDropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+
+  langDropdownText: {
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   inputWrap: {
