@@ -39,6 +39,12 @@ import { useTheme } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  loadNotificationSettings,
+  saveNotificationSettings,
+  type NotificationSettings,
+} from "../../lib/notificationSettings";
+import {
   EmailAuthProvider,
   deleteUser,
   reauthenticateWithCredential,
@@ -818,6 +824,9 @@ const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
 const [sharedInvitesLoading, setSharedInvitesLoading] = useState(false);
 
 const [shareAchievementsWithFriends, setShareAchievementsWithFriends] = useState(true);
+const [notificationsOpen, setNotificationsOpen] = useState(false);
+const [notificationSettings, setNotificationSettings] =
+  useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
 
   const [friendStatsOpen, setFriendStatsOpen] = useState(false);
   const [selectedFriendName, setSelectedFriendName] = useState("");
@@ -880,6 +889,45 @@ const [shareAchievementsWithFriends, setShareAchievementsWithFriends] = useState
 
 
   // --- EFFECTS ---
+
+  useEffect(() => {
+  let cancelled = false;
+
+  (async () => {
+    const settings = await loadNotificationSettings();
+    if (!cancelled) {
+      setNotificationSettings(settings);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+const updateNotificationSetting = async (
+  key: keyof NotificationSettings,
+  value: boolean
+) => {
+  const next = {
+    ...notificationSettings,
+    [key]: value,
+  };
+
+  setNotificationSettings(next);
+
+  try {
+    await saveNotificationSettings(next);
+  } catch {
+    showPwdPopup(
+      "error",
+      lang === "cs" ? "Oznámení" : "Notifications",
+      lang === "cs"
+        ? "Nepodařilo se uložit nastavení oznámení."
+        : "Could not save notification settings."
+    );
+  }
+};
 
   useEffect(() => {
     let mounted = true;
@@ -2253,6 +2301,103 @@ const incomingCount = friendEdges.filter(
         </View>
       </Modal>
 
+            {/* ✅ MODAL – Oznámení */}
+      <Modal
+        visible={notificationsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNotificationsOpen(false)}
+      >
+        <Pressable
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          onPress={() => setNotificationsOpen(false)}
+        />
+
+        <View
+          style={[
+            styles.sheet,
+            {
+              height: "58%",
+              backgroundColor: isDark ? UI.sheetBg : "#FFE0C2",
+              borderColor: isDark ? UI.sheetStroke : "#FF8A1F",
+            },
+          ]}
+        >
+          <View style={styles.sheetHeader}>
+            <Text style={[styles.sheetTitle, { color: UI.text }]}>
+              {lang === "cs" ? "Oznámení" : "Notifications"}
+            </Text>
+
+            <Pressable
+              onPress={() => setNotificationsOpen(false)}
+              style={({ pressed }) => [
+                styles.closeBtn,
+                { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
+            </Pressable>
+          </View>
+
+          <View
+            style={[
+              styles.infoCard,
+              { borderColor: UI.stroke, backgroundColor: UI.card },
+            ]}
+          >
+            {[
+              {
+                key: "challengeReminders" as const,
+                title: lang === "cs" ? "Notifikace výzev" : "Challenge reminders",
+              },
+              {
+                key: "friendRequests" as const,
+                title: lang === "cs" ? "Žádosti o přátelství" : "Friend requests",
+              },
+              {
+                key: "incomingChallenges" as const,
+                title: lang === "cs" ? "Když mě někdo vyzve" : "When someone challenges me",
+              },
+              {
+                key: "sharedChallenges" as const,
+                title: lang === "cs" ? "Společné výzvy" : "Shared challenges",
+              },
+
+{
+  key: "friendCompletedSharedChallenge" as const,
+  title:
+    lang === "cs"
+      ? "Když kamarád splní společnou výzvu"
+      : lang === "pl"
+      ? "Gdy znajomy ukończy wspólne wyzwanie"
+      : lang === "de"
+      ? "Wenn ein Freund eine gemeinsame Challenge abschließt"
+      : "When a friend completes a shared challenge",
+},
+
+            ].map((item) => (
+              <View
+                key={item.key}
+                style={[
+                  styles.modalRow,
+                  { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                ]}
+              >
+                <Text style={[styles.modalLabel, { color: UI.text, flex: 1 }]}>
+                  {item.title}
+                </Text>
+
+                <Switch
+                  value={notificationSettings[item.key]}
+                  onValueChange={(v) => updateNotificationSetting(item.key, v)}
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
       {/* ✅ MODAL – Informace */}
       <Modal
         visible={infoOpen}
@@ -2488,54 +2633,54 @@ const incomingCount = friendEdges.filter(
                     {p.streakFlamesInfo}
                   </Text>
 
-                  <Text style={[styles.infoTitle, { color: UI.text, marginTop: 16 }]}>
-                    Medaile
-                  </Text>
-                  <Text style={[styles.infoText, { color: UI.sub, marginTop: 6 }]}>
-                    {lang === "cs" ? "Každá výzva si počítá medaile podle tvé nejdelší série:" : "Each challenge awards medals based on your longest streak:"}
-                  </Text>
+                 <Text style={[styles.infoTitle, { color: UI.text, marginTop: 16 }]}>
+  {p.medals}
+</Text>
+<Text style={[styles.infoText, { color: UI.sub, marginTop: 6 }]}>
+  {p.medalsIntro}
+</Text>
 
                   <View style={styles.medalsGrid}>
                     {[
                       {
                         key: "brambora",
                         days: 10,
-                        title: lang === "cs" ? "Brambora" : "Potato",
+                        title: p.medalPotato,
                         desc: p.medalPotatoDesc,
                         img: require("../../assets/medals/potato_medal.png"),
                       },
                       {
                         key: "steel",
                         days: 30,
-                        title: lang === "cs" ? "Ocel" : "Steel",
+                        title: p.medalSteel,
                        desc: p.medalSteelDesc,
                         img: require("../../assets/medals/steel_medal.png"),
                       },
                       {
                         key: "bronze",
                         days: 45,
-                        title: lang === "cs" ? "Bronz" : "Bronze",
+                        title: p.medalBronze,
                        desc: p.medalBronzeDesc,
                         img: require("../../assets/medals/bronze_medal.png"),
                       },
                       {
                         key: "silver",
                         days: 90,
-                        title: lang === "cs" ? "Stříbro" : "Silver",
+                       title: p.medalSilver,
                        desc: p.medalSilverDesc,
                         img: require("../../assets/medals/silver_medal.png"),
                       },
                       {
                         key: "gold",
                         days: 180,
-                        title: lang === "cs" ? "Zlato" : "Gold",
+                        title: p.medalGold,
                         desc: p.medalGoldDesc,
                         img: require("../../assets/medals/gold_medal.png"),
                       },
                       {
                         key: "diamond",
                         days: 365,
-                        title: lang === "cs" ? "Diamant" : "Diamond",
+                        title: p.medalDiamond,
                      desc: p.medalDiamondDesc,
                         img: require("../../assets/medals/diamond_medal.png"),
                       },
@@ -4381,6 +4526,20 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
           <Text style={[styles.bigItemText, { color: UI.text }]}>{p.info}</Text>
           <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
         </Pressable>
+
+        <Pressable
+  onPress={() => setNotificationsOpen(true)}
+  style={({ pressed }) => [
+    styles.bigItem,
+    { borderColor: UI.stroke, backgroundColor: UI.card },
+    pressed && { opacity: 0.88 },
+  ]}
+>
+  <Text style={[styles.bigItemText, { color: UI.text }]}>
+    {lang === "cs" ? "Oznámení" : "Notifications"}
+  </Text>
+  <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
+</Pressable>
 
                <Pressable
           onPress={() => {

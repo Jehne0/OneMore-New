@@ -39,11 +39,23 @@ import { useTodayISO } from "../../lib/clock";
 import { auth, db } from "../../lib/firebase";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import {
+  DEFAULT_SHARED_NOTIFICATION_SETTING,
+  hasAnyActiveSharedNotification,
+  hasOtherActiveSharedNotification,
+  loadSharedNotificationSetting,
+  saveSharedNotificationSetting,
+  type SharedNotificationSetting,
+} from "../../lib/sharedNotificationSettings";
+import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
+import {
+  clearSharedRemindersForChallenge,
+  setSharedRemindersForChallenge,
+} from "../../lib/sharedReminders";
 import {
   AppState,
   ensureDailyPick,
@@ -880,6 +892,9 @@ export default function Index() {
 const TXT = useMemo(() => {
   if (lang === "en") {
     return {
+      sharedNotificationsSaved: "Notifications for shared challenge saved.",
+sharedNotificationsOff: "Notifications for shared challenge turned off.",
+notificationCount: "Number of notifications",
       welcomeBack: "Welcome back",
       premium: "Premium",
       free: "Free",
@@ -954,6 +969,9 @@ const TXT = useMemo(() => {
 
   if (lang === "pl") {
     return {
+      sharedNotificationsSaved: "Powiadomienia dla wspólnego wyzwania zapisane.",
+sharedNotificationsOff: "Powiadomienia dla wspólnego wyzwania wyłączone.",
+notificationCount: "Liczba powiadomień",
       welcomeBack: "Witaj z powrotem",
       premium: "Premium",
       free: "Free",
@@ -1028,6 +1046,9 @@ const TXT = useMemo(() => {
 
   if (lang === "de") {
     return {
+      sharedNotificationsSaved: "Benachrichtigungen für gemeinsame Challenge gespeichert.",
+sharedNotificationsOff: "Benachrichtigungen für gemeinsame Challenge deaktiviert.",
+notificationCount: "Anzahl der Benachrichtigungen",
       welcomeBack: "Willkommen zurück",
       premium: "Premium",
       free: "Free",
@@ -1102,6 +1123,9 @@ const TXT = useMemo(() => {
   }
 
   return {
+    sharedNotificationsSaved: "Notifikace pro společnou výzvu byly uloženy.",
+sharedNotificationsOff: "Notifikace pro společnou výzvu byly vypnuty.",
+notificationCount: "Počet notifikací",
     welcomeBack: "Vítej zpět",
     premium: "Premium",
     free: "Free",
@@ -1354,6 +1378,32 @@ const TXT = useMemo(() => {
   const [reorderMode, setReorderMode] = useState(false);
   const [expandedSharedId, setExpandedSharedId] = useState<string | null>(null);
 
+  const [sharedMenuOpen, setSharedMenuOpen] = useState(false);
+const [selectedSharedMenu, setSelectedSharedMenu] =
+  useState<SharedChallenge | null>(null);
+
+const [sharedNotificationOpen, setSharedNotificationOpen] = useState(false);
+const [sharedNotificationSetting, setSharedNotificationSetting] =
+  useState<SharedNotificationSetting>(DEFAULT_SHARED_NOTIFICATION_SETTING);
+
+function openSharedMenu(item: SharedChallenge) {
+  setSelectedSharedMenu(item);
+  setSharedMenuOpen(true);
+}
+
+function closeSharedMenu() {
+  setSharedMenuOpen(false);
+  setSelectedSharedMenu(null);
+}
+
+async function openSharedNotificationSettings() {
+  if (!selectedSharedMenu?.id) return;
+
+  const setting = await loadSharedNotificationSetting(selectedSharedMenu.id);
+  setSharedNotificationSetting(setting);
+  setSharedNotificationOpen(true);
+}
+
   const managed = useMemo(() => {
     if (!manageId) return null;
     return (appState?.challenges ?? []).find((c: any) => String(c.id) === String(manageId)) as any;
@@ -1373,6 +1423,10 @@ const TXT = useMemo(() => {
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [timePickerIndex, setTimePickerIndex] = useState(0);
   const [timePickerValue, setTimePickerValue] = useState(new Date());
+
+  const [sharedTimePickerOpen, setSharedTimePickerOpen] = useState(false);
+const [sharedTimePickerIndex, setSharedTimePickerIndex] = useState(0);
+const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
 
   const openManage = useCallback(
     (id: string) => {
@@ -1583,13 +1637,15 @@ const TXT = useMemo(() => {
     const maxN = Math.min(10, target);
     const times = (manageRemTimes ?? []).slice(0, clamp(manageRemCount, 1, maxN));
 
-    if (!premium && manageRemEnabled) {
-      const activeId = getFreeActiveReminderChallengeId(appState as any);
-      if (activeId && String(activeId) !== id) {
-        Alert.alert(TXT.notifications, TXT.notificationFreeLimit);
-        return;
-      }
-    }
+   if (!premium && manageRemEnabled) {
+  const activeId = getFreeActiveReminderChallengeId(appState as any);
+  const anySharedActive = await hasAnyActiveSharedNotification();
+
+  if ((activeId && String(activeId) !== id) || anySharedActive) {
+    Alert.alert(TXT.notifications, TXT.notificationFreeLimit);
+    return;
+  }
+}
 
     await persist((latest) => {
       const nextChallenges = (latest.challenges ?? []).map((c: any) => {
@@ -2646,7 +2702,7 @@ useEffect(() => {
 
               {manageRemEnabled && (
                 <>
-                  <Text style={styles.modalHint}>Počet notifikací: max {Math.min(20, manageTarget)}</Text>
+                  <Text style={styles.modalHint}>{TXT.notificationCount}: max {Math.min(20, manageTarget)}</Text>
 
                   <View style={styles.pills}>
                     {Array.from({ length: Math.min(20, manageTarget) }, (_, i) => i + 1).map((n) => {
@@ -2801,6 +2857,41 @@ useEffect(() => {
         </Pressable>
       </Modal>
 
+{sharedTimePickerOpen && (
+  <DateTimePicker
+    value={sharedTimePickerValue}
+    mode="time"
+    is24Hour
+    display="spinner"
+    onChange={(e: DateTimePickerEvent, date?: Date) => {
+      if (e.type === "dismissed") {
+        setSharedTimePickerOpen(false);
+        return;
+      }
+
+      const d = date ?? sharedTimePickerValue;
+      const hh = pad2(d.getHours());
+      const mm = pad2(d.getMinutes());
+
+      setSharedNotificationSetting((prev) => {
+        const nextTimes = Array.isArray(prev.times) ? [...prev.times] : [];
+
+        while (nextTimes.length <= sharedTimePickerIndex) {
+          nextTimes.push(nowHM());
+        }
+
+        nextTimes[sharedTimePickerIndex] = `${hh}:${mm}`;
+
+        return {
+          ...prev,
+          times: nextTimes,
+        };
+      });
+
+      setSharedTimePickerOpen(false);
+    }}
+  />
+)}
       <Modal
         visible={historyOpen}
         transparent
@@ -2897,6 +2988,292 @@ useEffect(() => {
         </Pressable>
       </Modal>
 
+      <Modal
+        visible={sharedMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeSharedMenu}
+      >
+        <Pressable style={styles.backdrop} onPress={closeSharedMenu}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: UI.accent }]}>
+                {selectedSharedMenu?.title ?? TXT.sharedChallenge}
+              </Text>
+
+              <Pressable
+                onPress={closeSharedMenu}
+                style={({ pressed }) => [
+                  styles.closeBtn,
+                  pressed && { opacity: 0.88 },
+                ]}
+              >
+                <Text style={styles.closeText}>{TXT.close}</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+  onPress={() => {
+    setSharedMenuOpen(false);
+    setTimeout(() => {
+      openSharedNotificationSettings();
+    }, 200);
+  }}
+              style={({ pressed }) => [
+                styles.secondaryBtn,
+                pressed && { opacity: 0.88 },
+              ]}
+            >
+              <Ionicons name="notifications" size={18} color={UI.text} />
+              <Text style={styles.secondaryBtnText}>{TXT.notifications}</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                const item = selectedSharedMenu;
+                closeSharedMenu();
+                if (item) confirmLeaveShared(item);
+              }}
+              style={({ pressed }) => [
+                styles.dangerBtn,
+                pressed && { opacity: 0.88 },
+              ]}
+            >
+              <Ionicons name="exit-outline" size={18} color="#fff" />
+              <Text style={styles.dangerBtnText}>{TXT.leave}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={sharedNotificationOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSharedNotificationOpen(false)}
+      >
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => setSharedNotificationOpen(false)}
+        >
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: UI.accent }]}>
+                {TXT.notifications}
+              </Text>
+
+              <Pressable
+                onPress={() => setSharedNotificationOpen(false)}
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}
+              >
+                <Text style={styles.closeText}>{TXT.close}</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.modalRow}>
+              <Text style={[styles.modalLabel, { color: UI.text }]}>
+                {TXT.notifications}
+              </Text>
+
+              <Switch
+                value={sharedNotificationSetting.enabled}
+                onValueChange={(v) => {
+                  setSharedNotificationSetting((prev) => ({
+                    ...prev,
+                    enabled: v,
+                    count: v ? Math.max(1, prev.count || 1) : 1,
+                    times: v ? prev.times : [],
+                  }));
+                }}
+              />
+            </View>
+
+            {sharedNotificationSetting.enabled && (
+              <>
+                <Text style={styles.modalHint}>
+                  {TXT.notificationCount}
+                </Text>
+
+                <View style={styles.pills}>
+                  {Array.from(
+  { length: Math.max(1, Number(selectedSharedMenu?.targetPerDay ?? 1)) },
+  (_, i) => i + 1
+).map((n) => {
+                    const active = sharedNotificationSetting.count === n;
+
+                    return (
+                      <Pressable
+                        key={n}
+                        onPress={() => {
+                          setSharedNotificationSetting((prev) => {
+                            const nextTimes = [...(prev.times ?? [])];
+
+                            while (nextTimes.length < n) {
+                              nextTimes.push(nowHM());
+                            }
+
+                            return {
+                              ...prev,
+                              count: n,
+                              times: nextTimes.slice(0, n),
+                            };
+                          });
+                        }}
+                        style={({ pressed }) => [
+                          styles.pill,
+                          active && styles.pillActive,
+                          pressed && { opacity: 0.9 },
+                        ]}
+                      >
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                          #{n}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {Array.from(
+                  { length: sharedNotificationSetting.count },
+                  (_, i) => i
+                ).map((i) => {
+                  const value = sharedNotificationSetting.times?.[i] ?? nowHM();
+
+                  return (
+                    <Pressable
+                      key={i}
+                     onPress={() => {
+  setSharedTimePickerIndex(i);
+
+  const [hh, mm] = String(value).split(":").map(Number);
+  const d = new Date();
+
+  if (Number.isFinite(hh)) d.setHours(hh);
+  if (Number.isFinite(mm)) d.setMinutes(mm);
+
+  setSharedTimePickerValue(d);
+  setSharedTimePickerOpen(true);
+}}
+                      style={({ pressed }) => [
+                        styles.timeRow,
+                        pressed && { opacity: 0.9 },
+                      ]}
+                    >
+                      <Text style={[styles.timeIndex, { color: UI.text }]}>
+                        #{i + 1}
+                      </Text>
+                      <Text style={{ color: UI.text, fontWeight: "900" }}>
+                        {value}
+                      </Text>
+                      <Ionicons name="time" size={18} color={UI.text} />
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
+
+            <Pressable
+            onPress={async () => {
+  if (!selectedSharedMenu?.id) return;
+
+  if (!premium && sharedNotificationSetting.enabled) {
+    const normalActiveId = getFreeActiveReminderChallengeId(appState as any);
+    const otherSharedActive = await hasOtherActiveSharedNotification(
+      selectedSharedMenu.id
+    );
+
+    if (normalActiveId || otherSharedActive) {
+      Alert.alert(
+        TXT.notifications,
+        TXT.notificationFreeLimit
+      );
+      return;
+    }
+  }
+
+await saveSharedNotificationSetting(
+  selectedSharedMenu.id,
+  sharedNotificationSetting
+);
+
+try {
+  // vždy nejdřív smaž staré
+  await clearSharedRemindersForChallenge(
+    selectedSharedMenu.id
+  );
+
+  if (sharedNotificationSetting.enabled && sharedNotificationSetting.times.length) {
+    await setSharedRemindersForChallenge(
+      selectedSharedMenu.id,
+      selectedSharedMenu.title ?? "Shared challenge",
+      sharedNotificationSetting.times
+    );
+  }
+} catch (e) {
+  Alert.alert(
+    TXT.notifications,
+    TXT.notificationsFailed
+  );
+}
+
+                setSharedNotificationOpen(false);
+
+                Alert.alert(
+                  TXT.notifications,
+                  sharedNotificationSetting.enabled
+                    ? TXT.sharedNotificationsSaved
+                    : TXT.sharedNotificationsOff
+                );
+              }}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>
+                {TXT.saveNotifications}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {sharedTimePickerOpen && (
+  <DateTimePicker
+    value={sharedTimePickerValue}
+    mode="time"
+    is24Hour
+    display="spinner"
+    onChange={(e: DateTimePickerEvent, date?: Date) => {
+      if (e.type === "dismissed") {
+        setSharedTimePickerOpen(false);
+        return;
+      }
+
+      const d = date ?? sharedTimePickerValue;
+      const hh = pad2(d.getHours());
+      const mm = pad2(d.getMinutes());
+
+      setSharedNotificationSetting((prev) => {
+        const nextTimes = Array.isArray(prev.times) ? [...prev.times] : [];
+
+        while (nextTimes.length <= sharedTimePickerIndex) {
+          nextTimes.push(nowHM());
+        }
+
+        nextTimes[sharedTimePickerIndex] = `${hh}:${mm}`;
+
+        return {
+          ...prev,
+          times: nextTimes,
+        };
+      });
+
+      setSharedTimePickerOpen(false);
+    }}
+  />
+)}
+
       {count === 0 && visibleSharedChallenges.length === 0 ? (
         <View style={styles.center}>
           <View style={styles.searchIconWrap}>
@@ -2950,7 +3327,13 @@ useEffect(() => {
                         <View key={item.id} style={styles.sharedCardOuter}>
                           <View style={styles.sharedCardInner}>
                             <View style={styles.sharedCompactRow}>
-                              <View style={styles.sharedCompactLeft}>
+                              <Pressable
+  onPress={() => openSharedMenu(item)}
+  style={({ pressed }) => [
+    styles.sharedCompactLeft,
+    pressed && { opacity: 0.88 },
+  ]}
+>
                                 
 
                                 <Text style={styles.sharedTitle} numberOfLines={1}>
@@ -2962,17 +3345,8 @@ useEffect(() => {
   item.memberUids.find((uid) => String(uid) !== String(auth.currentUser?.uid ?? "")) ?? ""
 )}`}
                                 </Text>
-                              </View>
+                              </Pressable>
 <View style={styles.sharedActionsRow}>
-  <Pressable
-    onPress={() => confirmLeaveShared(item)}
-    style={({ pressed }) => [
-      styles.sharedLeaveBtn,
-      pressed && { opacity: 0.9 },
-    ]}
-  >
-    <Text style={styles.sharedLeaveBtnText}>{TXT.leave}</Text>
-  </Pressable>
 
   <Pressable
     onPress={() => void markSharedDoneToday(item)}
