@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue, type Transaction } from "firebase-admin/firestore";
 
 //
@@ -163,6 +164,8 @@ async function sendPushToUser(
 
   const tokens = Array.from(tokenSet);
 
+  console.log("[push] uid:", uid, "tokens:", tokens);
+
   if (!tokens.length) {
     console.log("[push] no tokens for uid:", uid);
     return;
@@ -192,6 +195,8 @@ async function sendPushToUser(
 export const requestFriend = onCall({ region: "europe-west1" }, async (request) => {
   const uid = assertAuth(request);
   const otherUid = normUid((request.data ?? {}).otherUid);
+
+  console.log("[requestFriend] called from:", uid, "to:", otherUid);
 
   if (otherUid === uid) throw new HttpsError("invalid-argument", "Nemůžeš přidat sám sebe.");
 
@@ -226,6 +231,8 @@ export const requestFriend = onCall({ region: "europe-west1" }, async (request) 
   });
 
   try {
+    console.log("[requestFriend] sending push from:", uid, "to:", otherUid);
+
     await sendPushToUser(
       otherUid,
       "Nová žádost o přátelství",
@@ -397,5 +404,66 @@ export const sendTestPush = onCall({ region: "europe-west1" }, async (request) =
   return {
     ok: true,
     result: json,
+  };
+});
+
+export const deleteMyAccount = onCall({ region: "europe-west1" }, async (request) => {
+  const uid = assertAuth(request);
+
+  const authTime = Number(request.auth?.token?.auth_time ?? 0);
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  if (!authTime || nowSec - authTime > 300) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Z bezpečnostních důvodů se prosím znovu přihlas a potom účet smaž."
+    );
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.exists ? (userSnap.data() as any) : null;
+
+  const usernameLower = safeStr(
+    userData?.profile?.usernameLower ?? userData?.usernameLower,
+    128
+  );
+
+  if (usernameLower) {
+    const usernameRef = db.collection("usernames").doc(usernameLower);
+    const usernameSnap = await usernameRef.get();
+
+    if (!usernameSnap.exists || String(usernameSnap.data()?.uid ?? "") === uid) {
+      await usernameRef.delete().catch(() => {});
+    }
+  }
+
+  await db.collection("publicProfiles").doc(uid).delete().catch(() => {});
+
+  const myFriendsSnap = await db.collection("friends").doc(uid).collection("list").get();
+
+  await Promise.all(
+    myFriendsSnap.docs.map(async (friendDoc) => {
+      const otherUid = friendDoc.id;
+
+      await db
+        .collection("friends")
+        .doc(otherUid)
+        .collection("list")
+        .doc(uid)
+        .delete()
+        .catch(() => {});
+    })
+  );
+
+  await db.recursiveDelete(db.collection("friends").doc(uid)).catch(() => {});
+  await db.recursiveDelete(userRef).catch(() => {});
+
+  await getAuth().deleteUser(uid);
+
+  return {
+    ok: true,
+    deletedUid: uid,
+    deletedUsername: usernameLower || null,
   };
 });

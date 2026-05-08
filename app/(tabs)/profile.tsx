@@ -1448,94 +1448,94 @@ const noScaleText = {
       return;
     }
 
-    setDeleteWorking(true);
+  setDeleteWorking(true);
+  try {
+    // 1) reauth — uživatel zadá heslo, aby bylo smazání bezpečné
+    const cred = EmailAuthProvider.credential(user.email, pwd);
+    await reauthenticateWithCredential(user, cred);
+
+    // 2) kompletní smazání účtu přes Cloud Function
+    // Backend smaže:
+    // - Firebase Auth účet
+    // - users/{uid}
+    // - usernames/{usernameLower}
+    // - publicProfiles/{uid}
+    // - friends vazby
+    // - pushTokens
+    await user.getIdToken(true);
+
+    const fn = httpsCallable(functions, "deleteMyAccount");
+    await fn();
+
+    // 3) úklid lokálních dat
     try {
-      // 1) reauth (řeší “musím mazat 2×”)
-      const cred = EmailAuthProvider.credential(user.email, pwd);
-      await reauthenticateWithCredential(user, cred);
+      await revenueCatLogout();
+    } catch {
+      // ignore
+    }
 
-      // 2) najdi usernameLower z users/{uid}.profile
-      const uid = user.uid;
-      let usernameLower: string | null = null;
-      try {
-        const snap = await getDoc(doc(db, "users", uid));
-        const u = snap.exists() ? snap.data()?.profile?.usernameLower : null;
-        if (typeof u === "string" && u.trim()) usernameLower = u.trim();
-      } catch {}
+    try {
+      await signOut(auth);
+    } catch {
+      // ignore
+    }
 
-      // 3) smaž registry username (uvolnění jména)
-      if (usernameLower) {
-        try {
-          await deleteDoc(doc(db, "usernames", usernameLower));
-        } catch (e) {
-          console.log("delete username doc failed", e);
-        }
-      }
+    await clearOneMoreStorage();
 
-      // 4) smaž user dokument
-      try {
-        await deleteDoc(doc(db, "users", uid));
-      } catch (e) {
-        console.log("delete user doc failed", e);
-      }
+    // zavřeme modaly + přesměrujeme
+    setDeleteOpen(false);
+    setAccountOpen(false);
+    router.replace("/login");
+  } catch (err: any) {
+    const code = String(err?.code ?? "");
+    console.log("performDeleteAccount error", code, err);
 
-      // 5) (volitelně) smaž další cloud data, pokud máš
-      try {
-        await deleteCloudUserDoc(uid);
-      } catch {
-        // ignore
-      }
+    if (code.includes("auth/wrong-password")) {
+      showPwdPopup(
+        "error",
+        lang === "cs" ? "Špatné heslo" : "Wrong password",
+        lang === "cs"
+          ? "Zadal jsi špatné heslo. Zkus to znovu."
+          : "You entered the wrong password. Try again."
+      );
+      return;
+    }
 
-      // 6) smaž Auth účet (teď už nepůjde přihlásit)
-      await deleteUser(user);
-
-      // 7) uklid lokální data
-      await clearOneMoreStorage();
-
-      // zavřeme modaly + přesměrujeme
-      setDeleteOpen(false);
-      setAccountOpen(false);
-      router.replace("/login");
-    } catch (err: any) {
-      const code = String(err?.code ?? "");
-      console.log("performDeleteAccount error", code, err);
-
-      if (code.includes("auth/wrong-password")) {
-        showPwdPopup(
-          "error",
-          lang === "cs" ? "Špatné heslo" : "Wrong password",
-          lang === "cs" ? "Zadal jsi špatné heslo. Zkus to znovu." : "You entered the wrong password. Try again."
-        );
-        return;
-      }
-
-      if (code.includes("auth/requires-recent-login")) {
-        setDeleteOpen(false);
-        showPwdPopup(
-          "error",
-          lang === "cs" ? "Vyžadováno znovu přihlášení" : "Re-login required",
-          lang === "cs" ? "Z bezpečnostních důvodů se musíš znovu přihlásit a pak smazání zopakovat. Odhlásím tě teď." : "For security reasons, you need to sign in again and then repeat the deletion. I will sign you out now."
-        );
-        try {
-          await revenueCatLogout();
-          await signOut(auth);
-        } finally {
-          await clearOneMoreStorage();
-          router.replace("/login");
-        }
-        return;
-      }
-
+    if (
+      code.includes("auth/requires-recent-login") ||
+      code.includes("functions/failed-precondition") ||
+      code.includes("failed-precondition")
+    ) {
       setDeleteOpen(false);
       showPwdPopup(
         "error",
-        lang === "cs" ? "Smazání se nepovedlo" : "Deletion failed",
-        lang === "cs" ? "Nepodařilo se smazat účet. Zkus to prosím znovu." : "Could not delete the account. Please try again."
+        lang === "cs" ? "Vyžadováno znovu přihlášení" : "Re-login required",
+        lang === "cs"
+          ? "Z bezpečnostních důvodů se musíš znovu přihlásit a pak smazání zopakovat. Odhlásím tě teď."
+          : "For security reasons, you need to sign in again and then repeat the deletion. I will sign you out now."
       );
-    } finally {
-      setDeleteWorking(false);
+      try {
+        await revenueCatLogout();
+        await signOut(auth);
+      } finally {
+        await clearOneMoreStorage();
+        router.replace("/login");
+      }
+      return;
     }
-  };
+
+    setDeleteOpen(false);
+    showPwdPopup(
+      "error",
+      lang === "cs" ? "Smazání se nepovedlo" : "Deletion failed",
+      lang === "cs"
+        ? "Nepodařilo se smazat účet. Zkus to prosím znovu."
+        : "Could not delete the account. Please try again."
+    );
+  } finally {
+    setDeleteWorking(false);
+  }
+};
 
   const openPrivacyLink = async () => {
     const url = PRIVACY_URL;
