@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "1082535851082",
+    "firebase_url": "https://onemore-ca918-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "onemore-ca918",
+    "storage_bucket": "onemore-ca918.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1082535851082:android:8a9ddc58a504b199cb22b3",
+        "android_client_info": {
+          "package_name": "com.anonymous.OneMore"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1082535851082-otisl18tp78svuvsanp6clsjdqkdqomb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjh0TFGGmqIRgBWM-ZqS70PAi4E-0rTWg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1082535851082-otisl18tp78svuvsanp6clsjdqkdqomb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

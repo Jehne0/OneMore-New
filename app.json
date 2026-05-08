@@ -2,23 +2,24 @@
   "expo": {
     "name": "OneMore",
     "slug": "OneMore",
- "plugins": [
-  "expo-router",
-  [
-    "expo-splash-screen",
-    {
-      "image": "./assets/images/splash-icon.png",
-      "imageWidth": 200,
-      "resizeMode": "contain",
-      "backgroundColor": "#0B1220",
-      "dark": {
-        "backgroundColor": "#0B1220"
-      }
-    }
-  ],
-  "expo-font",
-  "expo-notifications"
-],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B1220",
+          "dark": {
+            "backgroundColor": "#0B1220"
+          }
+        }
+      ],
+      "expo-font",
+      "expo-notifications",
+      "expo-web-browser"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon/icon.png",
@@ -28,15 +29,16 @@
     "ios": {
       "supportsTablet": true
     },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/icon/icon.png"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.OneMore"
-    },
+  "android": {
+  "googleServicesFile": "./google-services.json",
+  "adaptiveIcon": {
+    "backgroundColor": "#E6F4FE",
+    "foregroundImage": "./assets/icon/icon.png"
+  },
+  "edgeToEdgeEnabled": true,
+  "predictiveBackGestureEnabled": false,
+  "package": "com.anonymous.OneMore"
+},
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"

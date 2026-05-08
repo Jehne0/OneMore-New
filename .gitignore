@@ -13,3 +13,6 @@ build/
 .env.*
 android/
 ios/
+# Firebase / FCM private service account keys
+fcm-service-account.json
+*firebase-adminsdk*.json
