@@ -3,6 +3,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { fetchCloudState, writeCloudState } from "./cloud";
 import { loadState, saveState, subscribeState, type AppState } from "./storage";
+import { registerPushTokenForCurrentUser } from "./pushTokens";
 
 const LOCAL_UPDATED_AT_KEY = "onemore_local_updatedAtISO";
 
@@ -120,12 +121,18 @@ export function initCloudSync() {
 
     if (!user) return;
 
-    try {
-      await syncNow();
-    } catch {
-      // ignore
-    }
+try {
+  await syncNow();
+} catch {
+  // ignore
+}
 
-    startCloudAutoSync();
+try {
+  await registerPushTokenForCurrentUser();
+} catch (e) {
+  console.log("Push token error:", e);
+}
+
+startCloudAutoSync();
   });
 }

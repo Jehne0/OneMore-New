@@ -9,6 +9,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn();
       allow write: if isMe(uid);
+
+      match /pushTokens/{token} {
+        allow read, write: if isMe(uid);
+      }
     }
 
     // Public profiles

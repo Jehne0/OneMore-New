@@ -42,7 +42,6 @@ export const sendSupportEmail = onCall(
       throw new HttpsError("invalid-argument", "Chybí e-mail / předmět / zpráva.");
     }
 
-    // 1) vždy uložíme ticket (funguje i bez e-mail providera)
     const ticketRef = await db.collection("supportTickets").add({
       uid: request.auth.uid,
       fromEmail: email,
@@ -53,7 +52,6 @@ export const sendSupportEmail = onCall(
       app: "OneMore",
     });
 
-    // 2) pokus o odeslání e-mailu přes Resend (pokud je nastavený secret)
     let emailSent = false;
     let emailError: string | null = null;
 
@@ -82,7 +80,6 @@ export const sendSupportEmail = onCall(
           text: `UID: ${request.auth.uid}\nReply-to: ${email}\nTicket: ${ticketRef.id}\n\n${message}`,
         });
 
-        // Resend obvykle vrací { id: "..." }
         resendId = typeof result?.id === "string" ? result.id : null;
         console.log("[support] resend result:", result);
 
@@ -96,7 +93,6 @@ export const sendSupportEmail = onCall(
       console.warn("[support] RESEND_API_KEY is missing (secret not loaded).");
     }
 
-    // Uložíme výsledek odeslání do ticketu (ať to jde dohledat v konzoli)
     await ticketRef.set(
       {
         emailSent,
@@ -142,6 +138,57 @@ function setFriendEdge(tx: Transaction, uid: string, otherUid: string, patch: Re
   tx.set(friendEdgeRef(uid, otherUid), patch, { merge: true });
 }
 
+async function sendPushToUser(
+  uid: string,
+  title: string,
+  body: string,
+  data: Record<string, any> = {}
+) {
+  const tokenSet = new Set<string>();
+
+  const userSnap = await db.collection("users").doc(uid).get();
+  const userData = userSnap.exists ? (userSnap.data() as any) : null;
+
+  const directToken = safeStr(userData?.expoPushToken, 500);
+  if (directToken) {
+    tokenSet.add(directToken);
+  }
+
+  const snap = await db.collection("users").doc(uid).collection("pushTokens").get();
+
+  snap.docs.forEach((doc) => {
+    const token = String(doc.data()?.token ?? doc.id).trim();
+    if (token) tokenSet.add(token);
+  });
+
+  const tokens = Array.from(tokenSet);
+
+  if (!tokens.length) {
+    console.log("[push] no tokens for uid:", uid);
+    return;
+  }
+
+  const messages = tokens.map((token) => ({
+    to: token,
+    sound: "default",
+    title,
+    body,
+    data,
+    channelId: "default",
+  }));
+
+  const res = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(messages),
+  });
+
+  const json = await res.json();
+  console.log("[push] sent:", JSON.stringify(json));
+}
+
 export const requestFriend = onCall({ region: "europe-west1" }, async (request) => {
   const uid = assertAuth(request);
   const otherUid = normUid((request.data ?? {}).otherUid);
@@ -177,6 +224,20 @@ export const requestFriend = onCall({ region: "europe-west1" }, async (request) 
       updatedAt: now,
     });
   });
+
+  try {
+    await sendPushToUser(
+      otherUid,
+      "Nová žádost o přátelství",
+      "Máš novou žádost o přátelství.",
+      {
+        type: "friend_request",
+        fromUid: uid,
+      }
+    );
+  } catch (e) {
+    console.error("[push] friend request error:", e);
+  }
 
   return { ok: true };
 });
@@ -219,7 +280,6 @@ export const declineFriend = onCall({ region: "europe-west1" }, async (request) 
   return { ok: true };
 });
 
-// ✅ NOVĚ: Odebrání přítele (symetricky smaže obě strany)
 export const removeFriend = onCall({ region: "europe-west1" }, async (request) => {
   const uid = assertAuth(request);
   const otherUid = normUid((request.data ?? {}).otherUid);
@@ -290,7 +350,6 @@ export const acceptFriendInvite = onCall({ region: "europe-west1" }, async (requ
     const now = FieldValue.serverTimestamp();
     tx.set(inviteRef, { usedBy: uid, usedAt: now }, { merge: true });
 
-    // ✅ Atomicky vytvoříme přátelství (accepted) na obou stranách
     tx.set(
       friendEdgeRef(uid, otherUid),
       { status: "accepted" as FriendStatus, initiatedBy: otherUid, createdAt: now, updatedAt: now },
@@ -304,4 +363,39 @@ export const acceptFriendInvite = onCall({ region: "europe-west1" }, async (requ
   });
 
   return { ok: true, otherUid };
+});
+
+export const sendTestPush = onCall({ region: "europe-west1" }, async (request) => {
+  const uid = assertAuth(request);
+  const token = safeStr((request.data ?? {}).token, 500);
+
+  if (!token) {
+    throw new HttpsError("invalid-argument", "Chybí push token.");
+  }
+
+  const res = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to: token,
+      sound: "default",
+      title: "OneMore",
+      body: "Test push notifikace funguje 🔥",
+      data: {
+        type: "test",
+        uid,
+      },
+    }),
+  });
+
+  const json = await res.json();
+
+  console.log("[push test]", json);
+
+  return {
+    ok: true,
+    result: json,
+  };
 });

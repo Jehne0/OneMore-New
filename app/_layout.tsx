@@ -12,9 +12,19 @@ import { LanguageProvider } from "../lib/i18n";
 import { initClock } from "../lib/clock";
 import { initCloudSync } from "../lib/cloudSync";
 import { AppAlertHost } from "../lib/appAlert";
+import * as Notifications from "expo-notifications";
 
 // ✅ NOVÉ — RevenueCat init
 import { configureRevenueCat } from "../lib/revenuecat";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 const REMEMBER_ME_KEY = "onemore_remember_me";
 

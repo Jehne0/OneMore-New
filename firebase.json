@@ -2,7 +2,25 @@
   "firestore": {
     "rules": "firestore.rules"
   },
-  "functions": {
-    "source": "functions"
-  }
+  "functions": [
+    {
+      "codebase": "default",
+      "source": "functions"
+    },
+    {
+      "source": "push",
+      "codebase": "push",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
 }

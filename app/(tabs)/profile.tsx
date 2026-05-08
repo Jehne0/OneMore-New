@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons, Feather  } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
@@ -1040,6 +1040,9 @@ await Promise.all(
     };
   }, [friendsOpen]);
   
+const seenIncomingInviteIdsRef = useRef<string[]>([]);
+const sharedInvitesInitializedRef = useRef(false);
+
     // ✅ Nepřijaté společné výzvy pro mě
   useEffect(() => {
    
@@ -1106,9 +1109,31 @@ await Promise.all(
           ...nextNames,
         }));
 
-        setSharedInvites(incomingPending);
-        setSentSharedInvites(outgoingPending);
-        setSharedInvitesLoading(false);
+   const nextIncomingIds = incomingPending.map((item) => String(item.id));
+
+if (sharedInvitesInitializedRef.current) {
+  const hasNewInvite = nextIncomingIds.some(
+    (id) => !seenIncomingInviteIdsRef.current.includes(id)
+  );
+
+  if (hasNewInvite) {
+    showPwdPopup(
+      "success",
+      lang === "cs" ? "Nová výzva" : "New challenge",
+      lang === "cs"
+        ? "Máš novou pozvánku do společné výzvy."
+        : "You have a new shared challenge invite."
+    );
+  }
+} else {
+  sharedInvitesInitializedRef.current = true;
+}
+
+seenIncomingInviteIdsRef.current = nextIncomingIds;
+
+setSharedInvites(incomingPending);
+setSentSharedInvites(outgoingPending);
+setSharedInvitesLoading(false);
       },
       () => {
         if (cancelled) return;
@@ -2363,8 +2388,7 @@ const incomingCount = friendEdges.filter(
                 key: "sharedChallenges" as const,
                 title: lang === "cs" ? "Společné výzvy" : "Shared challenges",
               },
-
-{
+              {
   key: "friendCompletedSharedChallenge" as const,
   title:
     lang === "cs"
@@ -2375,7 +2399,7 @@ const incomingCount = friendEdges.filter(
       ? "Wenn ein Freund eine gemeinsame Challenge abschließt"
       : "When a friend completes a shared challenge",
 },
-
+              
             ].map((item) => (
               <View
                 key={item.key}

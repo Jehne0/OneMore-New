@@ -5,6 +5,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { revenueCatLogin } from "../lib/revenuecat";
+import { registerPushTokenForCurrentUser } from "../lib/pushTokens";
 
 const SAVED_LOGIN_KEY = "onemore_saved_login";
 
@@ -23,8 +24,17 @@ export default function Index() {
       ]);
 
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user?.uid) await revenueCatLogin(user.uid);
-      if (cancelled) return;
+  if (user?.uid) {
+    await revenueCatLogin(user.uid);
+
+    try {
+      await registerPushTokenForCurrentUser();
+    } catch (e) {
+      console.log("Push token registration error:", e);
+    }
+  }
+
+  if (cancelled) return;
 
       if (user) {
         setLogged(true);

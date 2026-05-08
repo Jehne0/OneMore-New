@@ -1,6 +1,7 @@
 {
   "projects": {
-    "onemore": "onemore-ca918"
+    "onemore": "onemore-ca918",
+    "default": "onemore-ca918"
   },
   "targets": {},
   "etags": {}
