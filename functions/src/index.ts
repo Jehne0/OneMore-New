@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
@@ -143,12 +144,24 @@ async function sendPushToUser(
   uid: string,
   title: string,
   body: string,
-  data: Record<string, any> = {}
+  data: Record<string, any> = {},
+  requiredSettings: string[] = []
 ) {
   const tokenSet = new Set<string>();
 
   const userSnap = await db.collection("users").doc(uid).get();
   const userData = userSnap.exists ? (userSnap.data() as any) : null;
+
+    const notificationSettings = userData?.notificationSettings ?? {};
+
+  const disabledByUser = requiredSettings.some(
+    (key) => notificationSettings?.[key] === false
+  );
+
+  if (disabledByUser) {
+    console.log("[push] disabled by user settings:", uid, requiredSettings);
+    return;
+  }
 
   const directToken = safeStr(userData?.expoPushToken, 500);
   if (directToken) {
@@ -192,6 +205,39 @@ async function sendPushToUser(
   console.log("[push] sent:", JSON.stringify(json));
 }
 
+function arr(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : [];
+}
+
+async function getUsernameForPush(uid: string): Promise<string> {
+  try {
+    const snap = await db.collection("users").doc(uid).get();
+    const data = snap.exists ? (snap.data() as any) : null;
+
+    return (
+      safeStr(data?.profile?.username, 80) ||
+      safeStr(data?.username, 80) ||
+      "Kamarád"
+    );
+  } catch {
+    return "Kamarád";
+  }
+}
+
+function isSharedDone(v: any): boolean {
+  if (v === true) return true;
+  if (!v || typeof v !== "object") return false;
+
+  return (
+    v.done === true ||
+    v.completed === true ||
+    v.isDone === true ||
+    v.status === "done" ||
+    v.status === "completed" ||
+    !!v.completedAt
+  );
+}
+
 export const requestFriend = onCall({ region: "europe-west1" }, async (request) => {
   const uid = assertAuth(request);
   const otherUid = normUid((request.data ?? {}).otherUid);
@@ -233,14 +279,15 @@ export const requestFriend = onCall({ region: "europe-west1" }, async (request) 
   try {
     console.log("[requestFriend] sending push from:", uid, "to:", otherUid);
 
-    await sendPushToUser(
+      await sendPushToUser(
       otherUid,
       "Nová žádost o přátelství",
       "Máš novou žádost o přátelství.",
       {
         type: "friend_request",
         fromUid: uid,
-      }
+      },
+      ["friendRequests"]
     );
   } catch (e) {
     console.error("[push] friend request error:", e);
@@ -467,3 +514,116 @@ export const deleteMyAccount = onCall({ region: "europe-west1" }, async (request
     deletedUsername: usernameLower || null,
   };
 });
+
+export const notifySharedChallengeCreated = onDocumentCreated(
+  {
+    region: "europe-west1",
+    document: "sharedChallenges/{challengeId}",
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const challengeId = String(event.params.challengeId);
+    const data = snap.data() as any;
+
+    const createdBy = safeStr(data?.createdBy, 128);
+    const memberUids = arr(data?.memberUids);
+
+    if (!createdBy || !memberUids.length) {
+      console.log("[shared invite] missing createdBy/memberUids", challengeId);
+      return;
+    }
+
+    const fromName = await getUsernameForPush(createdBy);
+    const recipients = memberUids.filter((uid) => uid && uid !== createdBy);
+
+    console.log("[shared invite] challenge:", challengeId, "from:", createdBy, "to:", recipients);
+
+    await Promise.all(
+      recipients.map((uid) =>
+         sendPushToUser(
+          uid,
+          "Nová společná výzva",
+          `${fromName} tě vyzval/a ke společné výzvě.`,
+          {
+            type: "shared_challenge_invite",
+            challengeId,
+            fromUid: createdBy,
+          },
+          ["sharedChallenges", "incomingChallenges"]
+        )
+      )
+    );
+  }
+);
+
+export const notifySharedChallengeProgress = onDocumentWritten(
+  {
+    region: "europe-west1",
+    document: "sharedChallenges/{challengeId}/progress/{dateISO}",
+  },
+  async (event) => {
+    const before = event.data?.before?.data() as any | undefined;
+    const after = event.data?.after?.data() as any | undefined;
+
+    if (!after) return;
+
+    const challengeId = String(event.params.challengeId);
+    const dateISO = String(event.params.dateISO);
+
+    const beforeUsers = before?.users ?? {};
+    const afterUsers = after?.users ?? {};
+
+    const newlyCompletedUids = Object.keys(afterUsers).filter((uid) => {
+      const wasDone = isSharedDone(beforeUsers?.[uid]);
+      const isDone = isSharedDone(afterUsers?.[uid]);
+      return !wasDone && isDone;
+    });
+
+    if (!newlyCompletedUids.length) return;
+
+    const challengeSnap = await db.collection("sharedChallenges").doc(challengeId).get();
+    const challenge = challengeSnap.exists ? (challengeSnap.data() as any) : null;
+
+    const memberUids = arr(challenge?.memberUids);
+
+    if (!memberUids.length) {
+      console.log("[shared progress] no memberUids for challenge:", challengeId);
+      return;
+    }
+
+    for (const completedUid of newlyCompletedUids) {
+      const completedName = await getUsernameForPush(completedUid);
+      const recipients = memberUids.filter((uid) => uid && uid !== completedUid);
+
+      console.log(
+        "[shared progress] completed:",
+        completedUid,
+        "challenge:",
+        challengeId,
+        "date:",
+        dateISO,
+        "notify:",
+        recipients
+      );
+
+      await Promise.all(
+        recipients.map((uid) =>
+               sendPushToUser(
+            uid,
+            "Kamarád splnil společnou výzvu",
+            `${completedName} právě splnil/a společnou výzvu.`,
+            {
+              type: "shared_challenge_completed",
+              challengeId,
+              dateISO,
+              completedBy: completedUid,
+            },
+            ["sharedChallenges", "friendCompletedSharedChallenge"]
+          )
+        )
+      );
+    }
+  }
+);

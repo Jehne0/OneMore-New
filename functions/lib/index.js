@@ -33,12 +33,13 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteMyAccount = exports.sendTestPush = exports.acceptFriendInvite = exports.createFriendInvite = exports.blockFriend = exports.removeFriend = exports.declineFriend = exports.acceptFriend = exports.requestFriend = exports.sendSupportEmail = void 0;
+exports.notifySharedChallengeProgress = exports.notifySharedChallengeCreated = exports.deleteMyAccount = exports.sendTestPush = exports.acceptFriendInvite = exports.createFriendInvite = exports.blockFriend = exports.removeFriend = exports.declineFriend = exports.acceptFriend = exports.requestFriend = exports.sendSupportEmail = void 0;
 const https_1 = require("firebase-functions/v2/https");
+const firestore_1 = require("firebase-functions/v2/firestore");
 const params_1 = require("firebase-functions/params");
 const app_1 = require("firebase-admin/app");
 const auth_1 = require("firebase-admin/auth");
-const firestore_1 = require("firebase-admin/firestore");
+const firestore_2 = require("firebase-admin/firestore");
 //
 // Podpora (z aplikace)
 // - vždy uloží ticket do Firestore (admin)
@@ -46,7 +47,7 @@ const firestore_1 = require("firebase-admin/firestore");
 //
 const RESEND_API_KEY = (0, params_1.defineSecret)("RESEND_API_KEY");
 (0, app_1.initializeApp)();
-const db = (0, firestore_1.getFirestore)();
+const db = (0, firestore_2.getFirestore)();
 function safeStr(v, max = 4000) {
     const s = String(v ?? "").trim();
     return s.length > max ? s.slice(0, max) : s;
@@ -67,7 +68,7 @@ exports.sendSupportEmail = (0, https_1.onCall)({ region: "europe-west1", secrets
         fromEmail: email,
         subject,
         message,
-        createdAt: firestore_1.FieldValue.serverTimestamp(),
+        createdAt: firestore_2.FieldValue.serverTimestamp(),
         userAgent: safeStr(request.rawRequest?.headers?.["user-agent"], 500),
         app: "OneMore",
     });
@@ -108,7 +109,7 @@ exports.sendSupportEmail = (0, https_1.onCall)({ region: "europe-west1", secrets
     await ticketRef.set({
         emailSent,
         emailError,
-        updatedAt: firestore_1.FieldValue.serverTimestamp(),
+        updatedAt: firestore_2.FieldValue.serverTimestamp(),
         to,
         from,
         resendId,
@@ -133,10 +134,16 @@ function friendEdgeRef(uid, otherUid) {
 function setFriendEdge(tx, uid, otherUid, patch) {
     tx.set(friendEdgeRef(uid, otherUid), patch, { merge: true });
 }
-async function sendPushToUser(uid, title, body, data = {}) {
+async function sendPushToUser(uid, title, body, data = {}, requiredSettings = []) {
     const tokenSet = new Set();
     const userSnap = await db.collection("users").doc(uid).get();
     const userData = userSnap.exists ? userSnap.data() : null;
+    const notificationSettings = userData?.notificationSettings ?? {};
+    const disabledByUser = requiredSettings.some((key) => notificationSettings?.[key] === false);
+    if (disabledByUser) {
+        console.log("[push] disabled by user settings:", uid, requiredSettings);
+        return;
+    }
     const directToken = safeStr(userData?.expoPushToken, 500);
     if (directToken) {
         tokenSet.add(directToken);
@@ -171,6 +178,33 @@ async function sendPushToUser(uid, title, body, data = {}) {
     const json = await res.json();
     console.log("[push] sent:", JSON.stringify(json));
 }
+function arr(v) {
+    return Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : [];
+}
+async function getUsernameForPush(uid) {
+    try {
+        const snap = await db.collection("users").doc(uid).get();
+        const data = snap.exists ? snap.data() : null;
+        return (safeStr(data?.profile?.username, 80) ||
+            safeStr(data?.username, 80) ||
+            "Kamarád");
+    }
+    catch {
+        return "Kamarád";
+    }
+}
+function isSharedDone(v) {
+    if (v === true)
+        return true;
+    if (!v || typeof v !== "object")
+        return false;
+    return (v.done === true ||
+        v.completed === true ||
+        v.isDone === true ||
+        v.status === "done" ||
+        v.status === "completed" ||
+        !!v.completedAt);
+}
 exports.requestFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
     const uid = assertAuth(request);
     const otherUid = normUid((request.data ?? {}).otherUid);
@@ -188,7 +222,7 @@ exports.requestFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (r
         }
         if (mineStatus === "accepted" || theirStatus === "accepted")
             return;
-        const now = firestore_1.FieldValue.serverTimestamp();
+        const now = firestore_2.FieldValue.serverTimestamp();
         setFriendEdge(tx, uid, otherUid, {
             status: "pending",
             initiatedBy: uid,
@@ -207,7 +241,7 @@ exports.requestFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (r
         await sendPushToUser(otherUid, "Nová žádost o přátelství", "Máš novou žádost o přátelství.", {
             type: "friend_request",
             fromUid: uid,
-        });
+        }, ["friendRequests"]);
     }
     catch (e) {
         console.error("[push] friend request error:", e);
@@ -229,7 +263,7 @@ exports.acceptFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (re
         if (mineStatus === "blocked" || theirStatus === "blocked") {
             throw new https_1.HttpsError("failed-precondition", "Kontakt je blokovaný.");
         }
-        const now = firestore_1.FieldValue.serverTimestamp();
+        const now = firestore_2.FieldValue.serverTimestamp();
         tx.set(mineRef, { status: "accepted", updatedAt: now }, { merge: true });
         tx.set(theirsRef, { status: "accepted", updatedAt: now }, { merge: true });
     });
@@ -257,7 +291,7 @@ exports.blockFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (req
     const uid = assertAuth(request);
     const otherUid = normUid((request.data ?? {}).otherUid);
     await db.runTransaction(async (tx) => {
-        const now = firestore_1.FieldValue.serverTimestamp();
+        const now = firestore_2.FieldValue.serverTimestamp();
         tx.set(friendEdgeRef(uid, otherUid), { status: "blocked", initiatedBy: uid, updatedAt: now, createdAt: now }, { merge: true });
         tx.set(friendEdgeRef(otherUid, uid), { status: "blocked", initiatedBy: uid, updatedAt: now, createdAt: now }, { merge: true });
     });
@@ -268,7 +302,7 @@ exports.createFriendInvite = (0, https_1.onCall)({ region: "europe-west1" }, asy
     const inviteRef = db.collection("friendInvites").doc();
     await inviteRef.set({
         createdBy: uid,
-        createdAt: firestore_1.FieldValue.serverTimestamp(),
+        createdAt: firestore_2.FieldValue.serverTimestamp(),
         usedBy: null,
         usedAt: null,
     });
@@ -293,7 +327,7 @@ exports.acceptFriendInvite = (0, https_1.onCall)({ region: "europe-west1" }, asy
             throw new https_1.HttpsError("invalid-argument", "Tohle je tvoje vlastní pozvánka.");
         if (data?.usedBy)
             throw new https_1.HttpsError("failed-precondition", "Pozvánka už byla použitá.");
-        const now = firestore_1.FieldValue.serverTimestamp();
+        const now = firestore_2.FieldValue.serverTimestamp();
         tx.set(inviteRef, { usedBy: uid, usedAt: now }, { merge: true });
         tx.set(friendEdgeRef(uid, otherUid), { status: "accepted", initiatedBy: otherUid, createdAt: now, updatedAt: now }, { merge: true });
         tx.set(friendEdgeRef(otherUid, uid), { status: "accepted", initiatedBy: otherUid, createdAt: now, updatedAt: now }, { merge: true });
@@ -367,4 +401,66 @@ exports.deleteMyAccount = (0, https_1.onCall)({ region: "europe-west1" }, async 
         deletedUid: uid,
         deletedUsername: usernameLower || null,
     };
+});
+exports.notifySharedChallengeCreated = (0, firestore_1.onDocumentCreated)({
+    region: "europe-west1",
+    document: "sharedChallenges/{challengeId}",
+}, async (event) => {
+    const snap = event.data;
+    if (!snap)
+        return;
+    const challengeId = String(event.params.challengeId);
+    const data = snap.data();
+    const createdBy = safeStr(data?.createdBy, 128);
+    const memberUids = arr(data?.memberUids);
+    if (!createdBy || !memberUids.length) {
+        console.log("[shared invite] missing createdBy/memberUids", challengeId);
+        return;
+    }
+    const fromName = await getUsernameForPush(createdBy);
+    const recipients = memberUids.filter((uid) => uid && uid !== createdBy);
+    console.log("[shared invite] challenge:", challengeId, "from:", createdBy, "to:", recipients);
+    await Promise.all(recipients.map((uid) => sendPushToUser(uid, "Nová společná výzva", `${fromName} tě vyzval/a ke společné výzvě.`, {
+        type: "shared_challenge_invite",
+        challengeId,
+        fromUid: createdBy,
+    }, ["sharedChallenges", "incomingChallenges"])));
+});
+exports.notifySharedChallengeProgress = (0, firestore_1.onDocumentWritten)({
+    region: "europe-west1",
+    document: "sharedChallenges/{challengeId}/progress/{dateISO}",
+}, async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    if (!after)
+        return;
+    const challengeId = String(event.params.challengeId);
+    const dateISO = String(event.params.dateISO);
+    const beforeUsers = before?.users ?? {};
+    const afterUsers = after?.users ?? {};
+    const newlyCompletedUids = Object.keys(afterUsers).filter((uid) => {
+        const wasDone = isSharedDone(beforeUsers?.[uid]);
+        const isDone = isSharedDone(afterUsers?.[uid]);
+        return !wasDone && isDone;
+    });
+    if (!newlyCompletedUids.length)
+        return;
+    const challengeSnap = await db.collection("sharedChallenges").doc(challengeId).get();
+    const challenge = challengeSnap.exists ? challengeSnap.data() : null;
+    const memberUids = arr(challenge?.memberUids);
+    if (!memberUids.length) {
+        console.log("[shared progress] no memberUids for challenge:", challengeId);
+        return;
+    }
+    for (const completedUid of newlyCompletedUids) {
+        const completedName = await getUsernameForPush(completedUid);
+        const recipients = memberUids.filter((uid) => uid && uid !== completedUid);
+        console.log("[shared progress] completed:", completedUid, "challenge:", challengeId, "date:", dateISO, "notify:", recipients);
+        await Promise.all(recipients.map((uid) => sendPushToUser(uid, "Kamarád splnil společnou výzvu", `${completedName} právě splnil/a společnou výzvu.`, {
+            type: "shared_challenge_completed",
+            challengeId,
+            dateISO,
+            completedBy: completedUid,
+        }, ["sharedChallenges", "friendCompletedSharedChallenge"])));
+    }
 });
