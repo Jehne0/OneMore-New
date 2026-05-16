@@ -150,6 +150,10 @@ export type HistoryEntry = {
   challengeId?: string;
   challengeText: string; // snapshot textu v době uložení
   status: "completed" | "skipped";
+
+  // ✅ true = jen dílčí splnění, např. 1/4, 2/4, 3/4
+  // Streak se počítá až při posledním kroku, např. 4/4.
+  partial?: boolean;
 };
 
 
@@ -339,14 +343,15 @@ function migrateHistory(rawHistory: unknown): HistoryEntry[] {
   if (Array.isArray(rawHistory)) {
     return rawHistory
       .filter(Boolean)
-      .map((h: any): HistoryEntry => ({
-        date: String(h.date ?? ""),
-        time: String(h.time ?? ""),
-        atISO: String(h.atISO ?? ""),
-        challengeId: h.challengeId != null ? String(h.challengeId) : undefined,
-        challengeText: String(h.challengeText ?? ""),
-        status: h.status === "skipped" ? "skipped" : "completed",
-      }))
+     .map((h: any): HistoryEntry => ({
+  date: String(h.date ?? ""),
+  time: String(h.time ?? ""),
+  atISO: String(h.atISO ?? ""),
+  challengeId: h.challengeId != null ? String(h.challengeId) : undefined,
+  challengeText: String(h.challengeText ?? ""),
+  status: h.status === "skipped" ? "skipped" : "completed",
+  partial: h.partial === true,
+}))
       .filter((h: HistoryEntry) => !!h.date);
   }
 
@@ -439,7 +444,9 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
 
     lastPickDate: incoming.lastPickDate ?? existing.lastPickDate,
     dailyIds: incoming.dailyIds ?? existing.dailyIds,
-    lastCompletedDate: incoming.lastCompletedDate ?? existing.lastCompletedDate,
+    lastCompletedDate: Object.prototype.hasOwnProperty.call(incoming, "lastCompletedDate")
+  ? incoming.lastCompletedDate
+  : existing.lastCompletedDate,
     lastOpenDate: incoming.lastOpenDate ?? existing.lastOpenDate,
   };
 
@@ -558,11 +565,15 @@ function migrateEverCompletedFromHistory(state: AppState): { next: AppState; cha
   const ever = new Set<string>(state.everCompletedKeys ?? []);
   const before = ever.size;
 
-  for (const h of state.history ?? []) {
-    if (h.status !== "completed") continue;
-    if (h.challengeId) ever.add(`id:${String(h.challengeId)}`);
-    else if (h.challengeText) ever.add(`text:${String(h.challengeText)}`);
-  }
+for (const h of state.history ?? []) {
+  if (h.status !== "completed") continue;
+
+  // ✅ Dílčí splnění typu 1/4 nesmí znamenat "výzva byla někdy splněna".
+  if ((h as any).partial === true) continue;
+
+  if (h.challengeId) ever.add(`id:${String(h.challengeId)}`);
+  else if (h.challengeText) ever.add(`text:${String(h.challengeText)}`);
+}
 
   if (ever.size === before) return { next: state, changed: false };
   return { next: { ...state, everCompletedKeys: Array.from(ever) }, changed: true };
@@ -1016,17 +1027,43 @@ export async function markTodayCompleted(): Promise<AppState> {
   const state = await ensureDailyPick();
   const today = getTodayISO();
 
-  // pokud už je dnešek completed pro daily pick, neřešíme
-  if (state.lastCompletedDate === today) return state;
-
-  const nextStreak = state.lastCompletedDate === yesterdayISO() ? state.streak + 1 : 1;
-
   const pickedId = state.dailyIds?.[0];
-  const pickedText = pickedId
-    ? state.challenges.find((c) => c.id === pickedId)?.text ?? "(smazaná výzva)"
-    : "(bez výzvy)";
+
+  const pickedChallenge = pickedId
+    ? state.challenges.find((c) => String(c.id) === String(pickedId))
+    : undefined;
+
+  const pickedText = pickedChallenge?.text ?? "(smazaná výzva)";
+
+  const rawTarget = Number(pickedChallenge?.targetPerDay ?? 1);
+  const targetPerDay =
+    Number.isFinite(rawTarget) && rawTarget > 0 ? Math.floor(rawTarget) : 1;
+
+  const completedToday = (state.history ?? []).filter((h: any) => {
+    const sameDay = h.date === today;
+    const sameId = String(h.challengeId ?? "") === String(pickedId ?? "");
+    return sameDay && sameId && h.status === "completed";
+  }).length;
+
+  // ✅ Už je dnes splněno celé, další kliknutí nic nepřidá.
+  if (completedToday >= targetPerDay) {
+    return state;
+  }
+
+  const nextCompletedToday = Math.min(targetPerDay, completedToday + 1);
+  const isFullyCompletedNow = nextCompletedToday >= targetPerDay;
+
+  const dayAlreadyCounted = state.lastCompletedDate === today;
+
+  const nextStreak =
+    dayAlreadyCounted
+      ? state.streak
+      : state.lastCompletedDate === yesterdayISO()
+        ? state.streak + 1
+        : 1;
 
   const now = new Date();
+
   const entry: HistoryEntry = {
     date: today,
     time: timeHM(now),
@@ -1034,26 +1071,59 @@ export async function markTodayCompleted(): Promise<AppState> {
     challengeId: pickedId,
     challengeText: pickedText,
     status: "completed",
+
+    // ✅ pokud ještě není dosažen target, je to jen dílčí progress
+    partial: !isFullyCompletedNow,
   };
 
-  // ✅ FIX: nemažeme celý dnešek, jen záznam pro stejnou výzvu (pickedId) v dnešní den
+  // ✅ odstraníme jen dnešní skipped pro stejnou výzvu,
+  // ale completed/progress záznamy necháme, aby šlo počítat 1/4, 2/4, 3/4, 4/4.
   const filtered = (state.history ?? []).filter((h) => {
     const sameDay = h.date === today;
     const sameId = String(h.challengeId ?? "") === String(pickedId ?? "");
-    return !(sameDay && sameId);
+    const isSkipped = h.status === "skipped";
+
+    return !(sameDay && sameId && isSkipped);
   });
 
-  // ✅ trvalý záznam (nikdy neubírat)
-  const key = pickedId ? `id:${String(pickedId)}` : `text:${String(pickedText ?? "(bez výzvy)")}`;
   const ever = new Set<string>(state.everCompletedKeys ?? []);
-  ever.add(key);
+
+  if (isFullyCompletedNow) {
+    const key = pickedId
+      ? `id:${String(pickedId)}`
+      : `text:${String(pickedText ?? "(bez výzvy)")}`;
+
+    ever.add(key);
+  }
+
+const fixedLastCompletedDate =
+  isFullyCompletedNow
+    ? today
+    : state.lastCompletedDate === today
+      ? undefined
+      : state.lastCompletedDate;
+
+const fixedStreak =
+  isFullyCompletedNow
+    ? nextStreak
+    : state.lastCompletedDate === today
+      ? Math.max(0, (state.streak ?? 0) - 1)
+      : state.streak;
 
   const updated: AppState = {
     ...state,
-    lastCompletedDate: today,
-    streak: nextStreak,
-    challengeStats: pickedId ? updateStatsOnCompleted(state, String(pickedId), today) : state.challengeStats,
+
+    // ✅ streak / lastCompletedDate se nastaví až při 4/4, ne při 1/4
+lastCompletedDate: fixedLastCompletedDate,
+streak: fixedStreak,
+
+    challengeStats:
+      isFullyCompletedNow && pickedId
+        ? updateStatsOnCompleted(state, String(pickedId), today)
+        : state.challengeStats,
+
     history: [entry, ...filtered],
+
     everCompletedKeys: Array.from(ever),
   };
 

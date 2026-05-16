@@ -7,15 +7,25 @@ function pickOne<T>(arr: T[]): T | null {
 }
 
 function isTodayClosed(state: AppState, today: string): boolean {
-  // 1) robustně přes historii
   const hist = (state as any).history;
+
   if (Array.isArray(hist)) {
-    // pokud existuje jakýkoliv záznam pro dnešek (completed/skipped), bereme den jako uzavřený (kvůli daily picku)
-    const e = hist.find((h: any) => h?.date === today && (h.status === "completed" || h.status === "skipped"));
+    const e = hist.find((h: any) => {
+      if (h?.date !== today) return false;
+
+      // skipped = den je uzavřený
+      if (h.status === "skipped") return true;
+
+      // completed = den je uzavřený jen pokud to NENÍ dílčí progress 1/4, 2/4...
+      if (h.status === "completed" && h.partial !== true) return true;
+
+      return false;
+    });
+
     if (e) return true;
   }
 
-  // 2) fallback: starší kompatibilita přes lastCompletedDate
+  // fallback pro starší data
   if ((state as any).lastCompletedDate === today) return true;
 
   return false;

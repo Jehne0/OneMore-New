@@ -28,6 +28,7 @@ import {
 } from "../../lib/sharedChallenges";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  configureRevenueCat,
   getOfferingPackages,
   openCancelSubscription,
   purchasePackage,
@@ -938,6 +939,22 @@ const updateNotificationSetting = async (
       unsub?.();
     };
   }, []);
+useEffect(() => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+
+  (async () => {
+    try {
+      await configureRevenueCat();
+      console.log("[RevenueCat] configured from profile screen");
+    } catch (e: any) {
+      console.log("[RevenueCat] configure error from profile screen", {
+        code: String(e?.code ?? ""),
+        message: String(e?.message ?? e),
+      });
+    }
+  })();
+}, [auth.currentUser?.uid]);
 
   // ✅ Načíst můj username do headeru (z profilu)
   useEffect(() => {
@@ -1356,28 +1373,80 @@ const noScaleText = {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, t]);
 
-  const buyPremium = async () => {
-    if (premiumBusy) return;
-    setPremiumBusy(true);
-    try {
-      const pkgs = await getOfferingPackages();
-      if (!pkgs.length) {
-        Alert.alert(
-          p.premium,
-          lang === "cs"
-            ? "Balíčky Premium nejsou dostupné. (V Test Store se ujisti, že máš nastavené Offering/Package v RevenueCat.)"
-            : "Premium packages are not available. (In Test Store, make sure your Offering/Package is configured in RevenueCat.)"
-        );
-        return;
-      }
-      await purchasePackage(pkgs[0]);
-      Alert.alert(p.premium, lang === "cs" ? "Premium aktivováno." : "Premium activated.");
-    } catch {
-      Alert.alert(p.premium, lang === "cs" ? "Nepodařilo se aktivovat Premium." : "Could not activate Premium.");
-    } finally {
-      setPremiumBusy(false);
+const buyPremium = async () => {
+  if (premiumBusy) return;
+  setPremiumBusy(true);
+
+  try {
+    const pkgs = await getOfferingPackages();
+
+    console.log("[RevenueCat] packages count:", pkgs.length);
+    console.log(
+      "[RevenueCat] packages:",
+      pkgs.map((x: any) => ({
+        identifier: x?.identifier,
+        productId: x?.product?.identifier,
+        title: x?.product?.title,
+        price: x?.product?.priceString,
+      }))
+    );
+
+    if (!pkgs.length) {
+      Alert.alert(
+        p.premium,
+        lang === "cs"
+          ? "Balíčky Premium nejsou dostupné. RevenueCat nevrátil žádný package."
+          : "Premium packages are not available. RevenueCat returned no package."
+      );
+      return;
     }
-  };
+
+
+    await purchasePackage(pkgs[0]);
+
+    Alert.alert(
+      p.premium,
+      lang === "cs" ? "Premium aktivováno." : "Premium activated."
+    );
+   } catch (e: any) {
+    let fullJson = "";
+
+    try {
+      fullJson = JSON.stringify(e, null, 2);
+    } catch {
+      fullJson = "JSON stringify failed";
+    }
+
+    const code = String(e?.code ?? "none");
+    const message = String(e?.message ?? e ?? "none");
+    const underlying = String(
+      e?.underlyingErrorMessage ||
+        e?.userInfo?.underlyingErrorMessage ||
+        e?.userInfo?.NSUnderlyingError ||
+        "none"
+    );
+
+    const debugMessage =
+      "PROFILE_BUY_PREMIUM_DETAIL\n\n" +
+      "code: " +
+      code +
+      "\n\nmessage:\n" +
+      message +
+      "\n\nunderlying:\n" +
+      underlying +
+      "\n\nFULL:\n" +
+      fullJson;
+
+    console.log("[RevenueCat Premium error FULL]", debugMessage);
+
+    Alert.alert(
+      lang === "cs" ? "Premium chyba DETAIL" : "Premium error DETAIL",
+      debugMessage
+    );
+  } finally {
+    setPremiumBusy(false);
+  }
+};
 
   const cancelPremiumNow = async () => {
     if (premiumBusy) return;

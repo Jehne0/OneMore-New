@@ -29,16 +29,19 @@
     "ios": {
       "supportsTablet": true
     },
-  "android": {
-  "googleServicesFile": "./google-services.json",
-  "adaptiveIcon": {
-    "backgroundColor": "#E6F4FE",
-    "foregroundImage": "./assets/icon/icon.png"
-  },
-  "edgeToEdgeEnabled": true,
-  "predictiveBackGestureEnabled": false,
-  "package": "com.anonymous.OneMore"
-},
+    "android": {
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/icon/icon.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.OneMore",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"

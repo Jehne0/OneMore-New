@@ -4,10 +4,10 @@ export type MedalTier = "bronze" | "silver" | "gold";
 export type MedalCounts = Record<MedalTier, number>;
 
 export type ProfileStats = {
-  longestStreak: number; // nejdelší streak (globálně podle dnů "completed")
-  totalCompletedDays: number; // kolikrát bylo "completed" (unikátní dny)
-  daysWithAnyEntry: number; // kolik dní má záznam (completed nebo skipped)
-  medalCounts: MedalCounts; // kolik medailí jakého typu
+  longestStreak: number; // nejdelší streak globálně podle plně completed dnů
+  totalCompletedDays: number; // počet unikátních plně splněných dnů
+  daysWithAnyEntry: number; // kolik dní má jakýkoliv záznam
+  medalCounts: MedalCounts;
 };
 
 // ✅ tolerantní typ: i kdyby TS tvrdil, že AppState nemá medals, my s tím umíme pracovat
@@ -23,22 +23,36 @@ function diffDaysISO(aISO: string, bISO: string): number {
 }
 
 /**
+ * ✅ Dílčí splnění 1/4, 2/4, 3/4 se NESMÍ počítat jako hotový den.
+ * Hotový den je jen completed, které nemá partial === true.
+ */
+function isFullCompleted(h: HistoryEntry): boolean {
+  return h.status === "completed" && (h as any).partial !== true;
+}
+
+/**
  * Když by se v historii někdy objevily duplicity stejného dne,
- * vezmeme poslední (nejnovější) záznam pro dané datum.
+ * vezmeme poslední nejnovější záznam pro dané datum.
  */
 function dedupeByDate(history: HistoryEntry[]): HistoryEntry[] {
   const map = new Map<string, HistoryEntry>();
+
   for (const h of history ?? []) {
     if (!h?.date) continue;
+
     const prev = map.get(h.date);
+
     if (!prev) {
       map.set(h.date, h);
-    } else {
-      const a = String(prev.atISO ?? "");
-      const b = String(h.atISO ?? "");
-      map.set(h.date, b > a ? h : prev);
+      continue;
     }
+
+    const a = String(prev.atISO ?? "");
+    const b = String(h.atISO ?? "");
+
+    map.set(h.date, b > a ? h : prev);
   }
+
   return Array.from(map.values());
 }
 
@@ -52,42 +66,52 @@ export function getMedalCounts(state: AppStateWithMedals): MedalCounts {
   const counts: MedalCounts = { bronze: 0, silver: 0, gold: 0 };
 
   const medals = state.medals ?? [];
+
   for (const m of medals) {
     if (m?.tier === "gold") counts.gold++;
     else if (m?.tier === "silver") counts.silver++;
     else if (m?.tier === "bronze") counts.bronze++;
   }
+
   return counts;
 }
 
 export function getTotalCompletedDays(state: AppStateWithMedals): number {
   const history = sortByDateAsc(dedupeByDate(state.history ?? []));
   const completedDates = new Set<string>();
+
   for (const h of history) {
-    if (h.status === "completed") completedDates.add(h.date);
+    if (isFullCompleted(h)) {
+      completedDates.add(h.date);
+    }
   }
+
   return completedDates.size;
 }
 
 export function getDaysWithAnyEntry(state: AppStateWithMedals): number {
   const history = sortByDateAsc(dedupeByDate(state.history ?? []));
   const anyDates = new Set<string>();
+
   for (const h of history) {
     if (h.status === "completed" || h.status === "skipped") {
       anyDates.add(h.date);
     }
   }
+
   return anyDates.size;
 }
 
 /**
- * Nejdelší streak globálně: počítáme po sobě jdoucí dny,
- * kde byl stav "completed". (Skipped streak nepřidá.)
+ * Nejdelší streak globálně:
+ * počítáme jen po sobě jdoucí dny, kde byl den PLNĚ completed.
+ * Dílčí progress 1/4, 2/4, 3/4 se nepočítá.
  */
 export function getLongestStreak(state: AppStateWithMedals): number {
   const history = sortByDateAsc(dedupeByDate(state.history ?? []));
+
   const completedDates = history
-    .filter((h) => h.status === "completed")
+    .filter(isFullCompleted)
     .map((h) => h.date);
 
   if (completedDates.length === 0) return 0;
