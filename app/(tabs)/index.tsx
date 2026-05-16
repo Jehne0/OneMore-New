@@ -2157,88 +2157,141 @@ useEffect(() => {
     return days;
   }, [selectedId, tdy, dayIndex]);
 
-  async function markDoneToday(challengeId: string) {
-    if (!appState) return;
+ async function markDoneToday(challengeId: string) {
+  if (!appState) return;
 
-    const challenge = (appState.challenges ?? []).find((c) => String(c.id) === String(challengeId));
-    if (challenge && !isChallengeActiveToday(challenge)) {
-      Alert.alert(TXT.freeDay, TXT.freeRelax);
-      return;
-    }
-    const target = Number((challenge as any)?.targetPerDay ?? 1);
-    const targetSafe = Number.isFinite(target) && target > 0 ? Math.floor(target) : 1;
+  const challenge = (appState.challenges ?? []).find(
+    (c) => String(c.id) === String(challengeId)
+  );
 
-    const todayDone = (appState.history ?? []).filter(
-      (h: any) => String(h?.challengeId) === String(challengeId) && h?.date === tdy && h?.status === "completed"
-    ).length;
-
-    if (todayDone >= targetSafe) return;
-
-    const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-    const cleaned = (appState.history ?? []).filter(
-      (h: any) => !(String(h?.challengeId) === String(challengeId) && h?.date === tdy && h?.status === "skipped")
-    );
-
-    const ever = new Set<string>((appState.everCompletedKeys ?? []).map(String));
-    ever.add(`id:${String(challengeId)}`);
-
-    const next: AppState = {
-      ...appState,
-      challengeStats: updateStatsOnCompleted(appState, String(challengeId), tdy),
-      history: [
-        {
-          date: tdy,
-          time: hhmm,
-          atISO: now.toISOString(),
-          challengeId,
-          challengeText: challenge?.text ?? "(smazaná výzva)",
-          status: "completed",
-        },
-        ...cleaned,
-      ],
-      everCompletedKeys: Array.from(ever),
-    };
-
-    setAppState(next);
-    await saveState(next);
-
-    const isDayCompleteNext = (() => {
-      const enabled = (next.challenges ?? []).filter((c: any) => c.enabled !== false);
-      const visible = premium ? enabled : enabled.slice(0, FREE_MAX);
-
-      for (const c of visible as any[]) {
-        const cid = String(c?.id ?? "");
-        if (!cid) continue;
-        const t = Number(c?.targetPerDay ?? 1);
-        const target = Number.isFinite(t) && t > 0 ? Math.floor(t) : 1;
-
-        const completed = (next.history ?? []).filter(
-          (h: any) => String(h?.challengeId) === cid && h?.date === tdy && h?.status === "completed"
-        ).length;
-
-        if (completed < target) return false;
-      }
-      return visible.length > 0;
-    })();
-
-    if (isDayCompleteNext) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      heroPulse.setValue(0);
-      sparkle.setValue(0);
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(heroPulse, { toValue: 1, duration: 220, useNativeDriver: true }),
-          Animated.timing(heroPulse, { toValue: 0, duration: 320, useNativeDriver: true }),
-        ]),
-        Animated.timing(sparkle, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ]).start(() => {
-        sparkle.setValue(0);
-      });
-    }
+  if (challenge && !isChallengeActiveToday(challenge)) {
+    Alert.alert(TXT.freeDay, TXT.freeRelax);
+    return;
   }
+
+  const target = Number((challenge as any)?.targetPerDay ?? 1);
+  const targetSafe = Number.isFinite(target) && target > 0 ? Math.floor(target) : 1;
+
+  const todayDone = (appState.history ?? []).filter(
+    (h: any) =>
+      String(h?.challengeId) === String(challengeId) &&
+      h?.date === tdy &&
+      h?.status === "completed"
+  ).length;
+
+  if (todayDone >= targetSafe) return;
+
+  const nextDone = todayDone + 1;
+  const completesDay = nextDone >= targetSafe;
+
+  const now = new Date();
+  const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(
+    now.getMinutes()
+  ).padStart(2, "0")}`;
+
+  const cleaned = (appState.history ?? []).filter(
+    (h: any) =>
+      !(
+        String(h?.challengeId) === String(challengeId) &&
+        h?.date === tdy &&
+        h?.status === "skipped"
+      )
+  );
+
+  const ever = new Set<string>((appState.everCompletedKeys ?? []).map(String));
+
+  // Důležité:
+  // 1/3 a 2/3 jsou jen dílčí splnění.
+  // Ohýnek, medaile a "držím se 1. den" se započítají až při 3/3.
+  if (completesDay) {
+    ever.add(`id:${String(challengeId)}`);
+  }
+
+  const next: AppState = {
+    ...appState,
+
+    // Streak/statistiky upravíme až ve chvíli, kdy je splněný celý den.
+    challengeStats: completesDay
+      ? updateStatsOnCompleted(appState, String(challengeId), tdy)
+      : appState.challengeStats,
+
+    history: [
+      {
+        date: tdy,
+        time: hhmm,
+        atISO: now.toISOString(),
+        challengeId,
+        challengeText: challenge?.text ?? "(smazaná výzva)",
+        status: "completed",
+        partial: !completesDay,
+      },
+      ...cleaned,
+    ],
+
+    // Kvůli starší kompatibilitě nastavujeme lastCompletedDate až při úplném dokončení dne.
+    lastCompletedDate: completesDay ? tdy : appState.lastCompletedDate,
+
+    everCompletedKeys: Array.from(ever),
+  };
+
+  setAppState(next);
+  await saveState(next);
+
+  const isDayCompleteNext = (() => {
+    const enabled = (next.challenges ?? []).filter((c: any) => c.enabled !== false);
+    const visible = premium ? enabled : enabled.slice(0, FREE_MAX);
+
+    for (const c of visible as any[]) {
+      const cid = String(c?.id ?? "");
+      if (!cid) continue;
+
+      if (!isChallengeActiveOnDate(c, tdy)) continue;
+
+      const t = Number(c?.targetPerDay ?? 1);
+      const target = Number.isFinite(t) && t > 0 ? Math.floor(t) : 1;
+
+      const completed = (next.history ?? []).filter(
+        (h: any) =>
+          String(h?.challengeId) === cid &&
+          h?.date === tdy &&
+          h?.status === "completed"
+      ).length;
+
+      if (completed < target) return false;
+    }
+
+    return visible.length > 0;
+  })();
+
+  if (isDayCompleteNext) {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    heroPulse.setValue(0);
+    sparkle.setValue(0);
+
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(heroPulse, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heroPulse, {
+          toValue: 0,
+          duration: 320,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(sparkle, {
+        toValue: 1,
+        duration: 900,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      sparkle.setValue(0);
+    });
+  }
+}
 
   const persistOrderOptimistic = useCallback((nextOrderedVisible: any[]) => {
     setListData(nextOrderedVisible);

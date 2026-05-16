@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   ActivityIndicator,
   Image,
   Linking,
@@ -16,6 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Alert } from "../../lib/appAlert";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   acceptSharedChallenge,
