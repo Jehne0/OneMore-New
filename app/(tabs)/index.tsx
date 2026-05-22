@@ -86,6 +86,7 @@ const MEDAL_GOLD = require("../../assets/medals/gold_medal.png");
 const MEDAL_DIAMOND = require("../../assets/medals/diamond_medal.png");
 
 const FREE_MAX = 2;
+const FREE_SHARED_MAX = 1;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -3355,7 +3356,8 @@ try {
                   <View style={styles.sharedWrap}>
                     <Text style={styles.sharedSectionTitle}>{TXT.sharedChallenges}</Text>
 
-                    {visibleSharedChallenges.map((item) => {
+                    {visibleSharedChallenges.map((item, sharedIndex) => {
+  const lockedByFree = !premium && sharedIndex >= FREE_SHARED_MAX;
                       const me = auth.currentUser?.uid ?? "";
                       const memberRows = item.memberUids.map((uid) => {
                         const safeUid = String(uid);
@@ -3381,7 +3383,19 @@ try {
                           <View style={styles.sharedCardInner}>
                             <View style={styles.sharedCompactRow}>
                               <Pressable
-  onPress={() => openSharedMenu(item)}
+  onPress={() => {
+    if (lockedByFree) {
+      Alert.alert(
+        TXT.premium,
+        lang === "cs"
+          ? "Tahle společná výzva je uložená, ale ve Free verzi je zamčená. Obnov Premium a znovu se odemkne."
+          : "This shared challenge is saved, but locked in the Free version. Restore Premium to unlock it again."
+      );
+      return;
+    }
+
+    openSharedMenu(item);
+  }}
   style={({ pressed }) => [
     styles.sharedCompactLeft,
     pressed && { opacity: 0.88 },
@@ -3389,9 +3403,10 @@ try {
 >
                                 
 
-                                <Text style={styles.sharedTitle} numberOfLines={1}>
-                                  {item.title}
-                                </Text>
+                              <Text style={styles.sharedTitle} numberOfLines={1}>
+  {lockedByFree ? "🔒 " : ""}
+  {item.title}
+</Text>
 
                                 <Text style={styles.sharedCompactMeta} numberOfLines={1}>
                                  {`S: ${getSharedDisplayName(
@@ -3401,32 +3416,55 @@ try {
                               </Pressable>
 <View style={styles.sharedActionsRow}>
 
-  <Pressable
-    onPress={() => void markSharedDoneToday(item)}
-    style={({ pressed }) => [
-      styles.sharedDoneBtn,
-      myDoneToday && {
-        backgroundColor: UI.card2,
-        borderColor: UI.stroke,
-        opacity: 0.78,
-      },
-      !activeToday && {
-        backgroundColor: UI.card2,
-        borderColor: UI.stroke,
-        opacity: 0.78,
-      },
-      pressed && !myDoneToday && activeToday && { opacity: 0.9 },
+<Pressable
+  onPress={() => {
+    if (lockedByFree) {
+      Alert.alert(
+        TXT.premium,
+        lang === "cs"
+          ? "Tahle společná výzva je ve Free verzi zamčená. Obnov Premium a můžeš v ní pokračovat."
+          : "This shared challenge is locked in the Free version. Restore Premium to continue."
+      );
+      return;
+    }
+
+    void markSharedDoneToday(item);
+  }}
+  style={({ pressed }) => [
+    styles.sharedDoneBtn,
+    lockedByFree && {
+      backgroundColor: UI.card2,
+      borderColor: UI.stroke,
+      opacity: 0.55,
+    },
+    myDoneToday && {
+      backgroundColor: UI.card2,
+      borderColor: UI.stroke,
+      opacity: 0.78,
+    },
+    !activeToday && {
+      backgroundColor: UI.card2,
+      borderColor: UI.stroke,
+      opacity: 0.78,
+    },
+    pressed && !lockedByFree && !myDoneToday && activeToday && { opacity: 0.9 },
+  ]}
+>
+  <Text
+    style={[
+      styles.sharedDoneBtnText,
+      (lockedByFree || myDoneToday || !activeToday) && { color: UI.sub },
     ]}
   >
-    <Text
-      style={[
-        styles.sharedDoneBtnText,
-        (myDoneToday || !activeToday) && { color: UI.sub },
-      ]}
-    >
-      {myDoneToday ? TXT.done : !activeToday ? TXT.freeDay : TXT.complete}
-    </Text>
-  </Pressable>
+    {lockedByFree
+      ? TXT.premium
+      : myDoneToday
+        ? TXT.done
+        : !activeToday
+          ? TXT.freeDay
+          : TXT.complete}
+  </Text>
+</Pressable>
 </View>
                               <Pressable
                                 onPress={() =>

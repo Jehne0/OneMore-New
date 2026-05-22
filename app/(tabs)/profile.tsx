@@ -1191,7 +1191,21 @@ const sharedChallengeLimitCount = sharedChallenges.filter((item) => {
 const freeSharedLimitReached =
   !premium && sharedChallengeLimitCount >= 1;
 
-  
+  const FREE_ACTIVE_FRIENDS_LIMIT = 1;
+
+function isFriendLockedInFree(index: number) {
+  return !premium && index >= FREE_ACTIVE_FRIENDS_LIMIT;
+}
+
+function showPremiumLock(message?: string) {
+  Alert.alert(
+    p.premium,
+    message ??
+      (lang === "cs"
+        ? "Tahle položka je uložená, ale ve Free verzi je zamčená. Obnov Premium a znovu se odemkne."
+        : "This item is saved, but locked in the Free version. Restore Premium to unlock it again.")
+  );
+}
 
 const me = auth.currentUser?.uid ?? "";
 
@@ -3654,68 +3668,116 @@ const incomingCount = friendEdges.filter(
   </Text>
 ) : (
   <>
-    {accepted.map((e) => (
-      <View
-        key={"acc_" + e.otherUid}
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: 10,
-          gap: 12,
+  {accepted.map((e, index) => {
+  const lockedByFree = !premium && index >= 1;
+
+  return (
+    <View
+      key={"acc_" + e.otherUid}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: 10,
+        gap: 12,
+        opacity: lockedByFree ? 0.55 : 1,
+      }}
+    >
+      <Pressable
+        onPress={() => {
+          if (lockedByFree) {
+            Alert.alert(
+              p.premium,
+              lang === "cs"
+                ? "Tento přítel je ve Free verzi zamčený. Obnov Premium a znovu se odemkne."
+                : "This friend is locked in the Free version. Restore Premium to unlock it again."
+            );
+            return;
+          }
+
+          void openFriendStats(e.otherUid);
         }}
+        style={({ pressed }) => [
+          { flex: 1, marginRight: 8 },
+          pressed && { opacity: 0.85 },
+        ]}
       >
-               <Pressable
-          onPress={() => void openFriendStats(e.otherUid)}
-          style={({ pressed }) => [
-            { flex: 1, marginRight: 8 },
-            pressed && { opacity: 0.85 },
-          ]}
+        <Text
+          style={{ color: UI.text, fontWeight: "900" }}
+          numberOfLines={1}
         >
+          {lockedByFree ? "🔒 " : ""}
+          {getShownFriendName(e.otherUid)}
+        </Text>
+
+        {lockedByFree && (
           <Text
-            style={{ color: UI.text, fontWeight: "900" }}
+            style={{
+              color: UI.sub,
+              fontWeight: "800",
+              fontSize: 12,
+              marginTop: 2,
+            }}
             numberOfLines={1}
           >
-            {getShownFriendName(e.otherUid)}
+            {lang === "cs"
+              ? "Zamčeno ve Free verzi"
+              : "Locked in Free version"}
+          </Text>
+        )}
+      </Pressable>
+
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <Pressable
+          onPress={() => {
+            if (lockedByFree) {
+              Alert.alert(
+                p.premium,
+                lang === "cs"
+                  ? "Tohoto přítele můžeš znovu používat po obnovení Premium."
+                  : "You can use this friend again after restoring Premium."
+              );
+              return;
+            }
+
+            openChallengeInvite(e.otherUid);
+          }}
+          style={({ pressed }) => [
+            styles.smallBtn,
+            (lockedByFree || freeSharedLimitReached) && { opacity: 0.55 },
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          <Text style={styles.smallBtnText}>
+            {lockedByFree ? p.premium : p.invite}
           </Text>
         </Pressable>
 
-        <View style={{ flexDirection: "row", gap: 10 }}>
         <Pressable
-  onPress={() => openChallengeInvite(e.otherUid)}
-style={({ pressed }) => [
-  styles.smallBtn,
-  freeSharedLimitReached && { opacity: 0.55 },
-  pressed && { opacity: 0.9 },
-]}
->
-            <Text style={styles.smallBtnText}>{p.invite}</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={async () => {
-              try {
-                setFriendsBusy(true);
-                await removeFriend(e.otherUid);
-              } catch (err: any) {
-               Alert.alert(
-  p.friends,
-  err?.message ?? p.removeFriendFailed
-);
-              } finally {
-                setFriendsBusy(false);
-              }
-            }}
-            style={({ pressed }) => [
-              styles.smallBtnGhost,
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.smallBtnGhostText}>{p.remove}</Text>
-          </Pressable>
-        </View>
+          onPress={async () => {
+            try {
+              setFriendsBusy(true);
+              await removeFriend(e.otherUid);
+            } catch (err: any) {
+              Alert.alert(
+                p.friends,
+                err?.message ?? p.removeFriendFailed
+              );
+            } finally {
+              setFriendsBusy(false);
+            }
+          }}
+          style={({ pressed }) => [
+            styles.smallBtnGhost,
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          <Text style={styles.smallBtnGhostText}>{p.remove}</Text>
+        </Pressable>
       </View>
-    ))}
+    </View>
+  );
+})}
   </>
 )}
 
@@ -4191,47 +4253,57 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
               </Text>
 
               <View style={styles.challengePills}>
-                {friendEdges
-                  .filter((e) => e.status === "accepted")
-                  .map((e) => {
-                    const uid = String(e.otherUid);
-                    const active = challengeInviteFriendUids.includes(uid);
-                    const disabled =
-                      !active &&
-                      challengeInviteFriendUids.length >= MAX_SHARED_MEMBERS - 1;
+         {friendEdges
+  .filter((e) => e.status === "accepted")
+  .map((e, index) => {
+    const uid = String(e.otherUid);
+    const active = challengeInviteFriendUids.includes(uid);
+    const lockedByFree = isFriendLockedInFree(index);
 
-                    return (
-                      <Pressable
-                        key={uid}
-                        onPress={() => {
-                          setChallengeInviteFriendUids((prev) => {
-                            const has = prev.includes(uid);
-                            if (has) return prev.filter((x) => x !== uid);
-                            if (prev.length >= MAX_SHARED_MEMBERS - 1) return prev;
-                            return [...prev, uid];
-                          });
-                        }}
-                        style={({ pressed }) => [
-                          styles.challengePill,
-                          {
-                            borderColor: active ? UI.accent : UI.stroke,
-                            backgroundColor: active ? UI.accent : UI.card2,
-                            opacity: disabled ? 0.45 : 1,
-                          },
-                          pressed && { opacity: disabled ? 0.45 : 0.9 },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.challengePillText,
-                            { color: active ? "#0B1220" : UI.text },
-                          ]}
-                        >
-                          {getShownFriendName(uid)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+    const disabled =
+      lockedByFree ||
+      (!active && challengeInviteFriendUids.length >= MAX_SHARED_MEMBERS - 1);
+
+    return (
+      <Pressable
+        key={uid}
+        onPress={() => {
+          if (lockedByFree) {
+            showPremiumLock(p.freeFriendsLimit);
+            return;
+          }
+
+          if (disabled) return;
+
+          setChallengeInviteFriendUids((prev) => {
+            const has = prev.includes(uid);
+            if (has) return prev.filter((x) => x !== uid);
+            if (prev.length >= MAX_SHARED_MEMBERS - 1) return prev;
+            return [...prev, uid];
+          });
+        }}
+        style={({ pressed }) => [
+          styles.challengePill,
+          {
+            borderColor: active ? UI.accent : UI.stroke,
+            backgroundColor: active ? UI.accent : UI.card2,
+            opacity: disabled ? 0.45 : 1,
+          },
+          pressed && { opacity: disabled ? 0.45 : 0.9 },
+        ]}
+      >
+        <Text
+          style={[
+            styles.challengePillText,
+            { color: active ? "#0B1220" : UI.text },
+          ]}
+        >
+          {lockedByFree ? "🔒 " : ""}
+          {getShownFriendName(uid)}
+        </Text>
+      </Pressable>
+    );
+  })}
               </View>
 
               <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 12 }]}>
