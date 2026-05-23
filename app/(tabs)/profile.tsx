@@ -2710,229 +2710,230 @@ const incomingCount = friendEdges.filter(
               </View>
 
               <View style={styles.iconGrid}>
-                <Pressable
-                  onPress={() => setInfoScreen("freeprem")}
-                  style={({ pressed }) => [
-                    styles.iconTile,
-                    { borderColor: UI.stroke, backgroundColor: UI.card },
-                    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      {
-                        backgroundColor: "rgba(255,138,31,0.18)",
-                        borderColor: "rgba(255,138,31,0.35)",
-                      },
-                    ]}
-                  >
-                    
-                    <Ionicons name="sparkles" size={26} color={UI.accent} />
-                  </View>
-                  <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-                    Free & Premium
-                  </Text>
-                  <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
-                    {p.limitsBenefits}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setInfoScreen("streak_medals")}
-                  style={({ pressed }) => [
-                    styles.iconTile,
-                    { borderColor: UI.stroke, backgroundColor: UI.card },
-                    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      {
-                        backgroundColor: "rgba(255,138,31,0.18)",
-                        borderColor: "rgba(255,138,31,0.35)",
-                      },
-                    ]}
-                  >
-                    <Ionicons name="flame" size={26} color={UI.accent} />
-                  </View>
-                  <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-                    {p.streaksMedals}
-                  </Text>
-                  <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
-                    {p.streaksRewards}
-                  </Text>
-                </Pressable>
-
-
-                <Pressable
-                  onPress={() => setInfoScreen("privacy")}
-                  style={({ pressed }) => [
-                    styles.iconTile,
-                    { borderColor: UI.stroke, backgroundColor: UI.card },
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      { backgroundColor: UI.card2, borderColor: UI.stroke },
-                    ]}
-                  >
-                    <Ionicons name="shield-checkmark" size={24} color={UI.accent} />
-                  </View>
-                  <Text style={[styles.iconTileText, { color: UI.text }]}>
-                    {p.privacy}
-                  </Text>
-                </Pressable>
-
-<Pressable
-  onPress={() => {
-  if (!premium) {
-    Alert.alert(
-      p.premium,
-      lang === "cs"
-        ? "Historie výzev je dostupná v Premium. Tvoje historie se nemaže, jen je ve Free verzi zamčená."
-        : "Challenge history is available in Premium. Your history is not deleted, it is only locked in the Free version."
-    );
-    return;
-  }
-
-  setInfoOpen(false);
-  router.push("/history");
-}}
-
-  style={({ pressed }) => [
-    styles.iconTile,
-    {
-      borderColor: UI.stroke,
-      backgroundColor: UI.card,
-    },
-    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-  ]}
->
-  <View
-    style={[
-      styles.iconCircle,
-      {
-        backgroundColor: "rgba(255,138,31,0.18)",
-        borderColor: "rgba(255,138,31,0.35)",
-      },
-    ]}
-  ><Pressable
-  onPress={() => setInfoScreen("faq")}
-  style={({ pressed }) => [
-    styles.iconTile,
-    {
-      borderColor: UI.stroke,
-      backgroundColor: UI.card,
-    },
-    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-  ]}
->
-  <View
-    style={[
-      styles.iconCircle,
-      {
-        backgroundColor: "rgba(255,138,31,0.18)",
-        borderColor: "rgba(255,138,31,0.35)",
-      },
+  <Pressable
+    onPress={() => setInfoScreen("freeprem")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
     ]}
   >
-    <Ionicons name="help-circle-outline" size={24} color={UI.accent} />
-  </View>
+    <View
+      style={[
+        styles.iconCircle,
+        {
+          backgroundColor: "rgba(255,138,31,0.18)",
+          borderColor: "rgba(255,138,31,0.35)",
+        },
+      ]}
+    >
+      <Ionicons name="sparkles" size={26} color={UI.accent} />
+    </View>
 
-  <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-    {faqTitle}
-  </Text>
+    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+      Free & Premium
+    </Text>
 
-  <Text
-    style={{
-      color: UI.sub,
-      fontWeight: "700",
-      fontSize: 13,
-      textAlign: "center",
-      lineHeight: 18,
-    }}
+    <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
+      {p.limitsBenefits}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setInfoScreen("streak_medals")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
   >
-    {lang === "cs"
-      ? "Limity, Premium a notifikace"
-      : lang === "pl"
-        ? "Limity, Premium i powiadomienia"
-        : lang === "de"
-          ? "Limits, Premium und Benachrichtigungen"
-          : "Limits, Premium and notifications"}
-  </Text>
-</Pressable>
-    <Ionicons name="time-outline" size={24} color={UI.accent} />
-  </View>
+    <View
+      style={[
+        styles.iconCircle,
+        {
+          backgroundColor: "rgba(255,138,31,0.18)",
+          borderColor: "rgba(255,138,31,0.35)",
+        },
+      ]}
+    >
+      <Ionicons name="flame" size={26} color={UI.accent} />
+    </View>
 
-  <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-  {!premium ? "🔒 " : ""}
-  {p.history}
-</Text>
+    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+      {p.streaksMedals}
+    </Text>
 
-  <Text
-    style={{
-      color: UI.sub,
-      fontWeight: "700",
-      fontSize: 13,
-      textAlign: "center",
-      lineHeight: 18,
-    }}
+    <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
+      {p.streaksRewards}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setInfoScreen("privacy")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
   >
-   {!premium
-  ? lang === "cs"
-    ? "Zamčeno ve Free verzi"
-    : "Locked in Free version"
-  : p.historySubtitle}
-  </Text>
-</Pressable>
-                <Pressable
-                  onPress={() => setInfoScreen("terms")}
-                  style={({ pressed }) => [
-                    styles.iconTile,
-                    { borderColor: UI.stroke, backgroundColor: UI.card },
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      { backgroundColor: UI.card2, borderColor: UI.stroke },
-                    ]}
-                  >
-                    <Ionicons name="document-text" size={24} color={UI.accent} />
-                  </View>
-                  <Text style={[styles.iconTileText, { color: UI.text }]}>
-                    {p.terms}
-                  </Text>
-                </Pressable>
+    <View
+      style={[
+        styles.iconCircle,
+        { backgroundColor: UI.card2, borderColor: UI.stroke },
+      ]}
+    >
+      <Ionicons name="shield-checkmark" size={24} color={UI.accent} />
+    </View>
 
-                <Pressable
-                  onPress={() => setInfoScreen("support")}
-                  style={({ pressed }) => [
-                    styles.iconTile,
-                    { borderColor: UI.stroke, backgroundColor: UI.card },
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      { backgroundColor: UI.card2, borderColor: UI.stroke },
-                    ]}
-                  >
-                    <Ionicons name="mail" size={24} color={UI.accent} />
-                  </View>
-           <Text style={[styles.iconTileText, { color: UI.text }]}>
-  {p.sendQuestion}
-</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
+    <Text style={[styles.iconTileText, { color: UI.text }]}>
+      {p.privacy}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => {
+      if (!premium) {
+        Alert.alert(
+          p.premium,
+          lang === "cs"
+            ? "Historie výzev je dostupná v Premium. Tvoje historie se nemaže, jen je ve Free verzi zamčená."
+            : "Challenge history is available in Premium. Your history is not deleted, it is only locked in the Free version."
+        );
+        return;
+      }
+
+      setInfoOpen(false);
+      router.push("/history");
+    }}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View
+      style={[
+        styles.iconCircle,
+        {
+          backgroundColor: "rgba(255,138,31,0.18)",
+          borderColor: "rgba(255,138,31,0.35)",
+        },
+      ]}
+    >
+      <Ionicons name="time-outline" size={24} color={UI.accent} />
+    </View>
+
+    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+      {!premium ? "🔒 " : ""}
+      {p.history}
+    </Text>
+
+    <Text
+      style={{
+        color: UI.sub,
+        fontWeight: "700",
+        fontSize: 13,
+        textAlign: "center",
+        lineHeight: 18,
+      }}
+    >
+      {!premium
+        ? lang === "cs"
+          ? "Zamčeno ve Free verzi"
+          : "Locked in Free version"
+        : p.historySubtitle}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setInfoScreen("faq")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View
+      style={[
+        styles.iconCircle,
+        {
+          backgroundColor: "rgba(255,138,31,0.18)",
+          borderColor: "rgba(255,138,31,0.35)",
+        },
+      ]}
+    >
+      <Ionicons name="help-circle-outline" size={24} color={UI.accent} />
+    </View>
+
+    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+      {faqTitle}
+    </Text>
+
+    <Text
+      style={{
+        color: UI.sub,
+        fontWeight: "700",
+        fontSize: 13,
+        textAlign: "center",
+        lineHeight: 18,
+      }}
+    >
+      {lang === "cs"
+        ? "Limity, Premium a notifikace"
+        : lang === "pl"
+          ? "Limity, Premium i powiadomienia"
+          : lang === "de"
+            ? "Limits, Premium und Benachrichtigungen"
+            : "Limits, Premium and notifications"}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setInfoScreen("terms")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View
+      style={[
+        styles.iconCircle,
+        { backgroundColor: UI.card2, borderColor: UI.stroke },
+      ]}
+    >
+      <Ionicons name="document-text" size={24} color={UI.accent} />
+    </View>
+
+    <Text style={[styles.iconTileText, { color: UI.text }]}>
+      {p.terms}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setInfoScreen("support")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View
+      style={[
+        styles.iconCircle,
+        { backgroundColor: UI.card2, borderColor: UI.stroke },
+      ]}
+    >
+      <Ionicons name="mail" size={24} color={UI.accent} />
+    </View>
+
+    <Text style={[styles.iconTileText, { color: UI.text }]}>
+      {p.sendQuestion}
+    </Text>
+  </Pressable>
+</View>
+</View>
+) : (
             <ScrollView
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
