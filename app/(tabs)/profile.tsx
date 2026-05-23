@@ -85,6 +85,7 @@ type InfoScreen =
   | "support"
   | "streak_medals"
   | "freeprem"
+  | "faq"
   | "privacy"
   | "terms"
   | "paywall";
@@ -1362,6 +1363,146 @@ const noScaleText = {
   allowFontScaling: false as const,
   maxFontSizeMultiplier: 1,
 };
+const faqTitle =
+  lang === "cs"
+    ? "Časté dotazy"
+    : lang === "pl"
+      ? "Najczęstsze pytania"
+      : lang === "de"
+        ? "Häufige Fragen"
+        : "FAQ";
+
+const faqItems = useMemo(() => {
+  if (lang === "en") {
+    return [
+      {
+        q: "What happens when Premium ends?",
+        a: "Your challenges, friends, history and shared challenges are not deleted. Items above the Free limits are only locked. If you restore Premium, they unlock again.",
+      },
+      {
+        q: "What are the Free limits?",
+        a: "In the Free version you can actively use 2 challenges, 1 friend, 1 shared challenge and notifications for 1 challenge. Challenge history is a Premium feature.",
+      },
+      {
+        q: "How do I choose which challenges stay active in Free?",
+        a: "The first 2 challenges in your list stay active. You can reorder challenges and move the ones you want to use into the first two positions.",
+      },
+      {
+        q: "How do notifications work in the Free version?",
+        a: "Free users can have notifications enabled for only one challenge. To use notifications for another challenge, first turn them off on the current one and save the change.",
+      },
+      {
+        q: "Why are my notifications not arriving?",
+        a: "Android may limit apps to save battery. Open Phone Settings → Apps → OneMore → Battery and set OneMore to Unrestricted, or disable battery optimization. Also check that notifications are allowed.",
+      },
+      {
+        q: "How do shared challenges work?",
+        a: "Shared challenges let you complete a goal with friends and see everyone’s progress. In Free, only one shared challenge can be active or pending.",
+      },
+      {
+        q: "How do I cancel Premium?",
+        a: "Premium is managed by Google Play or the App Store. Open the Premium section in OneMore and use the subscription management button.",
+      },
+    ];
+  }
+
+  if (lang === "pl") {
+    return [
+      {
+        q: "Co się stanie, gdy Premium się skończy?",
+        a: "Twoje wyzwania, znajomi, historia i wspólne wyzwania nie zostaną usunięte. Elementy ponad limity Free będą tylko zablokowane. Po odnowieniu Premium odblokują się ponownie.",
+      },
+      {
+        q: "Jakie są limity wersji Free?",
+        a: "W wersji Free możesz aktywnie używać 2 wyzwań, 1 znajomego, 1 wspólnego wyzwania i powiadomień dla 1 wyzwania. Historia wyzwań jest funkcją Premium.",
+      },
+      {
+        q: "Jak wybrać, które wyzwania zostaną aktywne we Free?",
+        a: "Aktywne zostają pierwsze 2 wyzwania na liście. Możesz zmienić kolejność i przesunąć wybrane wyzwania na pierwsze dwie pozycje.",
+      },
+      {
+        q: "Jak działają powiadomienia w wersji Free?",
+        a: "W wersji Free możesz mieć powiadomienia tylko dla jednego wyzwania. Jeśli chcesz użyć ich przy innym wyzwaniu, najpierw wyłącz je przy obecnym i zapisz zmianę.",
+      },
+      {
+        q: "Dlaczego powiadomienia nie przychodzą?",
+        a: "Android może ograniczać aplikacje, aby oszczędzać baterię. Otwórz Ustawienia telefonu → Aplikacje → OneMore → Bateria i ustaw Bez ograniczeń albo wyłącz optymalizację baterii. Sprawdź też, czy powiadomienia są dozwolone.",
+      },
+      {
+        q: "Jak działają wspólne wyzwania?",
+        a: "Wspólne wyzwania pozwalają realizować cel ze znajomymi i śledzić postęp wszystkich osób. W wersji Free aktywne lub oczekujące może być tylko jedno wspólne wyzwanie.",
+      },
+      {
+        q: "Jak anulować Premium?",
+        a: "Premium jest zarządzane przez Google Play albo App Store. Otwórz sekcję Premium w OneMore i użyj przycisku zarządzania subskrypcją.",
+      },
+    ];
+  }
+
+  if (lang === "de") {
+    return [
+      {
+        q: "Was passiert, wenn Premium endet?",
+        a: "Deine Challenges, Freunde, der Verlauf und gemeinsame Challenges werden nicht gelöscht. Elemente über den Free-Limits werden nur gesperrt. Wenn du Premium wieder aktivierst, werden sie erneut freigeschaltet.",
+      },
+      {
+        q: "Welche Limits hat die Free-Version?",
+        a: "In der Free-Version kannst du 2 Challenges, 1 Freund, 1 gemeinsame Challenge und Benachrichtigungen für 1 Challenge aktiv nutzen. Der Challenge-Verlauf ist eine Premium-Funktion.",
+      },
+      {
+        q: "Wie wähle ich, welche Challenges in Free aktiv bleiben?",
+        a: "Die ersten 2 Challenges in deiner Liste bleiben aktiv. Du kannst die Reihenfolge ändern und die gewünschten Challenges nach oben verschieben.",
+      },
+      {
+        q: "Wie funktionieren Benachrichtigungen in Free?",
+        a: "Free-Nutzer können Benachrichtigungen nur für eine Challenge aktiv haben. Wenn du sie für eine andere Challenge nutzen möchtest, deaktiviere sie zuerst bei der aktuellen Challenge und speichere die Änderung.",
+      },
+      {
+        q: "Warum kommen meine Benachrichtigungen nicht an?",
+        a: "Android kann Apps einschränken, um Akku zu sparen. Öffne Einstellungen → Apps → OneMore → Akku und stelle OneMore auf Uneingeschränkt oder deaktiviere die Akku-Optimierung. Prüfe auch, ob Benachrichtigungen erlaubt sind.",
+      },
+      {
+        q: "Wie funktionieren gemeinsame Challenges?",
+        a: "Gemeinsame Challenges ermöglichen es dir, ein Ziel zusammen mit Freunden zu erfüllen und den Fortschritt aller zu sehen. In Free kann nur eine gemeinsame Challenge aktiv oder ausstehend sein.",
+      },
+      {
+        q: "Wie kündige ich Premium?",
+        a: "Premium wird über Google Play oder den App Store verwaltet. Öffne den Premium-Bereich in OneMore und nutze den Button zur Abo-Verwaltung.",
+      },
+    ];
+  }
+
+  return [
+    {
+      q: "Co se stane, když mi skončí Premium?",
+      a: "Tvoje výzvy, přátelé, historie ani společné výzvy se nesmažou. Položky nad limitem Free verze se jen zamknou. Po obnovení Premium se znovu odemknou.",
+    },
+    {
+      q: "Jaké jsou limity Free verze?",
+      a: "Ve Free verzi můžeš aktivně používat 2 výzvy, 1 přítele, 1 společnou výzvu a notifikace u 1 výzvy. Historie výzev je Premium funkce.",
+    },
+    {
+      q: "Jak vyberu, které výzvy budou ve Free aktivní?",
+      a: "Aktivní jsou první 2 výzvy v seznamu. Výzvy si můžeš přesunout a dát nahoru ty, které chceš ve Free používat.",
+    },
+    {
+      q: "Jak fungují notifikace ve Free verzi?",
+      a: "Ve Free verzi můžeš mít aktivní notifikace jen u jedné výzvy. Pokud chceš notifikace u jiné výzvy, nejdřív je vypni u původní výzvy a změnu ulož.",
+    },
+    {
+      q: "Proč mi nechodí notifikace?",
+      a: "Android může aplikaci omezovat kvůli baterii. Otevři Nastavení telefonu → Aplikace → OneMore → Baterie a nastav Bez omezení, případně vypni optimalizaci baterie. Zkontroluj také, že jsou oznámení povolená.",
+    },
+    {
+      q: "Jak fungují společné výzvy?",
+      a: "Společné výzvy ti umožní plnit cíl s přáteli a sledovat pokrok všech členů. Ve Free verzi může být aktivní nebo rozpracovaná jen jedna společná výzva.",
+    },
+    {
+      q: "Jak zruším Premium?",
+      a: "Premium se spravuje přes Google Play nebo App Store. V OneMore otevři sekci Premium a použij tlačítko pro správu předplatného.",
+    },
+  ];
+}, [lang]);
   // ✅ víc oranžové pozadí v light režimu
   const gradientColors = isDark
     ? [UI.bg, UI.bg]
@@ -1835,6 +1976,14 @@ function openChallengeInvite(friendUid: string) {
         return p.streaksMedals;
       case "freeprem":
         return p.freePremium;
+        case "faq":
+  return lang === "cs"
+    ? "Časté dotazy"
+    : lang === "pl"
+      ? "Najczęstsze pytania"
+      : lang === "de"
+        ? "Häufige Fragen"
+        : "FAQ";
       case "paywall":
         return p.premium;
       case "privacy":
@@ -2578,6 +2727,7 @@ const incomingCount = friendEdges.filter(
                       },
                     ]}
                   >
+                    
                     <Ionicons name="sparkles" size={26} color={UI.accent} />
                   </View>
                   <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
@@ -2652,6 +2802,26 @@ const incomingCount = friendEdges.filter(
   setInfoOpen(false);
   router.push("/history");
 }}
+
+  style={({ pressed }) => [
+    styles.iconTile,
+    {
+      borderColor: UI.stroke,
+      backgroundColor: UI.card,
+    },
+    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+  ]}
+>
+  <View
+    style={[
+      styles.iconCircle,
+      {
+        backgroundColor: "rgba(255,138,31,0.18)",
+        borderColor: "rgba(255,138,31,0.35)",
+      },
+    ]}
+  ><Pressable
+  onPress={() => setInfoScreen("faq")}
   style={({ pressed }) => [
     styles.iconTile,
     {
@@ -2670,6 +2840,31 @@ const incomingCount = friendEdges.filter(
       },
     ]}
   >
+    <Ionicons name="help-circle-outline" size={24} color={UI.accent} />
+  </View>
+
+  <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+    {faqTitle}
+  </Text>
+
+  <Text
+    style={{
+      color: UI.sub,
+      fontWeight: "700",
+      fontSize: 13,
+      textAlign: "center",
+      lineHeight: 18,
+    }}
+  >
+    {lang === "cs"
+      ? "Limity, Premium a notifikace"
+      : lang === "pl"
+        ? "Limity, Premium i powiadomienia"
+        : lang === "de"
+          ? "Limits, Premium und Benachrichtigungen"
+          : "Limits, Premium and notifications"}
+  </Text>
+</Pressable>
     <Ionicons name="time-outline" size={24} color={UI.accent} />
   </View>
 
@@ -3243,6 +3438,34 @@ const incomingCount = friendEdges.filter(
         </Text>
       </View>
     </View>
+  </View>
+)}
+{infoScreen === "faq" && (
+  <View
+    style={[
+      styles.infoCard,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+    ]}
+  >
+    {faqItems.map((item, index) => (
+      <View
+        key={item.q}
+        style={{
+          paddingTop: index === 0 ? 0 : 14,
+          marginTop: index === 0 ? 0 : 14,
+          borderTopWidth: index === 0 ? 0 : 1,
+          borderTopColor: UI.stroke,
+        }}
+      >
+        <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 6 }]}>
+          {item.q}
+        </Text>
+
+        <Text style={[styles.infoText, { color: UI.sub }]}>
+          {item.a}
+        </Text>
+      </View>
+    ))}
   </View>
 )}
               {infoScreen === "paywall" && (
