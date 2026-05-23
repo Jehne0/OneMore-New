@@ -2702,8 +2702,13 @@ const incomingCount = friendEdges.filter(
             </Pressable>
           </View>
 
-          {infoScreen === "menu" ? (
-            <View style={{ paddingBottom: 10 }}>
+         {infoScreen === "menu" ? (
+  <ScrollView
+    style={{ flex: 1 }}
+    keyboardShouldPersistTaps="handled"
+    showsVerticalScrollIndicator={true}
+    contentContainerStyle={{ paddingBottom: 90 }}
+  >
               <View style={{ marginBottom: 14 }}>
                 <Text style={[styles.infoTitle, { color: UI.text, fontSize: 22 }]} />
                 <Text style={[styles.infoText, { color: UI.sub }]} />
@@ -2786,8 +2791,14 @@ const incomingCount = friendEdges.filter(
     </View>
 
     <Text style={[styles.iconTileText, { color: UI.text }]}>
-      {p.privacy}
-    </Text>
+  {lang === "cs"
+    ? "Soukromí"
+    : lang === "pl"
+      ? "Prywatność"
+      : lang === "de"
+        ? "Datenschutz"
+        : "Privacy"}
+</Text>
   </Pressable>
 
   <Pressable
@@ -2932,7 +2943,7 @@ const incomingCount = friendEdges.filter(
     </Text>
   </Pressable>
 </View>
-</View>
+</ScrollView>
 ) : (
             <ScrollView
               style={{ flex: 1 }}
@@ -3502,12 +3513,6 @@ const incomingCount = friendEdges.filter(
                         </Text>
                       </View>
                     ))}
-                  </View>
-
-                  <View style={{ marginTop: 14 }}>
-                    <Text style={{ color: UI.sub, fontWeight: "700" }}>
-                      {p.priceInfo}
-                    </Text>
                   </View>
 
                   {!premium ? (
