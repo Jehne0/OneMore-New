@@ -2639,9 +2639,19 @@ const incomingCount = friendEdges.filter(
 
 <Pressable
   onPress={() => {
-    setInfoOpen(false);
-    router.push("/history");
-  }}
+  if (!premium) {
+    Alert.alert(
+      p.premium,
+      lang === "cs"
+        ? "Historie výzev je dostupná v Premium. Tvoje historie se nemaže, jen je ve Free verzi zamčená."
+        : "Challenge history is available in Premium. Your history is not deleted, it is only locked in the Free version."
+    );
+    return;
+  }
+
+  setInfoOpen(false);
+  router.push("/history");
+}}
   style={({ pressed }) => [
     styles.iconTile,
     {
@@ -2664,8 +2674,9 @@ const incomingCount = friendEdges.filter(
   </View>
 
   <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-    {p.history}
-  </Text>
+  {!premium ? "🔒 " : ""}
+  {p.history}
+</Text>
 
   <Text
     style={{
@@ -2676,7 +2687,11 @@ const incomingCount = friendEdges.filter(
       lineHeight: 18,
     }}
   >
-    {p.historySubtitle}
+   {!premium
+  ? lang === "cs"
+    ? "Zamčeno ve Free verzi"
+    : "Locked in Free version"
+  : p.historySubtitle}
   </Text>
 </Pressable>
                 <Pressable

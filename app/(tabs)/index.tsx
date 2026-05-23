@@ -1624,72 +1624,105 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     };
   }, [manageOpen, manageId, managed?.text, manageRename, saveRenameImmediate]);
 
-  const applyManageReminders = useCallback(async () => {
-    console.log("REMINDER SAVE CLICKED", {
-  manageId,
-  manageRemEnabled,
-  manageRemTimes,
-  manageRemCount,
-});
-    if (!manageId) return;
-    const id = String(manageId);
+ const applyManageReminders = useCallback(async () => {
+  console.log("REMINDER SAVE CLICKED", {
+    manageId,
+    manageRemEnabled,
+    manageRemTimes,
+    manageRemCount,
+  });
 
-    const target = clamp(Number(manageTarget) || 1, 1, 20);
-    const maxN = Math.min(10, target);
-    const times = (manageRemTimes ?? []).slice(0, clamp(manageRemCount, 1, maxN));
+  if (!manageId) return;
 
-   if (!premium && manageRemEnabled) {
-  const activeId = getFreeActiveReminderChallengeId(appState as any);
-  const anySharedActive = await hasAnyActiveSharedNotification();
+  const id = String(manageId);
+  const wantsEnabled = !!manageRemEnabled;
 
-  if ((activeId && String(activeId) !== id) || anySharedActive) {
-    Alert.alert(TXT.notifications, TXT.notificationFreeLimit);
-    return;
+  const target = clamp(Number(manageTarget) || 1, 1, 20);
+  const maxN = Math.min(10, target);
+  const wantedCount = clamp(Number(manageRemCount) || 1, 1, maxN);
+
+  let times = Array.isArray(manageRemTimes)
+    ? manageRemTimes
+        .filter((t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t))
+        .slice(0, wantedCount)
+    : [];
+
+  if (wantsEnabled && times.length === 0) {
+    times = [nowHM()];
   }
-}
 
-    await persist((latest) => {
-      const nextChallenges = (latest.challenges ?? []).map((c: any) => {
-        if (String(c.id) !== id) return c;
-        return {
-          ...c,
-          reminderEnabled: !!manageRemEnabled,
-          reminderTimes: manageRemEnabled ? times : [],
-        };
-      });
-      return { ...latest, challenges: nextChallenges } as any;
+  if (!premium && wantsEnabled) {
+    const activeId = getFreeActiveReminderChallengeId(appState as any);
+    const anySharedActive = await hasAnyActiveSharedNotification();
+
+    if ((activeId && String(activeId) !== id) || anySharedActive) {
+      Alert.alert(TXT.notifications, TXT.notificationFreeLimit);
+      return;
+    }
+  }
+
+  await persist((latest) => {
+    const nextChallenges = (latest.challenges ?? []).map((c: any) => {
+      if (String(c.id) !== id) return c;
+
+      return {
+        ...c,
+        reminderEnabled: wantsEnabled,
+        reminderTimes: wantsEnabled ? times : [],
+      };
     });
 
-   try {
-  if (manageRemEnabled && times.length) {
-    const latest = await loadState();
-    const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
-    await setDailyRemindersForChallenge(id, String(c?.text ?? "OneMore"), times);
+    return { ...latest, challenges: nextChallenges } as any;
+  });
 
-    Alert.alert(
-      TXT.notifications,
-      "Notifikace byly uloženy."
-    );
-  } else {
-    await clearDailyRemindersForChallenge(id);
+  try {
+    if (wantsEnabled) {
+      const latest = await loadState();
+      const c = (latest.challenges ?? []).find(
+        (x: any) => String(x.id) === id
+      ) as any;
 
-    Alert.alert(
-      TXT.notifications,
-      "Notifikace byly vypnuty."
-    );
-  }
-} catch (e: any) {
-      const msg = String(e?.message ?? "");
-      if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
-        Alert.alert(
-          TXT.notifications,
-          TXT.expoGoNotifications
-        );
-      } else {
-        Alert.alert(TXT.notifications, TXT.notificationsFailed);
-      }
+      await setDailyRemindersForChallenge(
+        id,
+        String(c?.text ?? "OneMore"),
+        times
+      );
+
+      setManageRemTimes(times);
+      setManageRemCount(times.length);
+
+      Alert.alert(TXT.notifications, "Notifikace byly uloženy.");
+    } else {
+      await clearDailyRemindersForChallenge(id);
+
+      setManageRemTimes([]);
+      setManageRemCount(1);
+
+      Alert.alert(TXT.notifications, "Notifikace byly vypnuty.");
     }
-  }, [manageId, manageTarget, manageRemTimes, manageRemCount, manageRemEnabled, premium, appState, persist]);
+  } catch (e: any) {
+    const msg = String(e?.message ?? "");
+
+    if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
+      Alert.alert(TXT.notifications, TXT.expoGoNotifications);
+    } else {
+      Alert.alert(TXT.notifications, TXT.notificationsFailed);
+    }
+  }
+}, [
+  manageId,
+  manageTarget,
+  manageRemTimes,
+  manageRemCount,
+  manageRemEnabled,
+  premium,
+  appState,
+  persist,
+  TXT.notifications,
+  TXT.notificationFreeLimit,
+  TXT.expoGoNotifications,
+  TXT.notificationsFailed,
+]);
 
   const deleteManagedChallenge = useCallback(async () => {
     if (!manageId) return;
@@ -2738,19 +2771,32 @@ useEffect(() => {
 
               <View style={styles.modalRow}>
                 <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.notifications}</Text>
-                <Switch
-                  value={manageRemEnabled}
-                  onValueChange={(v) => {
-                    setManageRemEnabled(v);
-                    if (!v) {
-                      setManageRemCount(1);
-                      setManageRemTimes([]);
-                    } else {
-                      const maxN = Math.min(20, manageTarget);
-                      setManageRemCount((n) => clamp(n || 1, 1, maxN));
-                    }
-                  }}
-                />
+              <Switch
+  value={manageRemEnabled}
+  onValueChange={(v) => {
+    setManageRemEnabled(v);
+
+    if (!v) {
+      setManageRemCount(1);
+      setManageRemTimes([]);
+      return;
+    }
+
+    const maxN = Math.min(10, manageTarget);
+
+    setManageRemCount((n) => clamp(n || 1, 1, maxN));
+
+    setManageRemTimes((prev) => {
+      const safe = Array.isArray(prev)
+        ? prev.filter((t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t))
+        : [];
+
+      if (safe.length > 0) return safe.slice(0, maxN);
+
+      return [nowHM()];
+    });
+  }}
+/>
               </View>
 
               {manageRemEnabled && (
@@ -2802,10 +2848,22 @@ useEffect(() => {
                     );
                   })}
 
-                  <Pressable onPress={() => void applyManageReminders()} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}>
+                         <Pressable onPress={() => void applyManageReminders()} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}>
                     <Text style={styles.primaryBtnText}>{TXT.saveNotifications}</Text>
                   </Pressable>
                 </>
+              )}
+
+              {!manageRemEnabled && (
+                <Pressable
+                  onPress={() => void applyManageReminders()}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={styles.primaryBtnText}>{TXT.saveNotifications}</Text>
+                </Pressable>
               )}
 
               {premium && (
