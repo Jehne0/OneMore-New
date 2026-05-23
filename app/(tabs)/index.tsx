@@ -1786,10 +1786,9 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   const tdy = todayISO;
   const historyEntries = appState?.history ?? [];
 
-  const visibleChallenges = useMemo(() => {
-    const all = appState?.challenges ?? [];
-    return premium ? all : all.slice(0, FREE_MAX);
-  }, [appState?.challenges, premium]);
+const visibleChallenges = useMemo(() => {
+  return appState?.challenges ?? [];
+}, [appState?.challenges]);
 
   const [listData, setListData] = useState<any[]>([]);
   useEffect(() => {
@@ -3586,6 +3585,7 @@ try {
               </>
             }
             renderItem={({ item, index }) => {
+              const lockedByFree = !premium && index >= FREE_MAX;
               const id = String(item.id);
               const ratio = progressRatioForCell(id);
               const streak = streakForChallenge(id);
@@ -3604,13 +3604,17 @@ try {
 
               return (
                 <Pressable
-                  onLongPress={() => {
-                    setReorderMode(true);
-                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                  delayLongPress={700}
-                  style={[styles.rowOuter, item.enabled === false && { opacity: 0.35 }]}
-                >
+  onLongPress={() => {
+    setReorderMode(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }}
+  delayLongPress={700}
+  style={[
+    styles.rowOuter,
+    item.enabled === false && { opacity: 0.35 },
+    lockedByFree && { opacity: 0.55 },
+  ]}
+>
                   <View style={styles.rowInner}>
                     <View style={styles.rowTop}>
                       <Pressable
@@ -3619,10 +3623,21 @@ try {
                           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         }}
                         delayLongPress={180}
-                        onPress={() => {
-                          if (reorderMode) return;
-                          openManage(String(id));
-                        }}
+                       onPress={() => {
+  if (reorderMode) return;
+
+  if (lockedByFree) {
+    Alert.alert(
+      TXT.premium,
+      lang === "cs"
+        ? "Tahle výzva je uložená, ale ve Free verzi je zamčená. Přesuň ji mezi první 2 výzvy nebo obnov Premium."
+        : "This challenge is saved, but locked in the Free version. Move it into the first 2 challenges or restore Premium."
+    );
+    return;
+  }
+
+  openManage(String(id));
+}}
                         style={{ flex: 1, minWidth: 0 }}
                       >
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -3646,13 +3661,19 @@ try {
                           </View>
 
                           <View style={styles.rowMain}>
-                            <Text style={styles.rowTitle} numberOfLines={1}>
-                              {item.text}
-                            </Text>
-
-                            <Text style={styles.rowDoneSmall}>
-                              {activeToday ? `${TXT.addTodayCount} ${done}/${Math.max(1, target)}` : TXT.freeRelax}
-                            </Text>
+                           <Text style={styles.rowTitle} numberOfLines={1}>
+  {lockedByFree ? "🔒 " : ""}
+  {item.text}
+</Text>
+                           <Text style={styles.rowDoneSmall}>
+  {lockedByFree
+    ? lang === "cs"
+      ? "Zamčeno ve Free verzi"
+      : "Locked in Free version"
+    : activeToday
+      ? `${TXT.addTodayCount} ${done}/${Math.max(1, target)}`
+      : TXT.freeRelax}
+</Text>
                           </View>
                         </View>
 
@@ -3690,20 +3711,39 @@ try {
                         </View>
                       ) : (
                         <Pressable
-                          onPress={() => {
-                            if (item.enabled === false) return;
-                            if (!activeToday) {
-                              Alert.alert(TXT.freeDay, TXT.freeRelax);
-                              return;
-                            }
-                            if (isCompleteToday) return;
-                            void markDoneToday(id);
-                          }}
-                          style={({ pressed }) => [
-                            styles.rowDoneBtn,
-                            item.enabled === false && { opacity: 0.35 },
+                        onPress={() => {
+  if (item.enabled === false) return;
 
-                            isCompleteToday && {
+  if (lockedByFree) {
+    Alert.alert(
+      TXT.premium,
+      lang === "cs"
+        ? "Tahle výzva je ve Free verzi zamčená. Přesuň ji mezi první 2 výzvy nebo obnov Premium."
+        : "This challenge is locked in the Free version. Move it into the first 2 challenges or restore Premium."
+    );
+    return;
+  }
+
+  if (!activeToday) {
+    Alert.alert(TXT.freeDay, TXT.freeRelax);
+    return;
+  }
+
+  if (isCompleteToday) return;
+  void markDoneToday(id);
+}}
+                        style={({ pressed }) => [
+  styles.rowDoneBtn,
+  item.enabled === false && { opacity: 0.35 },
+
+  lockedByFree && {
+    backgroundColor: UI.card2,
+    borderColor: UI.stroke,
+    opacity: 0.78,
+    transform: [{ scale: 1 }],
+  },
+
+  isCompleteToday && {
                               backgroundColor: UI.card2,
                               borderColor: UI.stroke,
                               opacity: 0.78,
@@ -3717,8 +3757,9 @@ try {
                               transform: [{ scale: 1 }],
                             },
 
-                            !isCompleteToday &&
-                              item.enabled !== false && {
+                           !lockedByFree &&
+  !isCompleteToday &&
+  item.enabled !== false && {
                                 opacity: pressed ? 0.88 : 1,
                                 transform: [{ scale: pressed ? 0.98 : 1 }],
                               },
@@ -3726,9 +3767,18 @@ try {
                           hitSlop={10}
                         >
                           <Text
-                            style={[styles.rowDoneBtnText, (isCompleteToday || !activeToday) && { color: UI.sub }]}
+                           style={[
+  styles.rowDoneBtnText,
+  (lockedByFree || isCompleteToday || !activeToday) && { color: UI.sub },
+]}
                           >
-                            {isCompleteToday ? TXT.done : !activeToday ? TXT.freeDay : TXT.complete}
+                           {lockedByFree
+  ? TXT.premium
+  : isCompleteToday
+    ? TXT.done
+    : !activeToday
+      ? TXT.freeDay
+      : TXT.complete}
                           </Text>
                         </Pressable>
                       )}
