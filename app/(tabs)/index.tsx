@@ -2052,20 +2052,34 @@ const sidePadding = 18;
     return Number.isFinite(s) ? s : 0;
   }
 
-  const bestStreak = useMemo(() => {
-    const challenges = (appState?.challenges ?? []) as any[];
-    let max = 0;
+ const globalStreak = useMemo(() => {
+  const saved = Number(appState?.streak ?? 0);
+  const yesterday = addDaysISO(tdy, -1);
+  const history = (appState?.history ?? []) as any[];
 
-    for (const ch of challenges) {
-      if (!ch || !ch.enabled || ch.deletedAt) continue;
-      const id = String(ch.id);
-      const stats = appState?.challengeStats?.[id] as any;
-      const v = Number(stats?.currentStreak ?? 0);
-      if (Number.isFinite(v)) max = Math.max(max, Math.floor(v));
-    }
+  const hasFullCompletedOnDate = (dateISO: string) =>
+    history.some((h: any) => {
+      return (
+        h?.date === dateISO &&
+        h?.status === "completed" &&
+        h?.partial !== true
+      );
+    });
 
-    return max;
-  }, [appState?.challenges, appState?.challengeStats]);
+  let cursor = hasFullCompletedOnDate(tdy) ? tdy : yesterday;
+  let computed = 0;
+
+  while (hasFullCompletedOnDate(cursor)) {
+    computed += 1;
+    cursor = addDaysISO(cursor, -1);
+  }
+
+  const savedIsStillValid =
+    appState?.lastCompletedDate === tdy ||
+    appState?.lastCompletedDate === yesterday;
+
+  return Math.max(0, savedIsStillValid ? saved : 0, computed);
+}, [appState?.streak, appState?.lastCompletedDate, appState?.history, tdy]);
 
   const medalState = useMemo(
     () => medalsFromChallengeStats(appState?.challengeStats),
@@ -2239,10 +2253,20 @@ useEffect(() => {
   if (completesDay) {
     ever.add(`id:${String(challengeId)}`);
   }
+const yesterday = addDaysISO(tdy, -1);
+const dayAlreadyCounted = appState.lastCompletedDate === tdy;
 
+const nextGlobalStreak =
+  !completesDay
+    ? appState.streak
+    : dayAlreadyCounted
+      ? Math.max(Number(appState.streak ?? 0), globalStreak)
+      : appState.lastCompletedDate === yesterday
+        ? Math.max(0, globalStreak) + 1
+        : 1;
   const next: AppState = {
     ...appState,
-
+streak: nextGlobalStreak,
     // Streak/statistiky upravíme až ve chvíli, kdy je splněný celý den.
     challengeStats: completesDay
       ? updateStatsOnCompleted(appState, String(challengeId), tdy)
@@ -2529,7 +2553,7 @@ useEffect(() => {
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>{TXT.keepsGoing}</Text>
          <Text style={styles.heroBig}>
-{bestStreak}. {TXT.dayWord}
+{globalStreak}. {TXT.dayWord}
 </Text>
             <Text style={styles.heroSub}>{TXT.dontStop}</Text>
             <Text style={styles.heroQuote}>„{TXT.quote}“</Text>

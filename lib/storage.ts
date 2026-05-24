@@ -655,15 +655,48 @@ function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; c
     return e.status === "completed" ? updateStatsOnCompleted({ ...state, challengeStats: map } as AppState, cid, e.date) : updateStatsOnSkipped({ ...state, challengeStats: map } as AppState, cid, e.date);
   }, { ...(state.challengeStats ?? {}) } as Record<string, ChallengeStats>);
 
-  const next: AppState = {
-    ...state,
-    streak: 0,
-    lastOpenDate: today,
-    challengeStats: nextStats,
-    history: [...additions.reverse(), ...(state.history ?? [])],
-  };
+ const hasFullCompletedOnDate = (dateISO: string) =>
+  (state.history ?? []).some((h: any) => {
+    return (
+      h?.date === dateISO &&
+      h?.status === "completed" &&
+      h?.partial !== true
+    );
+  });
 
-  return { next, changed: true };
+const hadAnyCompletedYesterday =
+  state.lastCompletedDate === y || hasFullCompletedOnDate(y);
+
+let repairedStreak = Number(state.streak ?? 0);
+
+// ✅ Když starší verze appky uložila lastCompletedDate, ale streak zůstal 0,
+// zkusíme hlavní streak dopočítat z historie.
+if (hadAnyCompletedYesterday && repairedStreak <= 0) {
+  let cursor = y;
+  let count = 0;
+
+  while (hasFullCompletedOnDate(cursor)) {
+    count += 1;
+    cursor = addDaysISO(cursor, -1);
+  }
+
+  repairedStreak = count;
+}
+
+const next: AppState = {
+  ...state,
+
+  // ✅ Hlavní streak "Držíš se už X. den" nesmí spadnout jen proto,
+  // že některá konkrétní výzva byla včera vynechaná.
+  // Padá jen tehdy, když včera nebyla splněná žádná výzva.
+  streak: hadAnyCompletedYesterday ? Math.max(1, repairedStreak) : 0,
+
+  lastOpenDate: today,
+  challengeStats: nextStats,
+  history: [...additions.reverse(), ...(state.history ?? [])],
+};
+
+return { next, changed: true };
 }
 
 // ---------- STORAGE ----------
