@@ -14,9 +14,6 @@ import { initCloudSync } from "../lib/cloudSync";
 import { AppAlertHost } from "../lib/appAlert";
 import * as Notifications from "expo-notifications";
 
-// ✅ NOVÉ — RevenueCat init
-import { configureRevenueCat } from "../lib/revenuecat";
-
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -61,9 +58,6 @@ export default function RootLayout() {
 
     // ✅ Cloud sync (Firestore)
     initCloudSync();
-
-    // ✅ RevenueCat init (Android platby)
-    void configureRevenueCat();
 
     (async () => {
       try {
