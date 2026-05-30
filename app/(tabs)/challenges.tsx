@@ -30,7 +30,7 @@ import {
 import { AppState, loadState, renameChallenge, saveState } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 
-const FREE_MAX = 3;
+const FREE_MAX = 2;
 
 function addDaysISO(iso: string, deltaDays: number) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -576,7 +576,7 @@ export default function ChallengesScreen() {
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    // ✅ limit 3 ve FREE – kontrola proti real storage (ne jen UI)
+    // ✅ limit 2 ve FREE – kontrola proti real storage (ne jen UI)
     // Premium limit NEPLATÍ
     if (!premium) {
       const latest = await loadState();
