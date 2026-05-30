@@ -33,6 +33,19 @@ function isIsoNewer(a?: string | null, b?: string | null): boolean {
   return String(a) > String(b);
 }
 
+function hasMeaningfulState(state?: AppState | null): boolean {
+  if (!state) return false;
+
+  return (
+    (state.challenges ?? []).length > 0 ||
+    (state.history ?? []).length > 0 ||
+    Object.keys(state.challengeStats ?? {}).length > 0 ||
+    (state.archivedChallenges ?? []).length > 0 ||
+    Number(state.streak ?? 0) > 0 ||
+    (state.everCompletedKeys ?? []).length > 0
+  );
+}
+
 /**
  * 1) když cloud prázdný -> upload lokálu
  * 2) když cloud novější -> download do lokálu
@@ -55,6 +68,14 @@ export async function syncNow(): Promise<void> {
     const iso = localISO ?? new Date().toISOString();
     await writeCloudState(uid, local, iso);
     await setLocalUpdatedAtISO(iso);
+    return;
+  }
+
+  if (hasMeaningfulState(cloud.state) && !hasMeaningfulState(local)) {
+    // Po reinstalaci muze lokal stihnout ulozit prazdny default state.
+    // Smysluplny cloud ma v takovem pripade vzdy prednost.
+    await saveState(cloud.state);
+    await setLocalUpdatedAtISO(cloudISO || new Date().toISOString());
     return;
   }
 
