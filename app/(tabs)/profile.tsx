@@ -1535,23 +1535,16 @@ const buyPremium = async () => {
   try {
     const pkgs = await getOfferingPackages();
 
-    console.log("[RevenueCat] packages count:", pkgs.length);
-    console.log(
-      "[RevenueCat] packages:",
-      pkgs.map((x: any) => ({
-        identifier: x?.identifier,
-        productId: x?.product?.identifier,
-        title: x?.product?.title,
-        price: x?.product?.priceString,
-      }))
-    );
-
     if (!pkgs.length) {
       Alert.alert(
         p.premium,
         lang === "cs"
-          ? "Balíčky Premium nejsou dostupné. RevenueCat nevrátil žádný package."
-          : "Premium packages are not available. RevenueCat returned no package."
+          ? "Premium teď není dostupné. Zkus to prosím později."
+          : lang === "pl"
+          ? "Premium nie jest teraz dostępne. Spróbuj ponownie później."
+          : lang === "de"
+          ? "Premium ist gerade nicht verfügbar. Bitte versuche es später erneut."
+          : "Premium is not available right now. Please try again later."
       );
       return;
     }
@@ -1563,40 +1556,16 @@ const buyPremium = async () => {
       p.premium,
       lang === "cs" ? "Premium aktivováno." : "Premium activated."
     );
-   } catch (e: any) {
-    let fullJson = "";
-
-    try {
-      fullJson = JSON.stringify(e, null, 2);
-    } catch {
-      fullJson = "JSON stringify failed";
-    }
-
-    const code = String(e?.code ?? "none");
-    const message = String(e?.message ?? e ?? "none");
-    const underlying = String(
-      e?.underlyingErrorMessage ||
-        e?.userInfo?.underlyingErrorMessage ||
-        e?.userInfo?.NSUnderlyingError ||
-        "none"
-    );
-
-    const debugMessage =
-      "PROFILE_BUY_PREMIUM_DETAIL\n\n" +
-      "code: " +
-      code +
-      "\n\nmessage:\n" +
-      message +
-      "\n\nunderlying:\n" +
-      underlying +
-      "\n\nFULL:\n" +
-      fullJson;
-
-    console.log("[RevenueCat Premium error FULL]", debugMessage);
-
+   } catch {
     Alert.alert(
-      lang === "cs" ? "Premium chyba DETAIL" : "Premium error DETAIL",
-      debugMessage
+      p.premium,
+      lang === "cs"
+        ? "Nákup se nepodařilo dokončit. Zkus to prosím znovu."
+        : lang === "pl"
+        ? "Nie udało się dokończyć zakupu. Spróbuj ponownie."
+        : lang === "de"
+        ? "Der Kauf konnte nicht abgeschlossen werden. Bitte versuche es erneut."
+        : "The purchase could not be completed. Please try again."
     );
   } finally {
     setPremiumBusy(false);
