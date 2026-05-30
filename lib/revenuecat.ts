@@ -97,7 +97,7 @@ export async function configureRevenueCat() {
 
     const apiKey = getRevenueCatApiKey();
 
-    Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+    Purchases.setLogLevel(__DEV__ ? Purchases.LOG_LEVEL.DEBUG : Purchases.LOG_LEVEL.WARN);
 
     await Purchases.configure({ apiKey });
 
