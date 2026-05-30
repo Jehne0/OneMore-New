@@ -2825,10 +2825,10 @@ streak: nextGlobalStreak,
 
               {manageRemEnabled && (
                 <>
-                  <Text style={styles.modalHint}>{TXT.notificationCount}: max {Math.min(20, manageTarget)}</Text>
+                  <Text style={styles.modalHint}>{TXT.notificationCount}: max {Math.min(10, manageTarget)}</Text>
 
                   <View style={styles.pills}>
-                    {Array.from({ length: Math.min(20, manageTarget) }, (_, i) => i + 1).map((n) => {
+                    {Array.from({ length: Math.min(10, manageTarget) }, (_, i) => i + 1).map((n) => {
                       const active = n === manageRemCount;
                       return (
                         <Pressable
