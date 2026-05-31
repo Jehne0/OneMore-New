@@ -1019,6 +1019,9 @@ useEffect(() => {
     const unsub = subscribeFriends(async (edges) => {
       if (cancelled) return;
 
+      setFriendEdges(edges);
+      setFriendsLoading(false);
+
       const uids = [...new Set(edges.map((e) => e.otherUid))];
     const nextNames: Record<string, string> = {};
 
@@ -1049,8 +1052,6 @@ await Promise.all(
         ...prev,
         ...nextNames,
       }));
-      setFriendEdges(edges);
-      setFriendsLoading(false);
     });
 
     return () => {
@@ -1172,7 +1173,13 @@ setSharedInvitesLoading(false);
  const getShownFriendName = (uid: string) => {
   const v = friendNames[uid];
   if (typeof v === "string" && v.trim()) return v.trim();
-  return p.loadingFriends;
+  return lang === "cs"
+    ? "Přítel"
+    : lang === "pl"
+      ? "Znajomy"
+      : lang === "de"
+        ? "Freund"
+        : "Friend";
 };
 
 const pendingInviteCount = sharedInvites.length + sentSharedInvites.length;
