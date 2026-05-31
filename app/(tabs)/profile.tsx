@@ -843,6 +843,7 @@ const [notificationSettings, setNotificationSettings] =
 
   // ✅ Info vnitřní navigace (menu jen ikonky)
   const [infoScreen, setInfoScreen] = useState<InfoScreen>("menu");
+  const [expandedFaqIndex, setExpandedFaqIndex] = useState<number | null>(null);
 
   // ✅ Podpora form (v Informace)
   const [supportEmail, setSupportEmail] = useState(
@@ -1527,6 +1528,12 @@ const faqItems = useMemo(() => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, t]);
+
+  useEffect(() => {
+    if (infoScreen !== "faq") {
+      setExpandedFaqIndex(null);
+    }
+  }, [infoScreen]);
 
 const buyPremium = async () => {
   if (premiumBusy) return;
@@ -3428,25 +3435,50 @@ const incomingCount = friendEdges.filter(
       { borderColor: UI.stroke, backgroundColor: UI.card },
     ]}
   >
-    {faqItems.map((item, index) => (
-      <View
-        key={item.q}
-        style={{
-          paddingTop: index === 0 ? 0 : 14,
-          marginTop: index === 0 ? 0 : 14,
-          borderTopWidth: index === 0 ? 0 : 1,
-          borderTopColor: UI.stroke,
-        }}
-      >
-        <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 6 }]}>
-          {item.q}
-        </Text>
+    {faqItems.map((item, index) => {
+      const expanded = expandedFaqIndex === index;
 
-        <Text style={[styles.infoText, { color: UI.sub }]}>
-          {item.a}
-        </Text>
-      </View>
-    ))}
+      return (
+        <View
+          key={item.q}
+          style={{
+            paddingTop: index === 0 ? 0 : 14,
+            marginTop: index === 0 ? 0 : 14,
+            borderTopWidth: index === 0 ? 0 : 1,
+            borderTopColor: UI.stroke,
+          }}
+        >
+          <Pressable
+            onPress={() =>
+              setExpandedFaqIndex(expanded ? null : index)
+            }
+            style={({ pressed }) => [
+              {
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+              },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={[styles.infoTitle, { color: UI.text, flex: 1 }]}>
+              {item.q}
+            </Text>
+            <Ionicons
+              name={expanded ? "chevron-up" : "chevron-down"}
+              size={20}
+              color={UI.sub}
+            />
+          </Pressable>
+
+          {expanded && (
+            <Text style={[styles.infoText, { color: UI.sub, marginTop: 6 }]}>
+              {item.a}
+            </Text>
+          )}
+        </View>
+      );
+    })}
   </View>
 )}
               {infoScreen === "paywall" && (
