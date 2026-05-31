@@ -22,8 +22,10 @@ function normalizeStats(s?: ChallengeStats): ChallengeStats {
     completedCount: Number(s?.completedCount ?? 0),
     skippedCount: Number(s?.skippedCount ?? 0),
     lastCompletedDay: s?.lastCompletedDay,
+    lastStreakDay: s?.lastStreakDay ?? s?.lastCompletedDay,
     currentStreak: Number(s?.currentStreak ?? 0),
     bestStreak: Number(s?.bestStreak ?? 0),
+    skipCredits: Math.min(1, Math.max(0, Number(s?.skipCredits ?? 0))),
   };
 }
 
@@ -36,21 +38,25 @@ export function updateStatsOnCompleted(
   const prev = normalizeStats(map[challengeId]);
   const ch = (state.challenges ?? []).find((c: any) => String(c.id) === String(challengeId)) as any;
   const prevActive = prevActiveDayISO(ch ?? null, today);
+  const lastStreakDay = prev.lastStreakDay ?? prev.lastCompletedDay;
 
   const dayAlreadyCounted = prev.lastCompletedDay === today;
 
   const nextStreak = dayAlreadyCounted
     ? prev.currentStreak
-    : prev.lastCompletedDay === prevActive
+    : lastStreakDay === prevActive
       ? prev.currentStreak + 1
       : 1;
+  const earnedFreeze = !dayAlreadyCounted && nextStreak > 0 && nextStreak % 10 === 0;
 
   const next: ChallengeStats = {
     ...prev,
     completedCount: prev.completedCount + 1,
     lastCompletedDay: today,
+    lastStreakDay: today,
     currentStreak: nextStreak,
     bestStreak: Math.max(prev.bestStreak, nextStreak),
+    skipCredits: earnedFreeze ? 1 : Math.min(1, prev.skipCredits),
   };
 
   map[challengeId] = next;
@@ -60,15 +66,18 @@ export function updateStatsOnCompleted(
 export function updateStatsOnSkipped(
   state: AppState,
   challengeId: string,
-  _today: string
+  today: string
 ): Record<string, ChallengeStats> {
   const map = { ...(state.challengeStats ?? {}) };
   const prev = normalizeStats(map[challengeId]);
+  const usesFreeze = prev.skipCredits > 0;
 
   const next: ChallengeStats = {
     ...prev,
     skippedCount: prev.skippedCount + 1,
-    currentStreak: 0,
+    currentStreak: usesFreeze ? prev.currentStreak : 0,
+    lastStreakDay: usesFreeze ? today : prev.lastStreakDay,
+    skipCredits: usesFreeze ? 0 : prev.skipCredits,
   };
 
   map[challengeId] = next;
@@ -154,6 +163,7 @@ export type HistoryEntry = {
   // ✅ true = jen dílčí splnění, např. 1/4, 2/4, 3/4
   // Streak se počítá až při posledním kroku, např. 4/4.
   partial?: boolean;
+  protectedByFreeze?: boolean;
 };
 
 
@@ -162,10 +172,14 @@ export type ChallengeStats = {
   skippedCount: number;
   /** poslední den, kdy byla výzva splněna (YYYY-MM-DD) */
   lastCompletedDay?: string;
+  /** poslední den, do kterého streak navazuje, včetně chráněného vynechání */
+  lastStreakDay?: string;
   /** aktuální streak pro tuto výzvu (po dnech s alespoň 1 splněním) */
   currentStreak: number;
   /** nejlepší streak pro tuto výzvu */
   bestStreak: number;
+  /** volný den pro zachování streaku; maximum je 1 */
+  skipCredits: number;
 };
 
 
@@ -351,6 +365,7 @@ function migrateHistory(rawHistory: unknown): HistoryEntry[] {
   challengeText: String(h.challengeText ?? ""),
   status: h.status === "skipped" ? "skipped" : "completed",
   partial: h.partial === true,
+  protectedByFreeze: h.protectedByFreeze === true,
 }))
       .filter((h: HistoryEntry) => !!h.date);
   }
@@ -634,6 +649,8 @@ function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; c
       state.archivedChallenges?.find((a) => String(a.id) === id)?.text ??
       "(smazaná výzva)";
 
+    const stats = normalizeStats((state.challengeStats ?? {})[id]);
+
     additions.push({
       date: y,
       time: "23:59",
@@ -641,6 +658,7 @@ function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; c
       challengeId: id,
       challengeText: text,
       status: "skipped",
+      protectedByFreeze: stats.skipCredits > 0,
     });
   }
 
@@ -1173,6 +1191,10 @@ export async function markTodaySkipped(): Promise<AppState> {
     ? state.challenges.find((c) => c.id === pickedId)?.text ?? "(smazaná výzva)"
     : "(bez výzvy)";
 
+  const usesFreeze = pickedId
+    ? normalizeStats((state.challengeStats ?? {})[String(pickedId)]).skipCredits > 0
+    : false;
+
   const now = new Date();
   const entry: HistoryEntry = {
     date: today,
@@ -1181,6 +1203,7 @@ export async function markTodaySkipped(): Promise<AppState> {
     challengeId: pickedId,
     challengeText: pickedText,
     status: "skipped",
+    protectedByFreeze: usesFreeze,
   };
 
   // ✅ FIX: nemažeme celý dnešek, jen záznam pro stejnou výzzvu (pickedId) v dnešní den
@@ -1192,7 +1215,7 @@ export async function markTodaySkipped(): Promise<AppState> {
 
   const updated: AppState = {
     ...state,
-    streak: 0,
+    streak: usesFreeze ? state.streak : 0,
     challengeStats: pickedId ? updateStatsOnSkipped(state, String(pickedId), today) : state.challengeStats,
     history: [entry, ...filtered],
   };

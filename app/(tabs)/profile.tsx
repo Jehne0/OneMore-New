@@ -1384,6 +1384,10 @@ const faqItems = useMemo(() => {
   if (lang === "en") {
     return [
       {
+        q: "What happens if I miss one day?",
+        a: "Each challenge has its own free day. After a 10-day streak, you get one free day. If you forget one day, your streak does not reset and the free day is used. Free days do not stack, so you can always have at most one. The missed day still does not count as completed.",
+      },
+      {
         q: "What happens when Premium ends?",
         a: "Your challenges, friends, history and shared challenges are not deleted. Items above the Free limits are only locked. If you restore Premium, they unlock again.",
       },
@@ -1416,6 +1420,10 @@ const faqItems = useMemo(() => {
 
   if (lang === "pl") {
     return [
+      {
+        q: "Co się stanie, jeśli opuszczę jeden dzień?",
+        a: "Każde wyzwanie ma własny wolny dzień. Po 10 dniach serii dostajesz jeden wolny dzień. Jeśli jednego dnia zapomnisz, seria się nie zerwie, a wolny dzień zostanie użyty. Wolne dni się nie kumulują, więc zawsze możesz mieć maksymalnie jeden. Opuszczony dzień nie liczy się jednak jako ukończony.",
+      },
       {
         q: "Co się stanie, gdy Premium się skończy?",
         a: "Twoje wyzwania, znajomi, historia i wspólne wyzwania nie zostaną usunięte. Elementy ponad limity Free będą tylko zablokowane. Po odnowieniu Premium odblokują się ponownie.",
@@ -1450,6 +1458,10 @@ const faqItems = useMemo(() => {
   if (lang === "de") {
     return [
       {
+        q: "Was passiert, wenn ich einen Tag auslasse?",
+        a: "Jede Challenge hat ihren eigenen freien Tag. Nach einer 10-Tage-Serie bekommst du einen freien Tag. Wenn du einen Tag vergisst, wird deine Serie nicht zurückgesetzt und der freie Tag wird verwendet. Freie Tage sammeln sich nicht an, du kannst also immer höchstens einen haben. Der ausgelassene Tag zählt aber nicht als erledigt.",
+      },
+      {
         q: "Was passiert, wenn Premium endet?",
         a: "Deine Challenges, Freunde, der Verlauf und gemeinsame Challenges werden nicht gelöscht. Elemente über den Free-Limits werden nur gesperrt. Wenn du Premium wieder aktivierst, werden sie erneut freigeschaltet.",
       },
@@ -1481,6 +1493,10 @@ const faqItems = useMemo(() => {
   }
 
   return [
+    {
+      q: "Co se stane, když jeden den vynechám?",
+      a: "Každá výzva má vlastní volný den. Po 10 dnech streaku získáš jeden volný den. Když jeden den zapomeneš, streak se ti nezruší a volný den se použije. Volné dny se nekumulují, takže můžeš mít vždy maximálně jeden. Vynechaný den se ale nepočítá jako splněný.",
+    },
     {
       q: "Co se stane, když mi skončí Premium?",
       a: "Tvoje výzvy, přátelé, historie ani společné výzvy se nesmažou. Položky nad limitem Free verze se jen zamknou. Po obnovení Premium se znovu odemknou.",

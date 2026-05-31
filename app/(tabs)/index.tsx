@@ -1839,7 +1839,7 @@ const count = visibleChallenges.length;
 const sidePadding = 18;
 
   const dayIndex = useMemo(() => {
-    const byChallenge = new Map<string, Map<string, { completed: number; skipped: boolean; lastTime?: string }>>();
+    const byChallenge = new Map<string, Map<string, { completed: number; skipped: boolean; protectedByFreeze?: boolean; lastTime?: string }>>();
     const startDate = new Map<string, string>();
 
     for (const h of historyEntries as any[]) {
@@ -1861,6 +1861,7 @@ const sidePadding = 18;
         if (t) cur.lastTime = t;
       } else if (h?.status === "skipped") {
         cur.skipped = true;
+        if (h?.protectedByFreeze === true) cur.protectedByFreeze = true;
       }
 
       byDate.set(date, cur);
@@ -2045,10 +2046,9 @@ const sidePadding = 18;
 
   function streakForChallenge(challengeId: string) {
     const todaySum = getDaySummary(challengeId, tdy);
-    if (todaySum?.skipped && (todaySum?.completed ?? 0) === 0) return 0;
-
     const stats = appState?.challengeStats?.[String(challengeId)];
     const s = Number((stats as any)?.currentStreak ?? 0);
+    if (todaySum?.skipped && (todaySum?.completed ?? 0) === 0 && todaySum?.protectedByFreeze !== true) return 0;
     return Number.isFinite(s) ? s : 0;
   }
 
