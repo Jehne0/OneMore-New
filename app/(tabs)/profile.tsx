@@ -2685,92 +2685,6 @@ const incomingCount = friendEdges.filter(
 
               <View style={styles.iconGrid}>
   <Pressable
-    onPress={() => setInfoScreen("freeprem")}
-    style={({ pressed }) => [
-      styles.iconTile,
-      { borderColor: UI.stroke, backgroundColor: UI.card },
-      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-    ]}
-  >
-    <View
-      style={[
-        styles.iconCircle,
-        {
-          backgroundColor: "rgba(255,138,31,0.18)",
-          borderColor: "rgba(255,138,31,0.35)",
-        },
-      ]}
-    >
-      <Ionicons name="sparkles" size={26} color={UI.accent} />
-    </View>
-
-    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-      Free & Premium
-    </Text>
-
-    <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
-      {p.limitsBenefits}
-    </Text>
-  </Pressable>
-
-  <Pressable
-    onPress={() => setInfoScreen("streak_medals")}
-    style={({ pressed }) => [
-      styles.iconTile,
-      { borderColor: UI.stroke, backgroundColor: UI.card },
-      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-    ]}
-  >
-    <View
-      style={[
-        styles.iconCircle,
-        {
-          backgroundColor: "rgba(255,138,31,0.18)",
-          borderColor: "rgba(255,138,31,0.35)",
-        },
-      ]}
-    >
-      <Ionicons name="flame" size={26} color={UI.accent} />
-    </View>
-
-    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
-      {p.streaksMedals}
-    </Text>
-
-    <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
-      {p.streaksRewards}
-    </Text>
-  </Pressable>
-
-  <Pressable
-    onPress={() => setInfoScreen("privacy")}
-    style={({ pressed }) => [
-      styles.iconTile,
-      { borderColor: UI.stroke, backgroundColor: UI.card },
-      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-    ]}
-  >
-    <View
-      style={[
-        styles.iconCircle,
-        { backgroundColor: UI.card2, borderColor: UI.stroke },
-      ]}
-    >
-      <Ionicons name="shield-checkmark" size={24} color={UI.accent} />
-    </View>
-
-    <Text style={[styles.iconTileText, { color: UI.text }]}>
-  {lang === "cs"
-    ? "Soukromí"
-    : lang === "pl"
-      ? "Prywatność"
-      : lang === "de"
-        ? "Datenschutz"
-        : "Privacy"}
-</Text>
-  </Pressable>
-
-  <Pressable
     onPress={() => {
       if (!premium) {
         Alert.alert(
@@ -2826,6 +2740,64 @@ const incomingCount = friendEdges.filter(
   </Pressable>
 
   <Pressable
+    onPress={() => setInfoScreen("streak_medals")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View
+      style={[
+        styles.iconCircle,
+        {
+          backgroundColor: "rgba(255,138,31,0.18)",
+          borderColor: "rgba(255,138,31,0.35)",
+        },
+      ]}
+    >
+      <Ionicons name="flame" size={26} color={UI.accent} />
+    </View>
+
+    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+      {p.streaksMedals}
+    </Text>
+
+    <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
+      {p.streaksRewards}
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setInfoScreen("freeprem")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View
+      style={[
+        styles.iconCircle,
+        {
+          backgroundColor: "rgba(255,138,31,0.18)",
+          borderColor: "rgba(255,138,31,0.35)",
+        },
+      ]}
+    >
+      <Ionicons name="sparkles" size={26} color={UI.accent} />
+    </View>
+
+    <Text style={[styles.iconTileText, { color: UI.text, fontSize: 16 }]}>
+      Free & Premium
+    </Text>
+
+    <Text style={{ color: UI.sub, fontWeight: "700", fontSize: 13 }}>
+      {p.limitsBenefits}
+    </Text>
+  </Pressable>
+
+  <Pressable
     onPress={() => setInfoScreen("faq")}
     style={({ pressed }) => [
       styles.iconTile,
@@ -2866,6 +2838,34 @@ const incomingCount = friendEdges.filter(
             ? "Limits, Premium und Benachrichtigungen"
             : "Limits, Premium and notifications"}
     </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => setInfoScreen("privacy")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View
+      style={[
+        styles.iconCircle,
+        { backgroundColor: UI.card2, borderColor: UI.stroke },
+      ]}
+    >
+      <Ionicons name="shield-checkmark" size={24} color={UI.accent} />
+    </View>
+
+    <Text style={[styles.iconTileText, { color: UI.text }]}>
+  {lang === "cs"
+    ? "Soukromí"
+    : lang === "pl"
+      ? "Prywatność"
+      : lang === "de"
+        ? "Datenschutz"
+        : "Privacy"}
+</Text>
   </Pressable>
 
   <Pressable
