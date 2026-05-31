@@ -684,6 +684,9 @@ function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; c
 
 const hadAnyCompletedYesterday =
   state.lastCompletedDate === y || hasFullCompletedOnDate(y);
+const hadProtectedFreezeYesterday = additions.some(
+  (e) => e.protectedByFreeze === true
+);
 
 let repairedStreak = Number(state.streak ?? 0);
 
@@ -707,7 +710,7 @@ const next: AppState = {
   // ✅ Hlavní streak "Držíš se už X. den" nesmí spadnout jen proto,
   // že některá konkrétní výzva byla včera vynechaná.
   // Padá jen tehdy, když včera nebyla splněná žádná výzva.
-  streak: hadAnyCompletedYesterday ? Math.max(1, repairedStreak) : 0,
+  streak: hadProtectedFreezeYesterday ? state.streak : hadAnyCompletedYesterday ? Math.max(1, repairedStreak) : 0,
 
   lastOpenDate: today,
   challengeStats: nextStats,
