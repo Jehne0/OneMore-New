@@ -70,7 +70,7 @@ export function updateStatsOnSkipped(
 ): Record<string, ChallengeStats> {
   const map = { ...(state.challengeStats ?? {}) };
   const prev = normalizeStats(map[challengeId]);
-  const usesFreeze = prev.skipCredits > 0;
+  const usesFreeze = prev.skipCredits > 0 && prev.currentStreak >= 10;
 
   const next: ChallengeStats = {
     ...prev,
@@ -658,7 +658,7 @@ function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; c
       challengeId: id,
       challengeText: text,
       status: "skipped",
-      protectedByFreeze: stats.skipCredits > 0,
+      protectedByFreeze: stats.skipCredits > 0 && stats.currentStreak >= 10,
     });
   }
 
@@ -1194,9 +1194,8 @@ export async function markTodaySkipped(): Promise<AppState> {
     ? state.challenges.find((c) => c.id === pickedId)?.text ?? "(smazaná výzva)"
     : "(bez výzvy)";
 
-  const usesFreeze = pickedId
-    ? normalizeStats((state.challengeStats ?? {})[String(pickedId)]).skipCredits > 0
-    : false;
+  const pickedStats = pickedId ? normalizeStats((state.challengeStats ?? {})[String(pickedId)]) : null;
+  const usesFreeze = pickedStats ? pickedStats.skipCredits > 0 && pickedStats.currentStreak >= 10 : false;
 
   const now = new Date();
   const entry: HistoryEntry = {

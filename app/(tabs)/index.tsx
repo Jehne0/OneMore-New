@@ -2044,11 +2044,55 @@ const sidePadding = 18;
     return "none";
   }
 
-  function streakForChallenge(challengeId: string) {
+  function isTodayIncompleteForStreak(challengeId: string) {
+    const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
+    if (c && !isChallengeActiveOnDate(c, tdy)) return false;
+
+    const st = dayStatus(challengeId, tdy);
+    if (st === "completed" || st === "free") return false;
+    if (st === "none") return false;
+
+    const stats = appState?.challengeStats?.[String(challengeId)];
+    const current = Number((stats as any)?.currentStreak ?? 0);
     const todaySum = getDaySummary(challengeId, tdy);
+    const hasEligibleFreeze = todaySum?.skipped === true && todaySum?.protectedByFreeze === true && current >= 10;
+
+    return st === "skipped" && !hasEligibleFreeze;
+  }
+
+  function previousActiveDateForChallenge(challengeId: string): string | null {
+    const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
+    if (!c) return addDaysISO(tdy, -1);
+
+    for (let i = 1; i <= 14; i++) {
+      const d = addDaysISO(tdy, -i);
+      if (isChallengeActiveOnDate(c, d)) return d;
+    }
+
+    return null;
+  }
+
+  function hasMissedPreviousActiveDayForStreak(challengeId: string) {
+    const prevDate = previousActiveDateForChallenge(challengeId);
+    if (!prevDate) return false;
+    if (prevDate < getStartDateForChallenge(challengeId)) return false;
+
+    const prevStatus = dayStatus(challengeId, prevDate);
+    if (prevStatus === "completed" || prevStatus === "free") return false;
+
+    const stats = appState?.challengeStats?.[String(challengeId)];
+    const current = Number((stats as any)?.currentStreak ?? 0);
+    const prevSum = getDaySummary(challengeId, prevDate);
+    const hasEligibleFreeze = prevSum?.skipped === true && prevSum?.protectedByFreeze === true && current >= 10;
+
+    return !hasEligibleFreeze;
+  }
+
+  function streakForChallenge(challengeId: string) {
     const stats = appState?.challengeStats?.[String(challengeId)];
     const s = Number((stats as any)?.currentStreak ?? 0);
-    if (todaySum?.skipped && (todaySum?.completed ?? 0) === 0 && todaySum?.protectedByFreeze !== true) return 0;
+    if (isTodayIncompleteForStreak(challengeId)) return 0;
+    if (hasMissedPreviousActiveDayForStreak(challengeId)) return 0;
     return Number.isFinite(s) ? s : 0;
   }
 
@@ -2060,8 +2104,7 @@ const bestStreak = useMemo(() => {
     if (!ch || !ch.enabled || ch.deletedAt) continue;
 
     const id = String(ch.id);
-    const stats = appState?.challengeStats?.[id] as any;
-    const v = Number(stats?.currentStreak ?? 0);
+    const v = streakForChallenge(id);
 
     if (Number.isFinite(v)) {
       max = Math.max(max, Math.floor(v));
@@ -2069,7 +2112,7 @@ const bestStreak = useMemo(() => {
   }
 
   return max;
-}, [appState?.challenges, appState?.challengeStats]);
+}, [appState?.challenges, appState?.challengeStats, dayIndex, tdy]);
 
   const medalState = useMemo(
     () => medalsFromChallengeStats(appState?.challengeStats),
