@@ -41,8 +41,9 @@ export async function declineFriend(otherUid: string) {
 }
 
 export async function removeFriend(otherUid: string) {
-  // same as decline
-  return declineFriend(otherUid);
+  myUid();
+  const call = httpsCallable(functions, "removeFriend");
+  await call({ otherUid });
 }
 
 export async function blockUser(otherUid: string) {

@@ -3,20 +3,39 @@ import { ChallengeStats } from "./storage";
 export type MedalTier = "none" | "brambora" | "steel" | "bronze" | "silver" | "gold" | "diamond";
 
 export const MEDAL_THRESHOLDS: Array<{ tier: Exclude<MedalTier, "none">; days: number }> = [
-  { tier: "diamond", days: 365 },
-  { tier: "gold", days: 180 },
-  { tier: "silver", days: 90 },
-  { tier: "bronze", days: 45 },
-  { tier: "steel", days: 30 },
-  { tier: "brambora", days: 10 },
+  { tier: "diamond", days: 180 },
+  { tier: "gold", days: 90 },
+  { tier: "silver", days: 30 },
+  { tier: "bronze", days: 20 },
+  { tier: "steel", days: 10 },
+  { tier: "brambora", days: 5 },
 ];
 
-export function tierForBestStreak(bestStreak: number): MedalTier {
-  const s = Math.max(0, Math.floor(Number.isFinite(bestStreak) ? bestStreak : 0));
+export const MEDAL_CYCLE_DAYS = 180;
+
+function safeStreak(streak: number): number {
+  return Math.max(0, Math.floor(Number.isFinite(streak) ? streak : 0));
+}
+
+function tierForCycleDays(days: number): MedalTier {
+  const s = safeStreak(days);
   for (const t of MEDAL_THRESHOLDS) {
     if (s >= t.days) return t.tier;
   }
   return "none";
+}
+
+export function currentMedalTierForStreak(currentStreak: number): MedalTier {
+  const s = safeStreak(currentStreak);
+  if (s <= 0) return "none";
+  const cycleDays = s % MEDAL_CYCLE_DAYS || MEDAL_CYCLE_DAYS;
+  return tierForCycleDays(cycleDays);
+}
+
+export function tierForBestStreak(bestStreak: number): MedalTier {
+  const s = safeStreak(bestStreak);
+  if (s >= MEDAL_CYCLE_DAYS) return "diamond";
+  return tierForCycleDays(s);
 }
 
 export type MedalCounts = Record<Exclude<MedalTier, "none">, number>;
@@ -26,20 +45,31 @@ export function emptyMedalCounts(): MedalCounts {
 }
 
 /**
- * Spočítá počty medailí napříč výzvami.
- * Každá výzva přidá max 1 medaili (tu nejvyšší podle bestStreak).
+ * Spočítá počty medailí napříč výzvami podle aktuálního streaku.
+ * Dokončené diamantové cykly zůstávají započítané a další cyklus začíná znovu od bramborové.
  */
 export function medalCountsFromChallengeStats(
-  stats?: Record<string, ChallengeStats>
+  stats?: Record<string, ChallengeStats>,
+  activeChallengeIds?: Iterable<string>
 ): MedalCounts {
   const counts = emptyMedalCounts();
   const map = stats ?? {};
+  const activeIds = activeChallengeIds ? new Set(Array.from(activeChallengeIds).map(String)) : null;
 
   for (const id of Object.keys(map)) {
+    if (activeIds && !activeIds.has(String(id))) continue;
     const s = map[id];
-    const tier = tierForBestStreak(Number(s?.bestStreak ?? 0));
-    if (tier === "none") continue;
-    counts[tier] = (counts[tier] ?? 0) + 1;
+    const currentStreak = safeStreak(Number(s?.currentStreak ?? 0));
+    const bestStreak = safeStreak(Number(s?.bestStreak ?? currentStreak));
+    if (currentStreak <= 0 && bestStreak <= 0) continue;
+
+    counts.diamond += Math.floor(bestStreak / MEDAL_CYCLE_DAYS);
+
+    const cycleDays = currentStreak % MEDAL_CYCLE_DAYS;
+    if (cycleDays <= 0) continue;
+
+    const tier = tierForCycleDays(cycleDays);
+    if (tier !== "none") counts[tier] = (counts[tier] ?? 0) + 1;
   }
 
   return counts;

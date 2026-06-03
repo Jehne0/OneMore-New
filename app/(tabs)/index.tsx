@@ -68,8 +68,8 @@ import {
 } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 import {
+  currentMedalTierForStreak,
   medalCountsFromChallengeStats,
-  tierForBestStreak,
   type MedalTier,
 } from "../../lib/medals";
 import * as Haptics from "expo-haptics";
@@ -149,8 +149,8 @@ type MedalState = {
   };
 };
 
-function medalsFromChallengeStats(stats?: any): MedalState {
-  const counts = medalCountsFromChallengeStats(stats ?? {});
+function medalsFromChallengeStats(stats?: any, activeChallengeIds?: Iterable<string>): MedalState {
+  const counts = medalCountsFromChallengeStats(stats ?? {}, activeChallengeIds);
   const active = {
     brambora: counts.brambora > 0,
     steel: counts.steel > 0,
@@ -934,6 +934,8 @@ notificationCount: "Number of notifications",
       sharedChallenge: "Shared challenge",
       withFriend: "With friend",
       withFriends: "With friends",
+      loadingUser: "Loading…",
+      unknownUser: "User",
       todayTarget: "Today's target",
       todayIsFree: "Today is a free day",
       leave: "Leave",
@@ -1011,6 +1013,8 @@ notificationCount: "Liczba powiadomień",
       sharedChallenge: "Wspólne wyzwanie",
       withFriend: "Ze znajomym",
       withFriends: "Ze znajomymi",
+      loadingUser: "Ładowanie…",
+      unknownUser: "Użytkownik",
       todayTarget: "Cel na dziś",
       todayIsFree: "Dziś jest dzień wolny",
       leave: "Opuść",
@@ -1089,6 +1093,8 @@ notificationCount: "Anzahl der Benachrichtigungen",
       sharedChallenge: "Gemeinsame Challenge",
       withFriend: "Mit Freund",
       withFriends: "Mit Freunden",
+      loadingUser: "Wird geladen…",
+      unknownUser: "Benutzer",
       todayTarget: "Heutiges Ziel",
       todayIsFree: "Heute ist ein freier Tag",
       leave: "Verlassen",
@@ -1165,6 +1171,8 @@ notificationCount: "Počet notifikací",
     sharedChallenge: "Společná výzva",
     withFriend: "S kamarádem",
     withFriends: "S přáteli",
+    loadingUser: "Načítám…",
+    unknownUser: "Uživatel",
     todayTarget: "Cíl dnes",
     todayIsFree: "Dnes je volný den",
     leave: "Odejít",
@@ -1324,14 +1332,13 @@ notificationCount: "Počet notifikací",
 
         const nextNames: Record<string, string> = {};
         for (const uid of allOtherUids) {
+          const safeUid = String(uid);
           try {
             const p = await getProfile(uid);
-            nextNames[uid] =
-              typeof p?.username === "string" && p.username.trim()
-                ? p.username.trim()
-                : uid;
+            const loadedName = typeof p?.username === "string" ? p.username.trim() : "";
+            nextNames[safeUid] = loadedName && loadedName !== safeUid ? loadedName : TXT.unknownUser;
           } catch {
-            nextNames[uid] = uid;
+            nextNames[safeUid] = TXT.unknownUser;
           }
         }
 
@@ -1354,7 +1361,7 @@ notificationCount: "Počet notifikací",
       unsubDays.forEach((u) => u());
       unsubProgress.forEach((u) => u());
     };
-  }, []);
+  }, [TXT.unknownUser]);
 
   
 
@@ -1908,12 +1915,19 @@ const sidePadding = 18;
 
   function getSharedDisplayName(uid: string): string {
     const me = auth.currentUser?.uid ?? "";
-    if (String(uid) === String(me)) return "Ty";
-    return sharedFriendNames[String(uid)] || String(uid);
+    const safeUid = String(uid);
+    if (!safeUid) return TXT.unknownUser;
+    if (safeUid === String(me)) return "Ty";
+    const loadedName = sharedFriendNames[safeUid];
+    if (typeof loadedName === "string" && loadedName.trim()) {
+      const trimmed = loadedName.trim();
+      return trimmed === safeUid ? TXT.unknownUser : trimmed;
+    }
+    return TXT.loadingUser;
   }
 
   function getSharedCompactLabel(item: SharedChallenge): string {
-    const otherNames = getSharedOtherUids(item).map((uid) => sharedFriendNames[uid] || uid);
+    const otherNames = getSharedOtherUids(item).map((uid) => getSharedDisplayName(uid));
 
     if (!otherNames.length) return "Společná výzva";
     if (otherNames.length === 1) return `${TXT.withFriend}: ${otherNames[0]}`;
@@ -2091,6 +2105,7 @@ const sidePadding = 18;
   function streakForChallenge(challengeId: string) {
     const stats = appState?.challengeStats?.[String(challengeId)];
     const s = Number((stats as any)?.currentStreak ?? 0);
+    if ((stats as any)?.lastCompletedDay === tdy && Number.isFinite(s) && s > 0) return s;
     if (isTodayIncompleteForStreak(challengeId)) return 0;
     if (hasMissedPreviousActiveDayForStreak(challengeId)) return 0;
     return Number.isFinite(s) ? s : 0;
@@ -2115,8 +2130,13 @@ const bestStreak = useMemo(() => {
 }, [appState?.challenges, appState?.challengeStats, dayIndex, tdy]);
 
   const medalState = useMemo(
-    () => medalsFromChallengeStats(appState?.challengeStats),
-    [appState?.challengeStats]
+    () => {
+      const activeIds = ((appState?.challenges ?? []) as any[])
+        .filter((c) => c && c.enabled !== false && !c.deletedAt)
+        .map((c) => String(c.id));
+      return medalsFromChallengeStats(appState?.challengeStats, activeIds);
+    },
+    [appState?.challengeStats, appState?.challenges]
   );
 
 const highestMedalForFriends = useMemo(() => {
@@ -2180,30 +2200,51 @@ useEffect(() => {
 ]);
 
   function medalLabel(tier: MedalTier): string {
-    switch (tier) {
-      case "brambora":
-        return "Brambora";
-      case "steel":
-        return "Ocel";
-      case "bronze":
-        return "Bronz";
-      case "silver":
-        return "Stříbro";
-      case "gold":
-        return "Zlato";
-      case "diamond":
-        return "Diamant";
-      default:
-        return "Žádná";
-    }
+    const labels: Record<string, Record<MedalTier, string>> = {
+      cs: {
+        none: "Žádná",
+        brambora: "Bramborová",
+        steel: "Železná",
+        bronze: "Bronzová",
+        silver: "Stříbrná",
+        gold: "Zlatá",
+        diamond: "Diamantová",
+      },
+      en: {
+        none: "None",
+        brambora: "Potato",
+        steel: "Iron",
+        bronze: "Bronze",
+        silver: "Silver",
+        gold: "Gold",
+        diamond: "Diamond",
+      },
+      pl: {
+        none: "Brak",
+        brambora: "Ziemniaczany",
+        steel: "Żelazny",
+        bronze: "Brązowy",
+        silver: "Srebrny",
+        gold: "Złoty",
+        diamond: "Diamentowy",
+      },
+      de: {
+        none: "Keine",
+        brambora: "Kartoffel",
+        steel: "Eisen",
+        bronze: "Bronze",
+        silver: "Silber",
+        gold: "Gold",
+        diamond: "Diamant",
+      },
+    };
+    const byLang = labels[lang] ?? labels.cs;
+    return byLang[tier] ?? byLang.none;
   }
 
-  const selectedChallengeMedal = useMemo(() => {
-    if (!selectedId) return "none" as MedalTier;
-    const stats = appState?.challengeStats?.[String(selectedId)];
-    const bestStreak = Number(stats?.bestStreak ?? 0);
-    return tierForBestStreak(bestStreak);
-  }, [appState?.challengeStats, selectedId]);
+  const selectedChallengeMedal: MedalTier = selectedId
+    ? currentMedalTierForStreak(streakForChallenge(String(selectedId)))
+    : "none";
 
   const selectedChallengeBestStreak = useMemo(() => {
     if (!selectedId) return 0;
@@ -3696,9 +3737,6 @@ try {
               const streak = streakForChallenge(id);
               const done = completedTodayCount(id);
               const target = targetForChallenge(id);
-              const medalTier = tierForBestStreak(
-                Number(appState?.challengeStats?.[id]?.bestStreak ?? 0)
-              );
 
               const activeToday = isChallengeActiveToday(item as any);
 

@@ -247,7 +247,7 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     freeFriendsLimit: "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium.",
     medalNone: "Žádná",
     medalPotato: "Bramborová",
-    medalSteel: "Ocelová",
+    medalSteel: "Železná",
     medalBronze: "Bronzová",
     medalSilver: "Stříbrná",
     medalGold: "Zlatá",
@@ -256,12 +256,12 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     declineFriendFailed: "Nepodařilo se odmítnout.",
     acceptFriendFailed: "Nepodařilo se přijmout.",
     removeFriendFailed: "Nepodařilo se odebrat.",
-    medalPotatoDesc: "Začátek. 10 dní držíš směr.",
-medalSteelDesc: "30 dní. Pevný základ.",
-medalBronzeDesc: "45 dní. Už vzniká návyk.",
-medalSilverDesc: "90 dní. Disciplína sílí.",
-medalGoldDesc: "180 dní. Výborná výdrž.",
-medalDiamondDesc: "365 dní. Životní styl.",
+    medalPotatoDesc: "5 dní. Bramborová.",
+medalSteelDesc: "10 dní. Železná.",
+medalBronzeDesc: "20 dní. Bronzová.",
+medalSilverDesc: "30 dní. Stříbrná.",
+medalGoldDesc: "90 dní. Zlatá.",
+medalDiamondDesc: "180 dní. Diamantová.",
 historyEmpty: "Žádná historie.",
 historyCompleted: "Splněno",
 historyMissed: "Nesplněno",
@@ -414,7 +414,7 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   freeFriendsLimit: "In the free version you can have only 1 friend. Upgrade to Premium for more.",
   medalNone: "None",
   medalPotato: "Potato",
-  medalSteel: "Steel",
+  medalSteel: "Iron",
   medalBronze: "Bronze",
   medalSilver: "Silver",
   medalGold: "Gold",
@@ -423,12 +423,12 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   acceptFriendFailed: "Could not accept request.",
   declineFriendFailed: "Could not decline request.",
   cancelRequestFailed: "Could not cancel request.",
-  medalPotatoDesc: "The beginning. 10 days on track.",
-medalSteelDesc: "30 days. Strong foundation.",
-medalBronzeDesc: "45 days. A habit is forming.",
-medalSilverDesc: "90 days. Discipline grows.",
-medalGoldDesc: "180 days. Excellent consistency.",
-medalDiamondDesc: "365 days. A lifestyle.",
+  medalPotatoDesc: "5 days. Potato.",
+medalSteelDesc: "10 days. Iron.",
+medalBronzeDesc: "20 days. Bronze.",
+medalSilverDesc: "30 days. Silver.",
+medalGoldDesc: "90 days. Gold.",
+medalDiamondDesc: "180 days. Diamond.",
 historyEmpty: "No history.",
 historyCompleted: "Completed",
 historyMissed: "Missed",
@@ -589,7 +589,7 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   freeFriendsLimit: "W wersji Free możesz mieć tylko 1 znajomego. Więcej wymaga Premium.",
   medalNone: "Brak",
   medalPotato: "Ziemniaczany",
-  medalSteel: "Stalowy",
+  medalSteel: "Żelazny",
   medalBronze: "Brązowy",
   medalSilver: "Srebrny",
   medalGold: "Złoty",
@@ -598,12 +598,12 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   declineFriendFailed: "Nie udało się odrzucić.",
   acceptFriendFailed: "Nie udało się zaakceptować.",
   removeFriendFailed: "Nie udało się usunąć.",
-  medalPotatoDesc: "Początek. 10 dni trzymasz kierunek.",
-medalSteelDesc: "30 dni. Solidna podstawa. Idziesz dalej.",
-medalBronzeDesc: "45 dni. To zaczyna przypominać rutynę.",
-medalSilverDesc: "Trzy miesiące. Nawyki stają się częścią dnia.",
-medalGoldDesc: "Pół roku. Najwyższa dyscyplina.",
-medalDiamondDesc: "Cały rok. To już styl życia.",
+  medalPotatoDesc: "5 dni. Ziemniaczany.",
+medalSteelDesc: "10 dni. Żelazny.",
+medalBronzeDesc: "20 dni. Brązowy.",
+medalSilverDesc: "30 dni. Srebrny.",
+medalGoldDesc: "90 dni. Złoty.",
+medalDiamondDesc: "180 dni. Diamentowy.",
 
 },
 
@@ -631,12 +631,12 @@ clearHistory: "Verlauf löschen",
 clearHistoryConfirm: "Möchtest du den Verlauf wirklich löschen?",
   streakFlamesInfo: "Die Flamme zeigt, wie viele Tage hintereinander du deine Herausforderung geschafft hast.\n\nWenn eine Herausforderung an einem Tag inaktiv ist oder ein freier Tag ist, wird die Serie nicht unterbrochen.\nDie Serie wird nur zurückgesetzt, wenn du einen aktiven Herausforderung-Tag verpasst. Du kannst eine Herausforderung deaktivieren, ohne die Serie zu verlieren.",
 medalsIntro: "Jede Herausforderung vergibt Medaillen nach deiner längsten Serie:",
-medalPotatoDesc: "Der Anfang. 10 Tage auf Kurs.",
-medalSteelDesc: "30 Tage. Eine stabile Grundlage. Weiter so.",
-medalBronzeDesc: "45 Tage. Es wird langsam zur Routine.",
-medalSilverDesc: "Drei Monate. Gewohnheiten werden Teil deines Tages.",
-medalGoldDesc: "Ein halbes Jahr. Starke Disziplin.",
-medalDiamondDesc: "Ein ganzes Jahr. Das ist ein Lebensstil.",
+medalPotatoDesc: "5 Tage. Kartoffel.",
+medalSteelDesc: "10 Tage. Eisen.",
+medalBronzeDesc: "20 Tage. Bronze.",
+medalSilverDesc: "30 Tage. Silber.",
+medalGoldDesc: "90 Tage. Gold.",
+medalDiamondDesc: "180 Tage. Diamant.",
   deleteAccountTitle: "Konto löschen?",
   deleteAccountText: "Diese Aktion kann nicht rückgängig gemacht werden. Das Konto wird gelöscht.",
   enterPassword: "Passwort eingeben",
@@ -764,7 +764,7 @@ history: "Herausforderungsverlauf",
   freeFriendsLimit: "In der Free-Version kannst du nur 1 Freund haben. Für mehr brauchst du Premium.",
   medalNone: "Keine",
   medalPotato: "Kartoffel",
-  medalSteel: "Stahl",
+  medalSteel: "Eisen",
   medalBronze: "Bronze",
   medalSilver: "Silber",
   medalGold: "Gold",
@@ -790,6 +790,32 @@ const profileLang =
 
 const p = PROFILE_STRINGS[profileLang];
 
+const medalDayUnit =
+  profileLang === "cs"
+    ? "dní"
+    : profileLang === "pl"
+      ? "dni"
+      : profileLang === "de"
+        ? "Tage"
+        : "days";
+
+const loadingUserText =
+  profileLang === "cs"
+    ? "Načítám…"
+    : profileLang === "pl"
+      ? "Ładowanie…"
+      : profileLang === "de"
+        ? "Wird geladen…"
+        : "Loading…";
+
+const unknownUserText =
+  profileLang === "cs"
+    ? "Uživatel"
+    : profileLang === "pl"
+      ? "Użytkownik"
+      : profileLang === "de"
+        ? "Benutzer"
+        : "User";
 
   // ✅ Změna username
   const [usernameOpen, setUsernameOpen] = useState(false);
@@ -1036,7 +1062,7 @@ await Promise.all(
           ? p.username.trim()
           : "";
 
-      if (shownName) {
+      if (shownName && shownName !== String(otherUid)) {
         nextNames[otherUid] = shownName;
       }
     } catch (e) {
@@ -1115,10 +1141,12 @@ await Promise.all(
           ? p.username.trim()
           : "";
 
-      if (shownName) {
+      if (shownName && shownName !== String(otherUid)) {
         nextNames[otherUid] = shownName;
       }
-    } catch {}
+    } catch {
+      nextNames[otherUid] = unknownUserText;
+    }
   })
 );
 
@@ -1166,13 +1194,13 @@ setSharedInvitesLoading(false);
       cancelled = true;
       unsub?.();
     };
-  }, [friendsOpen]);
+  }, [friendsOpen, lang, unknownUserText]);
 
   const email = (auth.currentUser?.email ?? "").trim();
 
  const getShownFriendName = (uid: string) => {
   const v = friendNames[uid];
-  if (typeof v === "string" && v.trim()) return v.trim();
+  if (typeof v === "string" && v.trim() && v.trim() !== String(uid)) return v.trim();
   return lang === "cs"
     ? "Přítel"
     : lang === "pl"
@@ -1227,8 +1255,8 @@ const pendingFriendRequestCount = friendEdges.filter(
 const getInviteCreatorName = (challenge: SharedChallenge) => {
   const creatorUid = String(challenge.createdBy ?? "");
   const v = friendNames[creatorUid];
-  if (typeof v === "string" && v.trim()) return v.trim();
-  return p.friends;
+  if (typeof v === "string" && v.trim() && v.trim() !== creatorUid) return v.trim();
+  return loadingUserText;
 };
 
   const medalLabel = (tier: FriendPreviewStats["highestMedal"]) => {
@@ -1296,8 +1324,8 @@ const getInviteCreatorName = (challenge: SharedChallenge) => {
 
     const names = others.map((uid) => {
       const v = friendNames[String(uid)];
-      if (typeof v === "string" && v.trim()) return v.trim();
-      return lang === "cs" ? "Načítám..." : "Loading...";
+      if (typeof v === "string" && v.trim() && v.trim() !== String(uid)) return v.trim();
+      return loadingUserText;
     });
 
     if (!names.length) return p.sharedChallenge;
@@ -2972,42 +3000,42 @@ const incomingCount = friendEdges.filter(
                     {[
                       {
                         key: "brambora",
-                        days: 10,
+                        days: 5,
                         title: p.medalPotato,
                         desc: p.medalPotatoDesc,
                         img: require("../../assets/medals/potato_medal.png"),
                       },
                       {
                         key: "steel",
-                        days: 30,
+                        days: 10,
                         title: p.medalSteel,
                        desc: p.medalSteelDesc,
                         img: require("../../assets/medals/steel_medal.png"),
                       },
                       {
                         key: "bronze",
-                        days: 45,
+                        days: 20,
                         title: p.medalBronze,
                        desc: p.medalBronzeDesc,
                         img: require("../../assets/medals/bronze_medal.png"),
                       },
                       {
                         key: "silver",
-                        days: 90,
+                        days: 30,
                        title: p.medalSilver,
                        desc: p.medalSilverDesc,
                         img: require("../../assets/medals/silver_medal.png"),
                       },
                       {
                         key: "gold",
-                        days: 180,
+                        days: 90,
                         title: p.medalGold,
                         desc: p.medalGoldDesc,
                         img: require("../../assets/medals/gold_medal.png"),
                       },
                       {
                         key: "diamond",
-                        days: 365,
+                        days: 180,
                         title: p.medalDiamond,
                      desc: p.medalDiamondDesc,
                         img: require("../../assets/medals/diamond_medal.png"),
@@ -3031,7 +3059,7 @@ const incomingCount = friendEdges.filter(
 
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.medalTitle, { color: UI.text }]}>
-                            {lang === "cs" ? `${m.days} dní – ${m.title}` : `${m.days} days – ${m.title}`}
+                            {`${m.days} ${medalDayUnit} – ${m.title}`}
                           </Text>
                           <Text style={[styles.medalDesc, { color: UI.sub }]}>
                             {m.desc}

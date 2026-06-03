@@ -134,6 +134,9 @@ function friendEdgeRef(uid, otherUid) {
 function setFriendEdge(tx, uid, otherUid, patch) {
     tx.set(friendEdgeRef(uid, otherUid), patch, { merge: true });
 }
+function friendStatus(snap) {
+    return snap.exists ? (snap.data()?.status ?? null) : null;
+}
 async function sendPushToUser(uid, title, body, data = {}, requiredSettings = []) {
     const tokenSet = new Set();
     const userSnap = await db.collection("users").doc(uid).get();
@@ -215,8 +218,8 @@ exports.requestFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (r
         const mineRef = friendEdgeRef(uid, otherUid);
         const theirsRef = friendEdgeRef(otherUid, uid);
         const [mineSnap, theirSnap] = await Promise.all([tx.get(mineRef), tx.get(theirsRef)]);
-        const mineStatus = mineSnap.exists ? mineSnap.data()?.status : null;
-        const theirStatus = theirSnap.exists ? theirSnap.data()?.status : null;
+        const mineStatus = friendStatus(mineSnap);
+        const theirStatus = friendStatus(theirSnap);
         if (mineStatus === "blocked" || theirStatus === "blocked") {
             throw new https_1.HttpsError("failed-precondition", "Tento kontakt je blokovaný.");
         }
@@ -258,8 +261,8 @@ exports.acceptFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (re
         if (!mineSnap.exists || !theirSnap.exists) {
             throw new https_1.HttpsError("not-found", "Žádost už neexistuje.");
         }
-        const mineStatus = mineSnap.data()?.status;
-        const theirStatus = theirSnap.data()?.status;
+        const mineStatus = friendStatus(mineSnap);
+        const theirStatus = friendStatus(theirSnap);
         if (mineStatus === "blocked" || theirStatus === "blocked") {
             throw new https_1.HttpsError("failed-precondition", "Kontakt je blokovaný.");
         }
@@ -273,8 +276,21 @@ exports.declineFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (r
     const uid = assertAuth(request);
     const otherUid = normUid((request.data ?? {}).otherUid);
     await db.runTransaction(async (tx) => {
-        tx.delete(friendEdgeRef(uid, otherUid));
-        tx.delete(friendEdgeRef(otherUid, uid));
+        const mineRef = friendEdgeRef(uid, otherUid);
+        const theirsRef = friendEdgeRef(otherUid, uid);
+        const [mineSnap, theirSnap] = await Promise.all([tx.get(mineRef), tx.get(theirsRef)]);
+        const mineStatus = friendStatus(mineSnap);
+        const theirStatus = friendStatus(theirSnap);
+        if (mineStatus === "accepted" || theirStatus === "accepted") {
+            throw new https_1.HttpsError("failed-precondition", "Potvrzené přátelství lze jen odebrat.");
+        }
+        if (mineStatus === "blocked" || theirStatus === "blocked") {
+            throw new https_1.HttpsError("failed-precondition", "Blokovaný kontakt nelze odmítnout jako žádost.");
+        }
+        if (mineStatus === "pending" || theirStatus === "pending") {
+            tx.delete(mineRef);
+            tx.delete(theirsRef);
+        }
     });
     return { ok: true };
 });
@@ -325,12 +341,23 @@ exports.acceptFriendInvite = (0, https_1.onCall)({ region: "europe-west1" }, asy
             throw new https_1.HttpsError("failed-precondition", "Neplatná pozvánka.");
         if (otherUid === uid)
             throw new https_1.HttpsError("invalid-argument", "Tohle je tvoje vlastní pozvánka.");
-        if (data?.usedBy)
+        const usedBy = String(data?.usedBy ?? "").trim();
+        if (usedBy && usedBy !== uid)
             throw new https_1.HttpsError("failed-precondition", "Pozvánka už byla použitá.");
+        if (usedBy === uid)
+            return;
+        const mineRef = friendEdgeRef(uid, otherUid);
+        const theirsRef = friendEdgeRef(otherUid, uid);
+        const [mineSnap, theirSnap] = await Promise.all([tx.get(mineRef), tx.get(theirsRef)]);
+        const mineStatus = friendStatus(mineSnap);
+        const theirStatus = friendStatus(theirSnap);
+        if (mineStatus === "blocked" || theirStatus === "blocked") {
+            throw new https_1.HttpsError("failed-precondition", "Kontakt je blokovaný.");
+        }
         const now = firestore_2.FieldValue.serverTimestamp();
         tx.set(inviteRef, { usedBy: uid, usedAt: now }, { merge: true });
-        tx.set(friendEdgeRef(uid, otherUid), { status: "accepted", initiatedBy: otherUid, createdAt: now, updatedAt: now }, { merge: true });
-        tx.set(friendEdgeRef(otherUid, uid), { status: "accepted", initiatedBy: otherUid, createdAt: now, updatedAt: now }, { merge: true });
+        tx.set(mineRef, { status: "accepted", initiatedBy: otherUid, createdAt: now, updatedAt: now }, { merge: true });
+        tx.set(theirsRef, { status: "accepted", initiatedBy: otherUid, createdAt: now, updatedAt: now }, { merge: true });
     });
     return { ok: true, otherUid };
 });

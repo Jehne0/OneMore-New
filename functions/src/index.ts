@@ -140,6 +140,10 @@ function setFriendEdge(tx: Transaction, uid: string, otherUid: string, patch: Re
   tx.set(friendEdgeRef(uid, otherUid), patch, { merge: true });
 }
 
+function friendStatus(snap: FirebaseFirestore.DocumentSnapshot): FriendStatus | null {
+  return snap.exists ? ((snap.data() as any)?.status ?? null) : null;
+}
+
 async function sendPushToUser(
   uid: string,
   title: string,
@@ -251,8 +255,8 @@ export const requestFriend = onCall({ region: "europe-west1" }, async (request) 
     const theirsRef = friendEdgeRef(otherUid, uid);
 
     const [mineSnap, theirSnap] = await Promise.all([tx.get(mineRef), tx.get(theirsRef)]);
-    const mineStatus = mineSnap.exists ? (mineSnap.data() as any)?.status : null;
-    const theirStatus = theirSnap.exists ? (theirSnap.data() as any)?.status : null;
+    const mineStatus = friendStatus(mineSnap);
+    const theirStatus = friendStatus(theirSnap);
 
     if (mineStatus === "blocked" || theirStatus === "blocked") {
       throw new HttpsError("failed-precondition", "Tento kontakt je blokovaný.");
@@ -308,8 +312,8 @@ export const acceptFriend = onCall({ region: "europe-west1" }, async (request) =
     if (!mineSnap.exists || !theirSnap.exists) {
       throw new HttpsError("not-found", "Žádost už neexistuje.");
     }
-    const mineStatus = (mineSnap.data() as any)?.status;
-    const theirStatus = (theirSnap.data() as any)?.status;
+    const mineStatus = friendStatus(mineSnap);
+    const theirStatus = friendStatus(theirSnap);
     if (mineStatus === "blocked" || theirStatus === "blocked") {
       throw new HttpsError("failed-precondition", "Kontakt je blokovaný.");
     }
@@ -327,8 +331,24 @@ export const declineFriend = onCall({ region: "europe-west1" }, async (request) 
   const otherUid = normUid((request.data ?? {}).otherUid);
 
   await db.runTransaction(async (tx) => {
-    tx.delete(friendEdgeRef(uid, otherUid));
-    tx.delete(friendEdgeRef(otherUid, uid));
+    const mineRef = friendEdgeRef(uid, otherUid);
+    const theirsRef = friendEdgeRef(otherUid, uid);
+    const [mineSnap, theirSnap] = await Promise.all([tx.get(mineRef), tx.get(theirsRef)]);
+    const mineStatus = friendStatus(mineSnap);
+    const theirStatus = friendStatus(theirSnap);
+
+    if (mineStatus === "accepted" || theirStatus === "accepted") {
+      throw new HttpsError("failed-precondition", "Potvrzené přátelství lze jen odebrat.");
+    }
+
+    if (mineStatus === "blocked" || theirStatus === "blocked") {
+      throw new HttpsError("failed-precondition", "Blokovaný kontakt nelze odmítnout jako žádost.");
+    }
+
+    if (mineStatus === "pending" || theirStatus === "pending") {
+      tx.delete(mineRef);
+      tx.delete(theirsRef);
+    }
   });
 
   return { ok: true };
@@ -399,18 +419,30 @@ export const acceptFriendInvite = onCall({ region: "europe-west1" }, async (requ
     if (!otherUid) throw new HttpsError("failed-precondition", "Neplatná pozvánka.");
     if (otherUid === uid) throw new HttpsError("invalid-argument", "Tohle je tvoje vlastní pozvánka.");
 
-    if (data?.usedBy) throw new HttpsError("failed-precondition", "Pozvánka už byla použitá.");
+    const usedBy = String(data?.usedBy ?? "").trim();
+    if (usedBy && usedBy !== uid) throw new HttpsError("failed-precondition", "Pozvánka už byla použitá.");
+    if (usedBy === uid) return;
+
+    const mineRef = friendEdgeRef(uid, otherUid);
+    const theirsRef = friendEdgeRef(otherUid, uid);
+    const [mineSnap, theirSnap] = await Promise.all([tx.get(mineRef), tx.get(theirsRef)]);
+    const mineStatus = friendStatus(mineSnap);
+    const theirStatus = friendStatus(theirSnap);
+
+    if (mineStatus === "blocked" || theirStatus === "blocked") {
+      throw new HttpsError("failed-precondition", "Kontakt je blokovaný.");
+    }
 
     const now = FieldValue.serverTimestamp();
     tx.set(inviteRef, { usedBy: uid, usedAt: now }, { merge: true });
 
     tx.set(
-      friendEdgeRef(uid, otherUid),
+      mineRef,
       { status: "accepted" as FriendStatus, initiatedBy: otherUid, createdAt: now, updatedAt: now },
       { merge: true }
     );
     tx.set(
-      friendEdgeRef(otherUid, uid),
+      theirsRef,
       { status: "accepted" as FriendStatus, initiatedBy: otherUid, createdAt: now, updatedAt: now },
       { merge: true }
     );

@@ -140,9 +140,9 @@ export default function ProfileScreen() {
 
   const earnedMedals = useMemo(() => {
     let remaining = stats.longestStreak;
-    const medals: Array<{ icon: string; label: string }> = [];
+    const medals: { icon: string; label: string }[] = [];
 
-    // ✅ nové prahy: 30 / 90 / 180 dní
+    // Medailové prahy: 5 / 10 / 20 / 30 / 90 / 180 dní
     while (remaining >= 180) {
       medals.push({ icon: "🥇", label: "180 dní" });
       remaining -= 180;
@@ -152,8 +152,20 @@ export default function ProfileScreen() {
       remaining -= 90;
     }
     while (remaining >= 30) {
-      medals.push({ icon: "🥉", label: "30 dní" });
+      medals.push({ icon: "🥈", label: "30 dní" });
       remaining -= 30;
+    }
+    while (remaining >= 20) {
+      medals.push({ icon: "🥉", label: "20 dní" });
+      remaining -= 20;
+    }
+    while (remaining >= 10) {
+      medals.push({ icon: "🥉", label: "10 dní" });
+      remaining -= 10;
+    }
+    while (remaining >= 5) {
+      medals.push({ icon: "🥉", label: "5 dní" });
+      remaining -= 5;
     }
     return medals;
   }, [stats.longestStreak]);
@@ -201,7 +213,7 @@ export default function ProfileScreen() {
         <View style={[styles.medalsCard, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
           <Text style={[styles.medalsTitle, { color: UI.text }]}>Medaile</Text>
           {earnedMedals.length === 0 ? (
-            <Text style={[styles.medalsSub, { color: UI.sub }]}>Zatím žádná. Medaile získáš po 30 / 90 / 180 dnech ve streaku.</Text>
+            <Text style={[styles.medalsSub, { color: UI.sub }]}>Zatím žádná. Medaile získáš po 5 / 10 / 20 / 30 / 90 / 180 dnech ve streaku.</Text>
           ) : (
             <View style={styles.medalsRow}>
               {earnedMedals.map((m, idx) => (
