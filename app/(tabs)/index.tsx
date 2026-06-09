@@ -977,6 +977,8 @@ notificationCount: "Number of notifications",
       delete: "Delete",
       freeRelax: "Relax :)",
       addTodayCount: "Completed",
+      inactive: "Inactive",
+      challengeOff: "Challenge is turned off",
     };
   }
 
@@ -1056,6 +1058,8 @@ notificationCount: "Liczba powiadomień",
       delete: "Usuń",
       freeRelax: "Odpocznij :)",
       addTodayCount: "Ukończono",
+      inactive: "Nieaktywne",
+      challengeOff: "Wyzwanie jest wyłączone",
     };
   }
 
@@ -1136,6 +1140,8 @@ notificationCount: "Anzahl der Benachrichtigungen",
       delete: "Löschen",
       freeRelax: "Entspann dich :)",
       addTodayCount: "Erledigt",
+      inactive: "Inaktiv",
+      challengeOff: "Challenge ist deaktiviert",
     };
   }
 
@@ -1214,6 +1220,8 @@ notificationCount: "Počet notifikací",
     delete: "Smazat",
     freeRelax: "Relaxuj :)",
     addTodayCount: "Splněno",
+    inactive: "Neaktivní",
+    challengeOff: "Výzva je vypnutá",
   };
 }, [lang]);
   const styles = useMemo(() => makeStyles(UI), [UI]);
@@ -2042,6 +2050,7 @@ const sidePadding = 18;
     }
 
     const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
+    if (c?.enabled === false || c?.deletedAt) return "none";
     if (c && !isChallengeActiveOnDate(c, date)) return "free";
 
     return "none";
@@ -3728,6 +3737,7 @@ try {
               const done = completedTodayCount(id);
               const target = targetForChallenge(id);
 
+              const isDisabled = item.enabled === false;
               const activeToday = isChallengeActiveToday(item as any);
 
               const isCompleteToday = done >= Math.max(1, target);
@@ -3803,6 +3813,8 @@ try {
     ? lang === "cs"
       ? "Zamčeno ve Free verzi"
       : "Locked in Free version"
+    : isDisabled
+      ? TXT.challengeOff
     : activeToday
       ? `${TXT.addTodayCount} ${done}/${Math.max(1, target)}`
       : TXT.freeRelax}
@@ -3845,7 +3857,7 @@ try {
                       ) : (
                         <Pressable
                         onPress={() => {
-  if (item.enabled === false) return;
+  if (isDisabled) return;
 
   if (lockedByFree) {
     Alert.alert(
@@ -3867,7 +3879,7 @@ try {
 }}
                         style={({ pressed }) => [
   styles.rowDoneBtn,
-  item.enabled === false && { opacity: 0.35 },
+  isDisabled && { opacity: 0.35 },
 
   lockedByFree && {
     backgroundColor: UI.card2,
@@ -3892,7 +3904,7 @@ try {
 
                            !lockedByFree &&
   !isCompleteToday &&
-  item.enabled !== false && {
+  !isDisabled && {
                                 opacity: pressed ? 0.88 : 1,
                                 transform: [{ scale: pressed ? 0.98 : 1 }],
                               },
@@ -3902,11 +3914,13 @@ try {
                           <Text
                            style={[
   styles.rowDoneBtnText,
-  (lockedByFree || isCompleteToday || !activeToday) && { color: UI.sub },
+  (lockedByFree || isDisabled || isCompleteToday || !activeToday) && { color: UI.sub },
 ]}
                           >
                            {lockedByFree
   ? TXT.premium
+  : isDisabled
+    ? TXT.inactive
   : isCompleteToday
     ? TXT.done
     : !activeToday
