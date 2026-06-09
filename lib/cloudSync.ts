@@ -150,8 +150,10 @@ try {
 
 try {
   await registerPushTokenForCurrentUser();
-} catch (e) {
-  console.log("Push token error:", e);
+} catch {
+  if (__DEV__) {
+    console.log("Push token registration failed");
+  }
 }
 
 startCloudAutoSync();

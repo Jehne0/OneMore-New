@@ -38,6 +38,7 @@ import { Alert } from "../../lib/appAlert";
 import { useTodayISO } from "../../lib/clock";
 import { auth, db } from "../../lib/firebase";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
+import { FREE_MAX_CHALLENGES } from "../../lib/plan";
 import {
   DEFAULT_SHARED_NOTIFICATION_SETTING,
   hasAnyActiveSharedNotification,
@@ -85,7 +86,7 @@ const MEDAL_SILVER = require("../../assets/medals/silver_medal.png");
 const MEDAL_GOLD = require("../../assets/medals/gold_medal.png");
 const MEDAL_DIAMOND = require("../../assets/medals/diamond_medal.png");
 
-const FREE_MAX = 2;
+const FREE_MAX = FREE_MAX_CHALLENGES;
 const FREE_SHARED_MAX = 1;
 
 function clamp(n: number, min: number, max: number) {
@@ -126,6 +127,15 @@ function daysBetween(aISO: string, bISO: string) {
   const a = new Date(aISO + "T00:00:00").getTime();
   const b = new Date(bISO + "T00:00:00").getTime();
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
+}
+
+function getUserChallengesForPlan(state?: AppState | null): any[] {
+  const archivedIds = new Set(
+    (((state as any)?.archivedChallenges ?? []) as any[]).map((a) => String(a?.id ?? "")).filter(Boolean)
+  );
+  return (((state as any)?.challenges ?? []) as any[]).filter(
+    (c) => c && !c.deletedAt && !archivedIds.has(String(c.id))
+  );
 }
 
 type DayStatus = "completed" | "skipped" | "free" | "none";
@@ -1490,7 +1500,8 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     const trimmed = addModalText.trim();
     if (!trimmed) return;
     if (!premium) {
-      const total = (appState?.challenges ?? []).length;
+      const latest = await loadState();
+      const total = getUserChallengesForPlan(latest).length;
       if (total >= FREE_MAX) {
         Alert.alert(
           TXT.freeVersionMaxChallengesTitle,
@@ -1520,7 +1531,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       };
     });
     setAddModalOpen(false);
-  }, [addModalText, persist, premium, appState?.challenges, router]);
+  }, [addModalText, persist, premium, router]);
 
   const saveBasicsImmediate = useCallback(
     async (nextEnabled: boolean, nextTarget: number) => {
@@ -1632,13 +1643,6 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   }, [manageOpen, manageId, managed?.text, manageRename, saveRenameImmediate]);
 
  const applyManageReminders = useCallback(async () => {
-  console.log("REMINDER SAVE CLICKED", {
-    manageId,
-    manageRemEnabled,
-    manageRemTimes,
-    manageRemCount,
-  });
-
   if (!manageId) return;
 
   const id = String(manageId);
@@ -1667,20 +1671,6 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       return;
     }
   }
-
-  await persist((latest) => {
-    const nextChallenges = (latest.challenges ?? []).map((c: any) => {
-      if (String(c.id) !== id) return c;
-
-      return {
-        ...c,
-        reminderEnabled: wantsEnabled,
-        reminderTimes: wantsEnabled ? times : [],
-      };
-    });
-
-    return { ...latest, challenges: nextChallenges } as any;
-  });
 
   try {
     if (wantsEnabled) {
@@ -1724,7 +1714,6 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   manageRemEnabled,
   premium,
   appState,
-  persist,
   TXT.notifications,
   TXT.notificationFreeLimit,
   TXT.expoGoNotifications,
@@ -2112,11 +2101,11 @@ const sidePadding = 18;
   }
 
 const bestStreak = useMemo(() => {
-  const challenges = (appState?.challenges ?? []) as any[];
+  const challenges = getUserChallengesForPlan(appState);
   let max = 0;
 
   for (const ch of challenges) {
-    if (!ch || !ch.enabled || ch.deletedAt) continue;
+    if (!ch) continue;
 
     const id = String(ch.id);
     const v = streakForChallenge(id);
@@ -3390,11 +3379,6 @@ useEffect(() => {
     }
   }
 
-await saveSharedNotificationSetting(
-  selectedSharedMenu.id,
-  sharedNotificationSetting
-);
-
 try {
   // vždy nejdřív smaž staré
   await clearSharedRemindersForChallenge(
@@ -3408,11 +3392,17 @@ try {
       sharedNotificationSetting.times
     );
   }
-} catch (e) {
+
+  await saveSharedNotificationSetting(
+    selectedSharedMenu.id,
+    sharedNotificationSetting
+  );
+} catch {
   Alert.alert(
     TXT.notifications,
     TXT.notificationsFailed
   );
+  return;
 }
 
                 setSharedNotificationOpen(false);

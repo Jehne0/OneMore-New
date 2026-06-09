@@ -50,8 +50,10 @@ export async function loadNotificationSettings(): Promise<NotificationSettings> 
       : DEFAULT_NOTIFICATION_SETTINGS;
 
     // Syncne i starší lokální nastavení do Firestore, aby ho viděly Cloud Functions.
-    saveNotificationSettingsToCloud(settings).catch((e) => {
-      console.log("notification settings cloud sync failed", e);
+    saveNotificationSettingsToCloud(settings).catch(() => {
+      if (__DEV__) {
+        console.log("notification settings cloud sync failed");
+      }
     });
 
     return settings;
@@ -67,7 +69,9 @@ export async function saveNotificationSettings(next: NotificationSettings) {
 
   try {
     await saveNotificationSettingsToCloud(normalized);
-  } catch (e) {
-    console.log("notification settings cloud save failed", e);
+  } catch {
+    if (__DEV__) {
+      console.log("notification settings cloud save failed");
+    }
   }
 }

@@ -130,7 +130,9 @@ export default function RegisterScreen() {
             return;
           }
 
-          console.log("CLAIM USERNAME ERROR:", err);
+          if (__DEV__) {
+            console.log("CLAIM USERNAME ERROR", String(err?.code ?? "unknown"));
+          }
           Alert.alert(
             t.register.cloudErrorTitle,
             `CODE: ${String(err?.code ?? "unknown")}\nMSG: ${String(err?.message ?? "")}`
@@ -152,7 +154,9 @@ export default function RegisterScreen() {
       } else if (code.includes("auth/timeout")) {
         Alert.alert(t.register.timeoutTitle, t.register.timeoutText);
       } else {
-        console.log("REGISTER ERROR:", e?.code, e?.message, e);
+        if (__DEV__) {
+          console.log("REGISTER ERROR", code);
+        }
         Alert.alert(
           t.register.genericErrorTitle,
           `${t.register.genericErrorText}\n\n(${code || "unknown"})`

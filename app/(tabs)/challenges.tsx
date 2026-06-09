@@ -21,6 +21,8 @@ import { Alert } from "../../lib/appAlert";
 import { getTodayISO, useTodayISO } from "../../lib/clock";
 import { ensureDaily } from "../../lib/logic";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
+import { FREE_MAX_CHALLENGES } from "../../lib/plan";
+import { hasAnyActiveSharedNotification } from "../../lib/sharedNotificationSettings";
 import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
@@ -30,7 +32,7 @@ import {
 import { AppState, loadState, renameChallenge, saveState } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 
-const FREE_MAX = 2;
+const FREE_MAX = FREE_MAX_CHALLENGES;
 
 function addDaysISO(iso: string, deltaDays: number) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -363,7 +365,12 @@ function nextNumericId(state: AppState): string {
 }
 
 function countFreeChallenges(s: AppState): number {
-  return (s.challenges ?? []).length;
+  const archivedIds = new Set(
+    (((s as any).archivedChallenges ?? []) as any[]).map((a) => String(a?.id ?? "")).filter(Boolean)
+  );
+  return ((s.challenges ?? []) as any[]).filter(
+    (c) => c && !c.deletedAt && !archivedIds.has(String(c.id))
+  ).length;
 }
 
 export default function ChallengesScreen() {
@@ -695,7 +702,8 @@ export default function ChallengesScreen() {
     // Free: jen 1 výzva může mít zapnuté notifikace
     if (!premium && remEnabled) {
       const activeId = getFreeActiveReminderChallengeId(state);
-      if (activeId && String(activeId) != id) {
+      const anySharedActive = await hasAnyActiveSharedNotification();
+      if ((activeId && String(activeId) != id) || anySharedActive) {
         Alert.alert(
           "Notifikace ve free verzi",
           "Ve free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy."
@@ -703,19 +711,6 @@ export default function ChallengesScreen() {
         return;
       }
     }
-
-    await persist((latest) => {
-      const nextChallenges = (latest.challenges ?? []).map((c: any) => {
-        if (String(c.id) !== id) return c;
-        return {
-          ...c,
-          // ⚠️ frekvenci (targetPerDay) neměníme v modálu notifikací
-          reminderEnabled: remEnabled,
-          reminderTimes: remEnabled ? times : [],
-        };
-      });
-      return { ...latest, challenges: nextChallenges };
-    });
 
     try {
       if (remEnabled && times.length) {

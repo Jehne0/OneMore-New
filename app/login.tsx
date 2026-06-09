@@ -125,8 +125,10 @@ export default function LoginScreen() {
       // Nesmí blokovat přihlášení – když RevenueCat selže, uživatel se má i tak dostat do appky.
       try {
         await revenueCatLogin(cred.user.uid);
-      } catch (rcErr: any) {
-        console.log("REVENUECAT LOGIN ERROR:", rcErr?.code, rcErr?.message, rcErr);
+      } catch {
+        if (__DEV__) {
+          console.log("REVENUECAT LOGIN ERROR");
+        }
       }
 
       // ✅ Email verification vypnuto – neblokujeme přihlášení a nic nezobrazujeme.
@@ -156,7 +158,9 @@ export default function LoginScreen() {
       } else if (code.includes("auth/timeout")) {
         Alert.alert(t.login.timeoutTitle, t.login.timeoutText);
       } else {
-        console.log("LOGIN ERROR:", e?.code, e?.message, e);
+        if (__DEV__) {
+          console.log("LOGIN ERROR", code);
+        }
         Alert.alert(
           t.login.genericErrorTitle,
           `${t.login.genericErrorText}\n\n(${code || "unknown"})`

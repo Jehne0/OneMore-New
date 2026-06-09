@@ -62,11 +62,6 @@ export const sendSupportEmail = onCall(
     const to = "info@desigame.eu";
     const from = "OneMore Support <info@desigame.eu>";
 
-    console.log("[support] ticketId:", ticketRef.id);
-    console.log("[support] apiKey exists:", !!apiKey);
-    console.log("[support] to:", to);
-    console.log("[support] from:", from);
-
     let resendId: string | null = null;
 
     if (apiKey) {
@@ -83,13 +78,11 @@ export const sendSupportEmail = onCall(
         });
 
         resendId = typeof result?.id === "string" ? result.id : null;
-        console.log("[support] resend result:", result);
-
         emailSent = true;
       } catch (e: any) {
         emailSent = false;
         emailError = String(e?.message ?? e);
-        console.error("[support] resend error:", emailError);
+        console.error("[support] email send failed");
       }
     } else {
       console.warn("[support] RESEND_API_KEY is missing (secret not loaded).");
@@ -163,7 +156,6 @@ async function sendPushToUser(
   );
 
   if (disabledByUser) {
-    console.log("[push] disabled by user settings:", uid, requiredSettings);
     return;
   }
 
@@ -181,10 +173,7 @@ async function sendPushToUser(
 
   const tokens = Array.from(tokenSet);
 
-  console.log("[push] uid:", uid, "tokens:", tokens);
-
   if (!tokens.length) {
-    console.log("[push] no tokens for uid:", uid);
     return;
   }
 
@@ -205,8 +194,7 @@ async function sendPushToUser(
     body: JSON.stringify(messages),
   });
 
-  const json = await res.json();
-  console.log("[push] sent:", JSON.stringify(json));
+  await res.json().catch(() => null);
 }
 
 function arr(v: unknown): string[] {
@@ -246,8 +234,6 @@ export const requestFriend = onCall({ region: "europe-west1" }, async (request) 
   const uid = assertAuth(request);
   const otherUid = normUid((request.data ?? {}).otherUid);
 
-  console.log("[requestFriend] called from:", uid, "to:", otherUid);
-
   if (otherUid === uid) throw new HttpsError("invalid-argument", "Nemůžeš přidat sám sebe.");
 
   await db.runTransaction(async (tx) => {
@@ -281,8 +267,6 @@ export const requestFriend = onCall({ region: "europe-west1" }, async (request) 
   });
 
   try {
-    console.log("[requestFriend] sending push from:", uid, "to:", otherUid);
-
       await sendPushToUser(
       otherUid,
       "Nová žádost o přátelství",
@@ -293,8 +277,8 @@ export const requestFriend = onCall({ region: "europe-west1" }, async (request) 
       },
       ["friendRequests"]
     );
-  } catch (e) {
-    console.error("[push] friend request error:", e);
+  } catch {
+    console.error("[push] friend request notification failed");
   }
 
   return { ok: true };
@@ -478,8 +462,6 @@ export const sendTestPush = onCall({ region: "europe-west1" }, async (request) =
 
   const json = await res.json();
 
-  console.log("[push test]", json);
-
   return {
     ok: true,
     result: json,
@@ -563,14 +545,11 @@ export const notifySharedChallengeCreated = onDocumentCreated(
     const memberUids = arr(data?.memberUids);
 
     if (!createdBy || !memberUids.length) {
-      console.log("[shared invite] missing createdBy/memberUids", challengeId);
       return;
     }
 
     const fromName = await getUsernameForPush(createdBy);
     const recipients = memberUids.filter((uid) => uid && uid !== createdBy);
-
-    console.log("[shared invite] challenge:", challengeId, "from:", createdBy, "to:", recipients);
 
     await Promise.all(
       recipients.map((uid) =>
@@ -621,24 +600,12 @@ export const notifySharedChallengeProgress = onDocumentWritten(
     const memberUids = arr(challenge?.memberUids);
 
     if (!memberUids.length) {
-      console.log("[shared progress] no memberUids for challenge:", challengeId);
       return;
     }
 
     for (const completedUid of newlyCompletedUids) {
       const completedName = await getUsernameForPush(completedUid);
       const recipients = memberUids.filter((uid) => uid && uid !== completedUid);
-
-      console.log(
-        "[shared progress] completed:",
-        completedUid,
-        "challenge:",
-        challengeId,
-        "date:",
-        dateISO,
-        "notify:",
-        recipients
-      );
 
       await Promise.all(
         recipients.map((uid) =>

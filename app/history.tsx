@@ -334,8 +334,10 @@ const p = HISTORY_STRINGS[historyLang];
         setVisibleCount(firstPage.length);
         setRows(firstPage);
       }
-    } catch (e) {
-      console.warn("History reload failed", e);
+    } catch {
+      if (__DEV__) {
+        console.warn("History reload failed");
+      }
     } finally {
       if (runIdRef.current === runId) setLoading(false);
     }

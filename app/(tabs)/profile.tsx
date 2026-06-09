@@ -256,12 +256,12 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     declineFriendFailed: "Nepodařilo se odmítnout.",
     acceptFriendFailed: "Nepodařilo se přijmout.",
     removeFriendFailed: "Nepodařilo se odebrat.",
-    medalPotatoDesc: "5 dní. Bramborová.",
-medalSteelDesc: "10 dní. Železná.",
-medalBronzeDesc: "20 dní. Bronzová.",
-medalSilverDesc: "30 dní. Stříbrná.",
-medalGoldDesc: "90 dní. Zlatá.",
-medalDiamondDesc: "180 dní. Diamantová.",
+    medalPotatoDesc: "První série je na světě. Jen tak dál.",
+medalSteelDesc: "Držíš tempo a buduješ pevný základ.",
+medalBronzeDesc: "Z návyku se začíná stávat rutina.",
+medalSilverDesc: "Měsíc za tebou. Tohle už má sílu.",
+medalGoldDesc: "Tři měsíce disciplíny. Skvělá práce.",
+medalDiamondDesc: "Půl roku vytrvalosti. Tohle je úroveň.",
 historyEmpty: "Žádná historie.",
 historyCompleted: "Splněno",
 historyMissed: "Nesplněno",
@@ -423,12 +423,12 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   acceptFriendFailed: "Could not accept request.",
   declineFriendFailed: "Could not decline request.",
   cancelRequestFailed: "Could not cancel request.",
-  medalPotatoDesc: "5 days. Potato.",
-medalSteelDesc: "10 days. Iron.",
-medalBronzeDesc: "20 days. Bronze.",
-medalSilverDesc: "30 days. Silver.",
-medalGoldDesc: "90 days. Gold.",
-medalDiamondDesc: "180 days. Diamond.",
+  medalPotatoDesc: "Your first streak is alive. Keep going.",
+medalSteelDesc: "You are building a solid base.",
+medalBronzeDesc: "The habit is starting to stick.",
+medalSilverDesc: "One month in. That is real progress.",
+medalGoldDesc: "Three months of discipline. Strong work.",
+medalDiamondDesc: "Half a year of consistency. Elite.",
 historyEmpty: "No history.",
 historyCompleted: "Completed",
 historyMissed: "Missed",
@@ -598,12 +598,12 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   declineFriendFailed: "Nie udało się odrzucić.",
   acceptFriendFailed: "Nie udało się zaakceptować.",
   removeFriendFailed: "Nie udało się usunąć.",
-  medalPotatoDesc: "5 dni. Ziemniaczany.",
-medalSteelDesc: "10 dni. Żelazny.",
-medalBronzeDesc: "20 dni. Brązowy.",
-medalSilverDesc: "30 dni. Srebrny.",
-medalGoldDesc: "90 dni. Złoty.",
-medalDiamondDesc: "180 dni. Diamentowy.",
+  medalPotatoDesc: "Pierwsza seria ruszyła. Idź dalej.",
+medalSteelDesc: "Budujesz solidną podstawę.",
+medalBronzeDesc: "Nawyk zaczyna się utrwalać.",
+medalSilverDesc: "Miesiąc za tobą. To już postęp.",
+medalGoldDesc: "Trzy miesiące dyscypliny. Mocna robota.",
+medalDiamondDesc: "Pół roku wytrwałości. To wysoki poziom.",
 
 },
 
@@ -631,12 +631,12 @@ clearHistory: "Verlauf löschen",
 clearHistoryConfirm: "Möchtest du den Verlauf wirklich löschen?",
   streakFlamesInfo: "Die Flamme zeigt, wie viele Tage hintereinander du deine Herausforderung geschafft hast.\n\nWenn eine Herausforderung an einem Tag inaktiv ist oder ein freier Tag ist, wird die Serie nicht unterbrochen.\nDie Serie wird nur zurückgesetzt, wenn du einen aktiven Herausforderung-Tag verpasst. Du kannst eine Herausforderung deaktivieren, ohne die Serie zu verlieren.",
 medalsIntro: "Jede Herausforderung vergibt Medaillen nach deiner längsten Serie:",
-medalPotatoDesc: "5 Tage. Kartoffel.",
-medalSteelDesc: "10 Tage. Eisen.",
-medalBronzeDesc: "20 Tage. Bronze.",
-medalSilverDesc: "30 Tage. Silber.",
-medalGoldDesc: "90 Tage. Gold.",
-medalDiamondDesc: "180 Tage. Diamant.",
+medalPotatoDesc: "Die erste Serie läuft. Weiter so.",
+medalSteelDesc: "Du baust ein starkes Fundament.",
+medalBronzeDesc: "Aus dem Ziel wird langsam Routine.",
+medalSilverDesc: "Ein Monat geschafft. Das ist echter Fortschritt.",
+medalGoldDesc: "Drei Monate Disziplin. Stark gemacht.",
+medalDiamondDesc: "Ein halbes Jahr Ausdauer. Top-Leistung.",
   deleteAccountTitle: "Konto löschen?",
   deleteAccountText: "Diese Aktion kann nicht rückgängig gemacht werden. Das Konto wird gelöscht.",
   enterPassword: "Passwort eingeben",
@@ -974,12 +974,10 @@ useEffect(() => {
   (async () => {
     try {
       await configureRevenueCat();
-      console.log("[RevenueCat] configured from profile screen");
     } catch (e: any) {
-      console.log("[RevenueCat] configure error from profile screen", {
-        code: String(e?.code ?? ""),
-        message: String(e?.message ?? e),
-      });
+      if (__DEV__) {
+        console.log("[RevenueCat] configure error from profile screen", String(e?.code ?? ""));
+      }
     }
   })();
 }, [auth.currentUser?.uid]);
@@ -1055,7 +1053,6 @@ await Promise.all(
   uids.map(async (otherUid) => {
     try {
       const p = await getProfile(otherUid);
-      console.log("PROFILE CHECK", otherUid, p);
 
       const shownName =
         typeof p?.username === "string" && p.username.trim()
@@ -1065,15 +1062,16 @@ await Promise.all(
       if (shownName && shownName !== String(otherUid)) {
         nextNames[otherUid] = shownName;
       }
-    } catch (e) {
-      console.log("PROFILE CHECK ERROR", otherUid, e);
+    } catch {
+      if (__DEV__) {
+        console.log("PROFILE CHECK ERROR");
+      }
     }
   })
 );
 
       if (cancelled) return;
 
-      console.log("FRIEND NAMES MAP", nextNames);
       setFriendNames((prev) => ({
         ...prev,
         ...nextNames,
@@ -1739,7 +1737,9 @@ const buyPremium = async () => {
     router.replace("/login");
   } catch (err: any) {
     const code = String(err?.code ?? "");
-    console.log("performDeleteAccount error", code, err);
+    if (__DEV__) {
+      console.log("performDeleteAccount error", code);
+    }
 
     if (code.includes("auth/wrong-password")) {
       showPwdPopup(

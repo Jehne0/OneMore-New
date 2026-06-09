@@ -108,8 +108,10 @@ export async function configureRevenueCat() {
     if (uid) {
       try {
         await Purchases.logIn(uid);
-      } catch (e) {
-        console.log("[RC LOGIN ERROR]", e);
+      } catch {
+        if (__DEV__) {
+          console.log("[RC LOGIN ERROR]");
+        }
       }
     }
 
@@ -118,8 +120,10 @@ export async function configureRevenueCat() {
     try {
       const info = await Purchases.getCustomerInfo();
       await applyCustomerInfo(info);
-    } catch (e) {
-      console.log("[RC CUSTOMER INFO ERROR]", e);
+    } catch {
+      if (__DEV__) {
+        console.log("[RC CUSTOMER INFO ERROR]");
+      }
     }
   })();
 
@@ -163,8 +167,6 @@ export async function purchasePackage(pkg: any) {
   } catch (e: any) {
     const fullMessage = buildRevenueCatErrorMessage(e);
 
-    console.log("[RC_FULL_DETAIL_BUILD_2026_05_14]", fullMessage);
-
     throw {
       ...e,
       code: "RC_FULL_DETAIL",
@@ -201,8 +203,10 @@ export async function revenueCatLogin(uid: string) {
 
   try {
     await Purchases.logIn(uid);
-  } catch (e) {
-    console.log("[RC LOGIN ERROR]", e);
+  } catch {
+    if (__DEV__) {
+      console.log("[RC LOGIN ERROR]");
+    }
   }
 
   await syncPremiumFromRevenueCat();
@@ -220,8 +224,10 @@ export async function revenueCatLogout() {
 
   try {
     await Purchases.logOut();
-  } catch (e) {
-    console.log("[RC LOGOUT ERROR]", e);
+  } catch {
+    if (__DEV__) {
+      console.log("[RC LOGOUT ERROR]");
+    }
   }
 
   await cancelPremium();

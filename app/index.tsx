@@ -29,8 +29,10 @@ export default function Index() {
 
     try {
       await registerPushTokenForCurrentUser();
-    } catch (e) {
-      console.log("Push token registration error:", e);
+    } catch {
+      if (__DEV__) {
+        console.log("Push token registration failed");
+      }
     }
   }
 

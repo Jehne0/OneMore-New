@@ -77,10 +77,6 @@ exports.sendSupportEmail = (0, https_1.onCall)({ region: "europe-west1", secrets
     const apiKey = RESEND_API_KEY.value();
     const to = "info@desigame.eu";
     const from = "OneMore Support <info@desigame.eu>";
-    console.log("[support] ticketId:", ticketRef.id);
-    console.log("[support] apiKey exists:", !!apiKey);
-    console.log("[support] to:", to);
-    console.log("[support] from:", from);
     let resendId = null;
     if (apiKey) {
         try {
@@ -94,13 +90,12 @@ exports.sendSupportEmail = (0, https_1.onCall)({ region: "europe-west1", secrets
                 text: `UID: ${request.auth.uid}\nReply-to: ${email}\nTicket: ${ticketRef.id}\n\n${message}`,
             });
             resendId = typeof result?.id === "string" ? result.id : null;
-            console.log("[support] resend result:", result);
             emailSent = true;
         }
         catch (e) {
             emailSent = false;
             emailError = String(e?.message ?? e);
-            console.error("[support] resend error:", emailError);
+            console.error("[support] email send failed");
         }
     }
     else {
@@ -144,7 +139,6 @@ async function sendPushToUser(uid, title, body, data = {}, requiredSettings = []
     const notificationSettings = userData?.notificationSettings ?? {};
     const disabledByUser = requiredSettings.some((key) => notificationSettings?.[key] === false);
     if (disabledByUser) {
-        console.log("[push] disabled by user settings:", uid, requiredSettings);
         return;
     }
     const directToken = safeStr(userData?.expoPushToken, 500);
@@ -158,9 +152,7 @@ async function sendPushToUser(uid, title, body, data = {}, requiredSettings = []
             tokenSet.add(token);
     });
     const tokens = Array.from(tokenSet);
-    console.log("[push] uid:", uid, "tokens:", tokens);
     if (!tokens.length) {
-        console.log("[push] no tokens for uid:", uid);
         return;
     }
     const messages = tokens.map((token) => ({
@@ -178,8 +170,7 @@ async function sendPushToUser(uid, title, body, data = {}, requiredSettings = []
         },
         body: JSON.stringify(messages),
     });
-    const json = await res.json();
-    console.log("[push] sent:", JSON.stringify(json));
+    await res.json().catch(() => null);
 }
 function arr(v) {
     return Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : [];
@@ -211,7 +202,6 @@ function isSharedDone(v) {
 exports.requestFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
     const uid = assertAuth(request);
     const otherUid = normUid((request.data ?? {}).otherUid);
-    console.log("[requestFriend] called from:", uid, "to:", otherUid);
     if (otherUid === uid)
         throw new https_1.HttpsError("invalid-argument", "Nemůžeš přidat sám sebe.");
     await db.runTransaction(async (tx) => {
@@ -240,14 +230,13 @@ exports.requestFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (r
         });
     });
     try {
-        console.log("[requestFriend] sending push from:", uid, "to:", otherUid);
         await sendPushToUser(otherUid, "Nová žádost o přátelství", "Máš novou žádost o přátelství.", {
             type: "friend_request",
             fromUid: uid,
         }, ["friendRequests"]);
     }
-    catch (e) {
-        console.error("[push] friend request error:", e);
+    catch {
+        console.error("[push] friend request notification failed");
     }
     return { ok: true };
 });
@@ -384,7 +373,6 @@ exports.sendTestPush = (0, https_1.onCall)({ region: "europe-west1" }, async (re
         }),
     });
     const json = await res.json();
-    console.log("[push test]", json);
     return {
         ok: true,
         result: json,
@@ -441,12 +429,10 @@ exports.notifySharedChallengeCreated = (0, firestore_1.onDocumentCreated)({
     const createdBy = safeStr(data?.createdBy, 128);
     const memberUids = arr(data?.memberUids);
     if (!createdBy || !memberUids.length) {
-        console.log("[shared invite] missing createdBy/memberUids", challengeId);
         return;
     }
     const fromName = await getUsernameForPush(createdBy);
     const recipients = memberUids.filter((uid) => uid && uid !== createdBy);
-    console.log("[shared invite] challenge:", challengeId, "from:", createdBy, "to:", recipients);
     await Promise.all(recipients.map((uid) => sendPushToUser(uid, "Nová společná výzva", `${fromName} tě vyzval/a ke společné výzvě.`, {
         type: "shared_challenge_invite",
         challengeId,
@@ -476,13 +462,11 @@ exports.notifySharedChallengeProgress = (0, firestore_1.onDocumentWritten)({
     const challenge = challengeSnap.exists ? challengeSnap.data() : null;
     const memberUids = arr(challenge?.memberUids);
     if (!memberUids.length) {
-        console.log("[shared progress] no memberUids for challenge:", challengeId);
         return;
     }
     for (const completedUid of newlyCompletedUids) {
         const completedName = await getUsernameForPush(completedUid);
         const recipients = memberUids.filter((uid) => uid && uid !== completedUid);
-        console.log("[shared progress] completed:", completedUid, "challenge:", challengeId, "date:", dateISO, "notify:", recipients);
         await Promise.all(recipients.map((uid) => sendPushToUser(uid, "Kamarád splnil společnou výzvu", `${completedName} právě splnil/a společnou výzvu.`, {
             type: "shared_challenge_completed",
             challengeId,
