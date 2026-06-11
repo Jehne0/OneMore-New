@@ -50,11 +50,13 @@ import {
 import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
+  refreshScheduledChallengeReminders,
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
 import {
   clearSharedRemindersForChallenge,
+  refreshScheduledSharedReminders,
   setSharedRemindersForChallenge,
 } from "../../lib/sharedReminders";
 import {
@@ -1262,9 +1264,12 @@ notificationCount: "Počet notifikací",
   const [premium, setPremium] = useState(false);
   const [appState, setAppState] = useState<AppState | null>(null);
   const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
+  const [sharedChallengesLoaded, setSharedChallengesLoaded] = useState(false);
   const [sharedTodayMap, setSharedTodayMap] = useState<Record<string, SharedChallengeDayProgress | null>>({});
   const [sharedFriendNames, setSharedFriendNames] = useState<Record<string, string>>({});
   const [sharedProgressMap, setSharedProgressMap] = useState<Record<string, SharedChallengeDayProgress[]>>({});
+  const [sharedCompletingMap, setSharedCompletingMap] = useState<Record<string, boolean>>({});
+  const [premiumReady, setPremiumReady] = useState(false);
 
   useEffect(() => {
     return subscribeState((next) => {
@@ -1285,6 +1290,7 @@ notificationCount: "Počet notifikací",
         if (!mounted) return;
 
         setSharedChallenges(items);
+        setSharedChallengesLoaded(true);
 
         unsubDays.forEach((u) => u());
         unsubDays = [];
@@ -1354,22 +1360,34 @@ notificationCount: "Počet notifikací",
           try {
             const p = await getProfile(uid);
             const loadedName = typeof p?.username === "string" ? p.username.trim() : "";
-            nextNames[safeUid] = loadedName && loadedName !== safeUid ? loadedName : TXT.unknownUser;
+            if (loadedName && loadedName !== safeUid) {
+              nextNames[safeUid] = loadedName;
+            } else {
+              nextNames[safeUid] = TXT.unknownUser;
+            }
           } catch {
             nextNames[safeUid] = TXT.unknownUser;
           }
         }
 
         if (mounted) {
-          setSharedFriendNames(nextNames);
+          setSharedFriendNames((prev) => {
+            const merged = { ...prev };
+            for (const [uid, name] of Object.entries(nextNames)) {
+              const previous = String(merged[uid] ?? "").trim();
+              if (name === TXT.unknownUser && previous && previous !== TXT.unknownUser) continue;
+              merged[uid] = name;
+            }
+            return merged;
+          });
         }
       },
       () => {
         if (!mounted) return;
         setSharedChallenges([]);
+        setSharedChallengesLoaded(true);
         setSharedTodayMap({});
         setSharedProgressMap({});
-        setSharedFriendNames({});
       }
     );
 
@@ -1385,13 +1403,35 @@ notificationCount: "Počet notifikací",
 
   useEffect(() => {
     let mounted = true;
-    isPremiumActive().then((p) => mounted && setPremium(!!p));
-    const unsub = subscribePremium((p) => mounted && setPremium(!!p));
+    isPremiumActive().then((p) => {
+      if (!mounted) return;
+      setPremium(!!p);
+      setPremiumReady(true);
+    });
+    const unsub = subscribePremium((p) => {
+      if (!mounted) return;
+      setPremium(!!p);
+      setPremiumReady(true);
+    });
     return () => {
       mounted = false;
       unsub();
     };
   }, []);
+
+  useEffect(() => {
+    if (!premiumReady || !appState || refreshedChallengeReminders.current) return;
+    refreshedChallengeReminders.current = true;
+    setRemindersPremiumEnabled(!!premium);
+    void refreshScheduledChallengeReminders();
+  }, [appState, premium, premiumReady]);
+
+  useEffect(() => {
+    if (!premiumReady || !sharedChallengesLoaded || refreshedSharedReminders.current) return;
+    refreshedSharedReminders.current = true;
+    setRemindersPremiumEnabled(!!premium);
+    void refreshScheduledSharedReminders(sharedChallenges);
+  }, [premium, premiumReady, sharedChallenges, sharedChallengesLoaded]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -1411,6 +1451,8 @@ const [selectedSharedMenu, setSelectedSharedMenu] =
 const [sharedNotificationOpen, setSharedNotificationOpen] = useState(false);
 const [sharedNotificationSetting, setSharedNotificationSetting] =
   useState<SharedNotificationSetting>(DEFAULT_SHARED_NOTIFICATION_SETTING);
+const refreshedChallengeReminders = useRef(false);
+const refreshedSharedReminders = useRef(false);
 
 function openSharedMenu(item: SharedChallenge) {
   setSelectedSharedMenu(item);
@@ -1576,6 +1618,18 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         return { ...(latest as any), challenges: list } as any;
       });
 
+      try {
+        const latest = await loadState();
+        const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
+        const times = Array.isArray(c?.reminderTimes) ? (c.reminderTimes as string[]) : [];
+        const filled = times.filter((t) => String(t ?? "").trim());
+        if (c?.reminderEnabled && c?.enabled !== false && filled.length) {
+          await setDailyRemindersForChallenge(id, String(c?.text ?? "OneMore"), filled);
+        } else {
+          await clearDailyRemindersForChallenge(id);
+        }
+      } catch {}
+
       const maxN = Math.min(10, target);
       if (manageRemEnabled) {
         setManageRemCount((n) => clamp(n, 1, maxN));
@@ -1618,6 +1672,18 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         };
         return { ...(latest as any), challenges: list } as any;
       });
+
+      try {
+        const latest = await loadState();
+        const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
+        const times = Array.isArray(c?.reminderTimes) ? (c.reminderTimes as string[]) : [];
+        const filled = times.filter((t) => String(t ?? "").trim());
+        if (c?.reminderEnabled && c?.enabled !== false && filled.length) {
+          await setDailyRemindersForChallenge(id, String(c?.text ?? "OneMore"), filled);
+        } else {
+          await clearDailyRemindersForChallenge(id);
+        }
+      } catch {}
 
       setManagePeriod(nextPeriod);
       setManageCustomDays(nextPeriod === "custom" ? uniqueDays : []);
@@ -1962,6 +2028,53 @@ const sidePadding = 18;
     return total;
   }
 
+  function applySharedCompletionLocally(item: SharedChallenge, uid: string, completedCount: number, dateISO: string) {
+    const safeCount = Math.max(0, Math.min(item.targetPerDay, Math.floor(Number(completedCount) || 0)));
+    const userProgress = {
+      completedCount: safeCount,
+      completed: safeCount >= item.targetPerDay,
+      updatedAt: new Date(),
+    };
+
+    setSharedTodayMap((prev) => {
+      const prevDay = prev[item.id];
+      const prevUsers = prevDay?.users ?? {};
+      return {
+        ...prev,
+        [item.id]: {
+          date: dateISO,
+          users: {
+            ...prevUsers,
+            [uid]: userProgress,
+          },
+          updatedAt: new Date(),
+        },
+      };
+    });
+
+    setSharedProgressMap((prev) => {
+      const rows = prev[item.id] ?? [];
+      const index = rows.findIndex((row) => String(row.date) === String(dateISO));
+      const prevRow = index >= 0 ? rows[index] : null;
+      const nextRow: SharedChallengeDayProgress = {
+        date: dateISO,
+        users: {
+          ...(prevRow?.users ?? {}),
+          [uid]: userProgress,
+        },
+        updatedAt: new Date(),
+      };
+
+      const nextRows = index >= 0 ? [...rows.slice(0, index), nextRow, ...rows.slice(index + 1)] : [...rows, nextRow];
+      nextRows.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+      return {
+        ...prev,
+        [item.id]: nextRows,
+      };
+    });
+  }
+
   async function markSharedDoneToday(item: SharedChallenge) {
     const me = auth.currentUser?.uid;
     if (!me) {
@@ -1982,32 +2095,46 @@ const sidePadding = 18;
     const done = getSharedUserCompletedCount(item, me);
     if (done >= item.targetPerDay) return;
 
-    try {
-      const nextCount = await completeSharedChallengeToday(item.id, getSharedTodayISO());
+    if (sharedCompletingMap[item.id]) return;
 
-      setSharedTodayMap((prev) => {
-        const prevDay = prev[item.id];
-        const prevUsers = prevDay?.users ?? {};
-        return {
-          ...prev,
-          [item.id]: {
-            date: getSharedTodayISO(),
-            users: {
-              ...prevUsers,
-              [me]: {
-                completedCount: nextCount,
-                completed: nextCount >= item.targetPerDay,
-                updatedAt: new Date(),
-              },
-            },
-            updatedAt: new Date(),
-          },
-        };
-      });
+    const today = getSharedTodayISO();
+    const previousToday = sharedTodayMap[item.id];
+    const previousProgress = sharedProgressMap[item.id];
+    const hadProgress = Object.prototype.hasOwnProperty.call(sharedProgressMap, item.id);
+    const optimisticCount = Math.min(item.targetPerDay, done + 1);
+
+    setSharedCompletingMap((prev) => ({ ...prev, [item.id]: true }));
+    applySharedCompletionLocally(item, me, optimisticCount, today);
+
+    try {
+      const nextCount = await completeSharedChallengeToday(item.id, today);
+      applySharedCompletionLocally(item, me, nextCount, today);
 
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (e: any) {
+      setSharedTodayMap((prev) => ({
+        ...prev,
+        [item.id]: previousToday ?? null,
+      }));
+      setSharedProgressMap((prev) => {
+        if (hadProgress) {
+          return {
+            ...prev,
+            [item.id]: previousProgress ?? [],
+          };
+        }
+
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
       Alert.alert(TXT.sharedChallenge, e?.message ?? TXT.couldNotSaveCompletion);
+    } finally {
+      setSharedCompletingMap((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
     }
   }
 
@@ -3398,7 +3525,8 @@ try {
     await setSharedRemindersForChallenge(
       selectedSharedMenu.id,
       selectedSharedMenu.title ?? "Shared challenge",
-      sharedNotificationSetting.times
+      sharedNotificationSetting.times,
+      selectedSharedMenu
     );
   }
 
@@ -3518,6 +3646,7 @@ try {
                       const myDone = getSharedUserCompletedCount(item, me);
                       const activeToday = isSharedChallengeActiveOnDate(item, getSharedTodayISO());
                       const myDoneToday = myDone >= item.targetPerDay;
+                      const sharedCompleting = !!sharedCompletingMap[item.id];
                       const expanded = expandedSharedId === item.id;
                       const iAccepted = item.acceptedBy.includes(me);
                       const pending = item.status === "pending";
@@ -3561,6 +3690,7 @@ try {
 <View style={styles.sharedActionsRow}>
 
 <Pressable
+  disabled={sharedCompleting || myDoneToday}
   onPress={() => {
     if (lockedByFree) {
       Alert.alert(
@@ -3591,18 +3721,23 @@ try {
       borderColor: UI.stroke,
       opacity: 0.78,
     },
-    pressed && !lockedByFree && !myDoneToday && activeToday && { opacity: 0.9 },
+    sharedCompleting && {
+      backgroundColor: UI.card2,
+      borderColor: UI.stroke,
+      opacity: 0.78,
+    },
+    pressed && !lockedByFree && !myDoneToday && !sharedCompleting && activeToday && { opacity: 0.9 },
   ]}
 >
   <Text
     style={[
       styles.sharedDoneBtnText,
-      (lockedByFree || myDoneToday || !activeToday) && { color: UI.sub },
+      (lockedByFree || myDoneToday || sharedCompleting || !activeToday) && { color: UI.sub },
     ]}
   >
     {lockedByFree
       ? TXT.premium
-      : myDoneToday
+      : myDoneToday || sharedCompleting
         ? TXT.done
         : !activeToday
           ? TXT.freeDay

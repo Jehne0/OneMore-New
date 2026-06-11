@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import Constants from "expo-constants";
-import { getCachedState, loadState } from "./storage";
+import { getTodayISO } from "./clock";
+import { getCachedState, isChallengeActiveOnDate, loadState, type Challenge } from "./storage";
 import { updateState } from "./storage";
 
 type NotificationsModule = typeof import("expo-notifications");
@@ -26,8 +27,14 @@ const REMINDER_CHANNEL_ID = "reminders_high_v1";
 const REMINDER_DATA_KEY = "oneMoreReminderKey";
 const REMINDER_DATA_KIND = "oneMoreReminderKind";
 const SHARED_REMINDER_PREFIX = "shared_";
+const ROLLING_SCHEDULE_DAYS = 30;
 
 type ReminderKind = "challenge" | "shared";
+export type ReminderSchedule = {
+  period?: "daily" | "every2" | "custom";
+  enabled?: boolean;
+  isActiveOnDate: (dateISO: string) => boolean;
+};
 
 export function setRemindersPremiumEnabled(v: boolean) {
   _premiumEnabled = !!v;
@@ -42,6 +49,65 @@ function parseHHMM(time: string): { hour: number; minute: number } | null {
 
 function reminderKindForId(challengeId: string): ReminderKind {
   return String(challengeId).startsWith(SHARED_REMINDER_PREFIX) ? "shared" : "challenge";
+}
+
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function dateForISOAndTime(dateISO: string, hour: number, minute: number): Date {
+  const [year, month, day] = dateISO.split("-").map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1, hour, minute, 0, 0);
+}
+
+function scheduleForChallenge(challenge: Challenge | undefined | null): ReminderSchedule {
+  const period =
+    challenge?.period === "every2" || challenge?.period === "custom" || challenge?.period === "daily"
+      ? challenge.period
+      : "daily";
+
+  return {
+    period,
+    enabled: !!challenge && challenge.enabled !== false && !challenge.deletedAt,
+    isActiveOnDate: (dateISO) => isChallengeActiveOnDate(challenge ?? null, dateISO),
+  };
+}
+
+async function resolveReminderSchedule(reminderKey: string, override?: ReminderSchedule): Promise<ReminderSchedule> {
+  if (override) return override;
+
+  if (reminderKindForId(reminderKey) === "challenge") {
+    const latest = getCachedState() ?? (await loadState());
+    const challenge = (latest.challenges ?? []).find((c) => String(c.id) === String(reminderKey));
+    return scheduleForChallenge(challenge ?? null);
+  }
+
+  return {
+    period: "daily",
+    enabled: true,
+    isActiveOnDate: () => true,
+  };
+}
+
+function upcomingActiveDates(schedule: ReminderSchedule, fromISO = getTodayISO()): string[] {
+  if (schedule.enabled === false) return [];
+
+  const dates: string[] = [];
+  for (let i = 0; i < ROLLING_SCHEDULE_DAYS; i++) {
+    const dateISO = addDaysISO(fromISO, i);
+    if (schedule.isActiveOnDate(dateISO)) dates.push(dateISO);
+  }
+
+  return dates;
+}
+
+function shouldUseDailyTrigger(schedule: ReminderSchedule): boolean {
+  return schedule.enabled !== false && (schedule.period ?? "daily") === "daily" && schedule.isActiveOnDate(getTodayISO());
 }
 
 async function cancelReminderNotifications(
@@ -135,7 +201,8 @@ export async function ensureReminderPermissions(): Promise<boolean> {
 export async function setDailyRemindersForChallenge(
   challengeId: string,
   challengeText: string,
-  timesHHMM: string[]
+  timesHHMM: string[],
+  scheduleOverride?: ReminderSchedule
 ): Promise<void> {
   if (isExpoGo()) {
     throw new Error("NOTIFICATIONS_EXPO_GO_UNSUPPORTED");
@@ -151,6 +218,7 @@ export async function setDailyRemindersForChallenge(
   const Notifications = await N();
   const reminderKey = String(challengeId);
   const reminderKind = reminderKindForId(reminderKey);
+  const schedule = await resolveReminderSchedule(reminderKey, scheduleOverride);
 
   await ensureHandler();
   await ensureAndroidChannel();
@@ -195,30 +263,47 @@ export async function setDailyRemindersForChallenge(
   await cancelReminderNotifications(Notifications, reminderKey, oldIds);
 
   const newIds: string[] = [];
+  const useDailyTrigger = shouldUseDailyTrigger(schedule);
+  const activeDates = useDailyTrigger ? [] : upcomingActiveDates(schedule);
 
   for (const { p } of parsed) {
-    const trigger = {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: p.hour,
-      minute: p.minute,
-    } as any;
+    const triggers = useDailyTrigger
+      ? [
+          {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour: p.hour,
+            minute: p.minute,
+          } as any,
+        ]
+      : activeDates
+          .map((dateISO) => dateForISOAndTime(dateISO, p.hour, p.minute))
+          .filter((date) => date.getTime() > Date.now())
+          .map(
+            (date) =>
+              ({
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date,
+              }) as any
+          );
 
-    const newId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "OneMore",
-        body: challengeText || "Připomínka výzvy",
-        sound: "default",
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-        data: {
-          [REMINDER_DATA_KEY]: reminderKey,
-          [REMINDER_DATA_KIND]: reminderKind,
+    for (const trigger of triggers) {
+      const newId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "OneMore",
+          body: challengeText || "Připomínka výzvy",
+          sound: "default",
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          data: {
+            [REMINDER_DATA_KEY]: reminderKey,
+            [REMINDER_DATA_KIND]: reminderKind,
+          },
+          ...(Platform.OS === "android" ? { channelId: REMINDER_CHANNEL_ID } : {}),
         },
-        ...(Platform.OS === "android" ? { channelId: REMINDER_CHANNEL_ID } : {}),
-      },
-      trigger,
-    });
+        trigger,
+      });
 
-    newIds.push(newId);
+      newIds.push(newId);
+    }
   }
 
   await updateState((s) => ({
@@ -288,6 +373,26 @@ export function getFreeActiveReminderChallengeId(state: any): string | null {
   const active = ch.find((c) => c?.reminderEnabled);
 
   return active ? String(active.id) : null;
+}
+
+export async function refreshScheduledChallengeReminders(): Promise<void> {
+  const latest = getCachedState() ?? (await loadState());
+
+  for (const challenge of latest.challenges ?? []) {
+    const id = String(challenge?.id ?? "");
+    if (!id) continue;
+    const hasScheduledIds = ((latest.reminderNotifIds ?? {})[id] ?? []).length > 0;
+
+    const times = Array.isArray(challenge?.reminderTimes)
+      ? challenge.reminderTimes.filter((time) => typeof time === "string" && parseHHMM(time))
+      : [];
+
+    if (challenge?.reminderEnabled && challenge.enabled !== false && !challenge.deletedAt && times.length) {
+      await setDailyRemindersForChallenge(id, String(challenge.text ?? "OneMore"), times, scheduleForChallenge(challenge));
+    } else if (challenge?.reminderEnabled || hasScheduledIds) {
+      await clearDailyRemindersForChallenge(id);
+    }
+  }
 }
 
 export const setDailyReminderForChallenge = async (

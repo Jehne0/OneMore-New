@@ -268,7 +268,7 @@ function diffDaysISO(aISO: string, bISO: string): number {
   return Math.floor((a - b) / 86400000);
 }
 
-function isChallengeActiveOnDate(c: Challenge | undefined | null, dateISO: string): boolean {
+export function isChallengeActiveOnDate(c: Challenge | undefined | null, dateISO: string): boolean {
   if (!c) return true; // když nemáme definici, bereme jako daily
   if (c.enabled === false) return false;
   if (c.deletedAt) return false;

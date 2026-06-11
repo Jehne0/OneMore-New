@@ -577,6 +577,18 @@ export default function ChallengesScreen() {
       });
       return { ...latest, challenges: nextChallenges };
     });
+
+    try {
+      const latest = await loadState();
+      const c = (latest.challenges ?? []).find((x: any) => String(x.id) === String(id)) as any;
+      const times = Array.isArray(c?.reminderTimes) ? (c.reminderTimes as string[]) : [];
+      const filled = times.filter((t) => String(t ?? "").trim());
+      if (c?.reminderEnabled && c?.enabled !== false && filled.length) {
+        await setDailyRemindersForChallenge(String(id), String(c?.text ?? "OneMore"), filled);
+      } else {
+        await clearDailyRemindersForChallenge(String(id));
+      }
+    } catch {}
   }
 
   async function addChallenge(): Promise<void> {
