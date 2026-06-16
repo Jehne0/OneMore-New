@@ -10,7 +10,7 @@ const TEST_API_KEY = "test_xYHcUmOjDUuuTuZcuFxAMynxvKe";
 
 // 🟢 Produkční klíče z RevenueCat dashboardu
 const ANDROID_API_KEY = "goog_qBDfAHXdhHnQlqwvyXKYRHVTGtq";
-const IOS_API_KEY = "appl_xxxxxxxxx";
+const IOS_API_KEY = "appl_iqHdLUlZeNUdRvTWTDVLDpoKpdX";
 
 // ✅ RevenueCat je zapnutý
 const REVENUECAT_ENABLED = true;
