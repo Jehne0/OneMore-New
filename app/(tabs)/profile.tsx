@@ -3903,7 +3903,7 @@ const incomingCount = friendEdges.filter(
               <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                 <ActivityIndicator size="large" />
                 <Text style={{ marginTop: 12, color: UI.sub, fontWeight: "800" }}>
-                  Načítám přátele...
+                  {p.loadingFriends}
                 </Text>
               </View>
             ) : (
@@ -3961,7 +3961,7 @@ const incomingCount = friendEdges.filter(
 
 {!accepted.length ? (
   <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
-    Zatím žádní přátelé.
+    {p.noFriendsYet}
   </Text>
 ) : (
   <>
