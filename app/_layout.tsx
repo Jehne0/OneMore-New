@@ -12,6 +12,7 @@ import { LanguageProvider } from "../lib/i18n";
 import { initClock } from "../lib/clock";
 import { initCloudSync } from "../lib/cloudSync";
 import { AppAlertHost } from "../lib/appAlert";
+import { UpdateGate } from "../lib/UpdateGate";
 import * as Notifications from "expo-notifications";
 
 Notifications.setNotificationHandler({
@@ -76,6 +77,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <LanguageProvider>
           <AppAlertHost />
+          <UpdateGate />
           <AppShell />
         </LanguageProvider>
       </ThemeProvider>

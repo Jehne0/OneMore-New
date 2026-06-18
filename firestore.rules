@@ -47,6 +47,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Public app configuration
+    match /appConfig/{configId} {
+      allow read: if configId == "versionCheck";
+      allow write: if false;
+    }
+
     // Shared challenges
     match /sharedChallenges/{challengeId} {
 

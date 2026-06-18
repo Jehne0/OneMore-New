@@ -87,6 +87,14 @@ export type Dictionary = {
     genericErrorTitle: string;
     genericErrorText: string;
   };
+  update: {
+    recommendedTitle: string;
+    recommendedMessage: string;
+    requiredTitle: string;
+    requiredMessage: string;
+    updateButton: string;
+    laterButton: string;
+  };
 };
 
 export const STRINGS: Record<Lang, Dictionary> = {
@@ -173,6 +181,14 @@ export const STRINGS: Record<Lang, Dictionary> = {
       genericErrorTitle: "Chyba",
       genericErrorText: "Nepodařilo se registrovat. Zkus to prosím znovu.",
     },
+    update: {
+      recommendedTitle: "Je dostupná nová verze",
+      recommendedMessage: "Doporučujeme aktualizovat OneMore na nejnovější verzi.",
+      requiredTitle: "Aktualizace je nutná",
+      requiredMessage: "Tato verze aplikace už není podporovaná. Aktualizujte prosím OneMore na nejnovější verzi.",
+      updateButton: "Aktualizovat",
+      laterButton: "Později",
+    },
   },
 
   en: {
@@ -257,6 +273,14 @@ export const STRINGS: Record<Lang, Dictionary> = {
       timeoutText: "Registration got stuck (signal / Firebase). Please try again.",
       genericErrorTitle: "Error",
       genericErrorText: "Could not register. Please try again.",
+    },
+    update: {
+      recommendedTitle: "A new version is available",
+      recommendedMessage: "We recommend updating OneMore to the latest version.",
+      requiredTitle: "Update required",
+      requiredMessage: "This version of the app is no longer supported. Please update OneMore to the latest version.",
+      updateButton: "Update",
+      laterButton: "Later",
     },
   },
 
@@ -343,6 +367,14 @@ export const STRINGS: Record<Lang, Dictionary> = {
       genericErrorTitle: "Błąd",
       genericErrorText: "Nie udało się zarejestrować. Spróbuj ponownie.",
     },
+    update: {
+      recommendedTitle: "Dostępna jest nowa wersja",
+      recommendedMessage: "Zalecamy aktualizację OneMore do najnowszej wersji.",
+      requiredTitle: "Aktualizacja jest wymagana",
+      requiredMessage: "Ta wersja aplikacji nie jest już obsługiwana. Zaktualizuj OneMore do najnowszej wersji.",
+      updateButton: "Aktualizuj",
+      laterButton: "Później",
+    },
   },
 
   de: {
@@ -427,6 +459,14 @@ export const STRINGS: Record<Lang, Dictionary> = {
       timeoutText: "Die Registrierung hängt fest (Signal / Firebase). Bitte versuche es erneut.",
       genericErrorTitle: "Fehler",
       genericErrorText: "Registrierung nicht möglich. Bitte versuche es erneut.",
+    },
+    update: {
+      recommendedTitle: "Eine neue Version ist verfügbar",
+      recommendedMessage: "Wir empfehlen, OneMore auf die neueste Version zu aktualisieren.",
+      requiredTitle: "Update erforderlich",
+      requiredMessage: "Diese Version der App wird nicht mehr unterstützt. Bitte aktualisiere OneMore auf die neueste Version.",
+      updateButton: "Aktualisieren",
+      laterButton: "Später",
     },
   },
 };
