@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import * as Application from "expo-application";
 import { Platform } from "react-native";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -26,28 +27,33 @@ function toPositiveNumber(value: unknown): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
-function versionNameToCode(value: unknown): number {
-  if (typeof value !== "string") return 0;
-  const parts = value
-    .split(".")
-    .map((part) => Number(part))
-    .filter((part) => Number.isFinite(part) && part >= 0);
-
-  if (!parts.length) return 0;
-
-  const [major = 0, minor = 0, patch = 0] = parts;
-  return Math.floor(major) * 10000 + Math.floor(minor) * 100 + Math.floor(patch);
-}
-
 export function getCurrentVersionCode(): number {
   const c = Constants as any;
-  return (
-    toPositiveNumber(c?.expoConfig?.android?.versionCode) ||
-    toPositiveNumber(c?.nativeBuildVersion) ||
-    toPositiveNumber(c?.expoConfig?.ios?.buildNumber) ||
-    versionNameToCode(c?.nativeApplicationVersion) ||
-    versionNameToCode(c?.expoConfig?.version)
-  );
+  const nativeBuildVersion =
+    toPositiveNumber(Application.nativeBuildVersion) ||
+    toPositiveNumber(c?.nativeBuildVersion);
+
+  if (nativeBuildVersion) return nativeBuildVersion;
+
+  if (Platform.OS === "android") {
+    return (
+      toPositiveNumber(c?.platform?.android?.versionCode) ||
+      toPositiveNumber(c?.expoConfig?.android?.versionCode) ||
+      toPositiveNumber(c?.manifest?.android?.versionCode) ||
+      toPositiveNumber(c?.manifest2?.extra?.expoClient?.android?.versionCode) ||
+      toPositiveNumber(c?.easConfig?.android?.versionCode)
+    );
+  }
+
+  if (Platform.OS === "ios") {
+    return (
+      toPositiveNumber(c?.expoConfig?.ios?.buildNumber) ||
+      toPositiveNumber(c?.manifest?.ios?.buildNumber) ||
+      toPositiveNumber(c?.manifest2?.extra?.expoClient?.ios?.buildNumber)
+    );
+  }
+
+  return 0;
 }
 
 export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckResult | null> {
@@ -60,7 +66,17 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
     const latestVersionCode = toPositiveNumber(data.latestVersionCode);
     const minimumRequiredVersionCode = toPositiveNumber(data.minimumRequiredVersionCode);
 
-    if (!currentVersionCode) return null;
+    if (!currentVersionCode) {
+      if (__DEV__) {
+        console.log("[versionCheck]", {
+          currentVersionCode: null,
+          latestVersionCode,
+          minimumRequiredVersionCode,
+          updateType: "none",
+        });
+      }
+      return null;
+    }
 
     const latestVersionName =
       typeof data.latestVersionName === "string" ? data.latestVersionName.trim() : "";
@@ -70,11 +86,36 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
     const updateUrl = typeof updateUrlRaw === "string" ? updateUrlRaw.trim() : undefined;
 
     if (minimumRequiredVersionCode > currentVersionCode) {
+      if (__DEV__) {
+        console.log("[versionCheck]", {
+          currentVersionCode,
+          latestVersionCode,
+          minimumRequiredVersionCode,
+          updateType: "required",
+        });
+      }
       return { level: "required", latestVersionName, message, updateUrl };
     }
 
     if (latestVersionCode > currentVersionCode) {
+      if (__DEV__) {
+        console.log("[versionCheck]", {
+          currentVersionCode,
+          latestVersionCode,
+          minimumRequiredVersionCode,
+          updateType: "recommended",
+        });
+      }
       return { level: "recommended", latestVersionName, message, updateUrl };
+    }
+
+    if (__DEV__) {
+      console.log("[versionCheck]", {
+        currentVersionCode,
+        latestVersionCode,
+        minimumRequiredVersionCode,
+        updateType: "none",
+      });
     }
 
     return null;
