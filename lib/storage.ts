@@ -844,9 +844,13 @@ export async function loadState(): Promise<AppState> {
       }
     }
 
-    if (!raw) return defaultState;
+    if (!raw) {
+      _cache = defaultState;
+      return defaultState;
+    }
 
     const merged = parseAndMerge(raw);
+    _cache = merged;
 
     if (usedKey && usedKey !== STORAGE_KEY) {
       await saveState(merged);
@@ -862,6 +866,7 @@ export async function loadState(): Promise<AppState> {
         return merged;
       }
     } catch {}
+    _cache = defaultState;
     return defaultState;
   }
 }

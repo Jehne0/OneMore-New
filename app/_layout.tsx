@@ -57,7 +57,9 @@ export default function RootLayout() {
     void initClock();
 
     // ✅ Cloud sync (Firestore)
-    initCloudSync();
+    try {
+      initCloudSync();
+    } catch {}
 
     (async () => {
       try {

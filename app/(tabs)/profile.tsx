@@ -1109,10 +1109,11 @@ const sharedInvitesInitializedRef = useRef(false);
         const incomingPending = items.filter((item) => {
           const isPending = item.status === "pending";
           const iAmMember = item.memberUids.includes(uid);
+          const iAmPendingInvite = (item.pendingInviteUids ?? []).includes(uid);
           const iAlreadyAccepted = item.acceptedBy.includes(uid);
           const createdByMe = String(item.createdBy) === String(uid);
 
-          return isPending && iAmMember && !iAlreadyAccepted && !createdByMe;
+          return ((isPending && iAmMember && !iAlreadyAccepted) || iAmPendingInvite) && !createdByMe;
         });
 
         const outgoingPending = items.filter((item) => {

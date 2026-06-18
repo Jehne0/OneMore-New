@@ -51,7 +51,13 @@ service cloud.firestore {
     match /sharedChallenges/{challengeId} {
 
       allow read: if signedIn()
-        && request.auth.uid in resource.data.memberUids;
+        && (
+          request.auth.uid in resource.data.memberUids
+          || (
+            resource.data.pendingInviteUids is list
+            && request.auth.uid in resource.data.pendingInviteUids
+          )
+        );
 
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
@@ -70,7 +76,21 @@ service cloud.firestore {
         )
         && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.memberUids is list
-        && request.resource.data.acceptedBy is list;
+        && request.resource.data.acceptedBy is list
+        && (
+          request.resource.data.memberUids == resource.data.memberUids
+          || (
+            !(request.auth.uid in request.resource.data.memberUids)
+            && request.resource.data.memberUids.hasOnly(resource.data.memberUids)
+          )
+        )
+        && (
+          request.resource.data.pendingInviteUids == resource.data.pendingInviteUids
+          || (
+            !("pendingInviteUids" in resource.data)
+            && !("pendingInviteUids" in request.resource.data)
+          )
+        );
 
       match /progress/{dateISO} {
 

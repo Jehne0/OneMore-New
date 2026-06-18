@@ -11,7 +11,8 @@ import {
   where,
   type Unsubscribe,
 } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "./firebase";
 
 export type SharedChallengePeriod = "daily" | "every2" | "custom";
 export type SharedChallengeStatus = "pending" | "active" | "declined";
@@ -30,6 +31,7 @@ export type SharedChallenge = {
   enabled: boolean;
   status: SharedChallengeStatus;
   acceptedBy: string[];
+  pendingInviteUids?: string[];
   leftBy?: string[];
   createdAt?: any;
   updatedAt?: any;
@@ -186,6 +188,7 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
     enabled: true,
     status: "pending",
     acceptedBy: [uid],
+    pendingInviteUids: [],
     leftBy: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -199,6 +202,12 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
 export async function acceptSharedChallenge(challengeId: string) {
   const uid = myUid();
   const challenge = await getSharedChallenge(challengeId);
+
+  if (challenge && !challenge.memberUids.includes(uid) && (challenge.pendingInviteUids ?? []).includes(uid)) {
+    const call = httpsCallable(functions, "acceptSharedChallengeMemberInvite");
+    await call({ challengeId });
+    return;
+  }
 
   if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
   if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
@@ -221,6 +230,12 @@ export async function acceptSharedChallenge(challengeId: string) {
 export async function declineSharedChallenge(challengeId: string) {
   const uid = myUid();
   const challenge = await getSharedChallenge(challengeId);
+
+  if (challenge && !challenge.memberUids.includes(uid) && (challenge.pendingInviteUids ?? []).includes(uid)) {
+    const call = httpsCallable(functions, "declineSharedChallengeMemberInvite");
+    await call({ challengeId });
+    return;
+  }
 
   if (!challenge) throw new Error("Společná výzva nebyla nalezena.");
   if (!challenge.memberUids.includes(uid)) throw new Error("Do této výzvy nepatříš.");
@@ -284,64 +299,106 @@ export async function leaveSharedChallenge(challengeId: string) {
   });
 }
 
+export async function inviteSharedChallengeMember(challengeId: string, friendUid: string) {
+  myUid();
+  const call = httpsCallable(functions, "inviteSharedChallengeMember");
+  await call({ challengeId, friendUid });
+}
+
 export function subscribeSharedChallenges(
   onItems: (items: SharedChallenge[]) => void,
   onError?: (e: any) => void
 ): Unsubscribe {
   const uid = myUid();
 
-  const q = query(
+  const memberQuery = query(
     collection(db, "sharedChallenges"),
     where("memberUids", "array-contains", uid)
   );
+  const pendingQuery = query(
+    collection(db, "sharedChallenges"),
+    where("pendingInviteUids", "array-contains", uid)
+  );
 
-  return onSnapshot(
-    q,
+  const memberItems = new Map<string, SharedChallenge>();
+  const pendingItems = new Map<string, SharedChallenge>();
+
+  const readDoc = (d: any): SharedChallenge => {
+    const data = d.data() as any;
+    return {
+      id: d.id,
+      title: String(data.title ?? ""),
+      createdBy: String(data.createdBy ?? ""),
+      memberUids: Array.isArray(data.memberUids)
+        ? data.memberUids.map((x: any) => String(x))
+        : [],
+      targetPerDay: clamp(Number(data.targetPerDay ?? 1) || 1, 1, 20),
+      period:
+        data.period === "every2" || data.period === "custom"
+          ? data.period
+          : "daily",
+      customDays: dedupeDays(data.customDays),
+      periodAnchor: ensureISODate(data.periodAnchor),
+      enabled: data.enabled !== false,
+      status:
+        data.status === "pending" || data.status === "declined"
+          ? data.status
+          : "active",
+      acceptedBy: Array.isArray(data.acceptedBy)
+        ? data.acceptedBy.map((x: any) => String(x))
+        : [],
+      pendingInviteUids: Array.isArray(data.pendingInviteUids)
+        ? data.pendingInviteUids.map((x: any) => String(x))
+        : [],
+      leftBy: Array.isArray(data.leftBy)
+        ? data.leftBy.map((x: any) => String(x))
+        : [],
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    };
+  };
+
+  const emit = () => {
+    const merged = new Map<string, SharedChallenge>();
+
+    pendingItems.forEach((item, id) => merged.set(id, item));
+    memberItems.forEach((item, id) => merged.set(id, item));
+
+    const items = Array.from(merged.values()).filter((item) => !(item.leftBy ?? []).includes(uid));
+
+    items.sort((a, b) => {
+      const ta = a.createdAt?.seconds ?? 0;
+      const tb = b.createdAt?.seconds ?? 0;
+      return tb - ta;
+    });
+
+    onItems(items);
+  };
+
+  const unsubMembers = onSnapshot(
+    memberQuery,
     (snap) => {
-      const items: SharedChallenge[] = snap.docs
-        .map((d) => {
-          const data = d.data() as any;
-          return {
-            id: d.id,
-            title: String(data.title ?? ""),
-            createdBy: String(data.createdBy ?? ""),
-            memberUids: Array.isArray(data.memberUids)
-              ? data.memberUids.map((x: any) => String(x))
-              : [],
-            targetPerDay: clamp(Number(data.targetPerDay ?? 1) || 1, 1, 20),
-            period:
-              data.period === "every2" || data.period === "custom"
-                ? data.period
-                : "daily",
-            customDays: dedupeDays(data.customDays),
-            periodAnchor: ensureISODate(data.periodAnchor),
-            enabled: data.enabled !== false,
-            status:
-              data.status === "pending" || data.status === "declined"
-                ? data.status
-                : "active",
-            acceptedBy: Array.isArray(data.acceptedBy)
-              ? data.acceptedBy.map((x: any) => String(x))
-              : [],
-            leftBy: Array.isArray(data.leftBy)
-              ? data.leftBy.map((x: any) => String(x))
-              : [],
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-          };
-        })
-        .filter((item) => !(item.leftBy ?? []).includes(uid));
-
-      items.sort((a, b) => {
-        const ta = a.createdAt?.seconds ?? 0;
-        const tb = b.createdAt?.seconds ?? 0;
-        return tb - ta;
-      });
-
-      onItems(items);
+      memberItems.clear();
+      snap.docs.forEach((d) => memberItems.set(d.id, readDoc(d)));
+      emit();
     },
     (err) => onError?.(err)
   );
+
+  const unsubPending = onSnapshot(
+    pendingQuery,
+    (snap) => {
+      pendingItems.clear();
+      snap.docs.forEach((d) => pendingItems.set(d.id, readDoc(d)));
+      emit();
+    },
+    (err) => onError?.(err)
+  );
+
+  return () => {
+    unsubMembers();
+    unsubPending();
+  };
 }
 
 export function subscribeSharedChallengeDay(
@@ -410,6 +467,9 @@ export async function getSharedChallenge(challengeId: string): Promise<SharedCha
         : "active",
     acceptedBy: Array.isArray(data.acceptedBy)
       ? data.acceptedBy.map((x: any) => String(x))
+      : [],
+    pendingInviteUids: Array.isArray(data.pendingInviteUids)
+      ? data.pendingInviteUids.map((x: any) => String(x))
       : [],
     leftBy: Array.isArray(data.leftBy)
       ? data.leftBy.map((x: any) => String(x))

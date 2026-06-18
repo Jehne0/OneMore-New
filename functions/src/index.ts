@@ -230,6 +230,16 @@ function isSharedDone(v: any): boolean {
   );
 }
 
+const MAX_SHARED_MEMBERS = 10;
+
+function sharedChallengeRef(challengeId: string) {
+  return db.collection("sharedChallenges").doc(challengeId);
+}
+
+function uniqueUids(values: string[]) {
+  return Array.from(new Set(values.map((x) => String(x ?? "").trim()).filter(Boolean)));
+}
+
 export const requestFriend = onCall({ region: "europe-west1" }, async (request) => {
   const uid = assertAuth(request);
   const otherUid = normUid((request.data ?? {}).otherUid);
@@ -527,6 +537,188 @@ export const deleteMyAccount = onCall({ region: "europe-west1" }, async (request
     deletedUid: uid,
     deletedUsername: usernameLower || null,
   };
+});
+
+export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, async (request) => {
+  const uid = assertAuth(request);
+  const challengeId = safeStr((request.data ?? {}).challengeId, 256);
+  const friendUid = normUid((request.data ?? {}).friendUid, "friendUid");
+
+  if (!challengeId) throw new HttpsError("invalid-argument", "Chybi challengeId.");
+  if (friendUid === uid) throw new HttpsError("invalid-argument", "Nemuzes pozvat sam sebe.");
+
+  let challengeTitle = "Spolecna vyzva";
+
+  await db.runTransaction(async (tx) => {
+    const challengeRef = sharedChallengeRef(challengeId);
+    const [challengeSnap, mineFriendSnap, theirFriendSnap] = await Promise.all([
+      tx.get(challengeRef),
+      tx.get(friendEdgeRef(uid, friendUid)),
+      tx.get(friendEdgeRef(friendUid, uid)),
+    ]);
+
+    if (!challengeSnap.exists) {
+      throw new HttpsError("not-found", "Spolecna vyzva nebyla nalezena.");
+    }
+
+    const data = challengeSnap.data() as any;
+    const memberUids = uniqueUids(arr(data?.memberUids));
+    const acceptedBy = uniqueUids(arr(data?.acceptedBy));
+    const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids)).filter(
+      (pendingUid) => !memberUids.includes(pendingUid)
+    );
+
+    if (!memberUids.includes(uid) || !acceptedBy.includes(uid)) {
+      throw new HttpsError("permission-denied", "Pozvat muze jen prijaty ucastnik vyzvy.");
+    }
+
+    if (data?.enabled === false || data?.status === "declined") {
+      throw new HttpsError("failed-precondition", "Tato vyzva uz neni aktivni.");
+    }
+
+    if (friendStatus(mineFriendSnap) !== "accepted" || friendStatus(theirFriendSnap) !== "accepted") {
+      throw new HttpsError("failed-precondition", "Pozvat lze jen prijateho pritele.");
+    }
+
+    if (memberUids.includes(friendUid)) {
+      throw new HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
+    }
+
+    if (pendingInviteUids.includes(friendUid)) {
+      throw new HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
+    }
+
+    if (memberUids.length + pendingInviteUids.length >= MAX_SHARED_MEMBERS) {
+      throw new HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
+    }
+
+    challengeTitle = safeStr(data?.title, 120) || challengeTitle;
+
+    tx.set(
+      challengeRef,
+      {
+        pendingInviteUids: [...pendingInviteUids, friendUid],
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+
+  try {
+    const fromName = await getUsernameForPush(uid);
+    await sendPushToUser(
+      friendUid,
+      "Nova spolecna vyzva",
+      `${fromName} te pozval/a do spolecne vyzvy: ${challengeTitle}.`,
+      {
+        type: "shared_challenge_invite",
+        challengeId,
+        fromUid: uid,
+      },
+      ["sharedChallenges", "incomingChallenges"]
+    );
+  } catch {
+    console.error("[push] shared challenge member invite notification failed");
+  }
+
+  return { ok: true };
+});
+
+export const acceptSharedChallengeMemberInvite = onCall({ region: "europe-west1" }, async (request) => {
+  const uid = assertAuth(request);
+  const challengeId = safeStr((request.data ?? {}).challengeId, 256);
+
+  if (!challengeId) throw new HttpsError("invalid-argument", "Chybi challengeId.");
+
+  await db.runTransaction(async (tx) => {
+    const challengeRef = sharedChallengeRef(challengeId);
+    const challengeSnap = await tx.get(challengeRef);
+
+    if (!challengeSnap.exists) {
+      throw new HttpsError("not-found", "Spolecna vyzva nebyla nalezena.");
+    }
+
+    const data = challengeSnap.data() as any;
+    const memberUids = uniqueUids(arr(data?.memberUids));
+    const acceptedBy = uniqueUids(arr(data?.acceptedBy));
+    const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
+    const leftBy = uniqueUids(arr(data?.leftBy)).filter((memberUid) => memberUid !== uid);
+
+    if (data?.enabled === false || data?.status === "declined") {
+      throw new HttpsError("failed-precondition", "Tato vyzva uz neni aktivni.");
+    }
+
+    const alreadyMember = memberUids.includes(uid);
+    if (!alreadyMember && !pendingInviteUids.includes(uid)) {
+      throw new HttpsError("permission-denied", "Pro tuto vyzvu nemas pozvanku.");
+    }
+
+    if (!alreadyMember && memberUids.length >= MAX_SHARED_MEMBERS) {
+      throw new HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
+    }
+
+    const nextMemberUids = alreadyMember ? memberUids : [...memberUids, uid];
+    const nextAcceptedBy = uniqueUids([...acceptedBy, uid]).filter((memberUid) =>
+      nextMemberUids.includes(memberUid)
+    );
+    const nextPendingInviteUids = pendingInviteUids.filter((memberUid) => memberUid !== uid);
+    const everyoneAccepted = nextMemberUids.every((memberUid) => nextAcceptedBy.includes(memberUid));
+    const wasActive = data?.status === "active";
+
+    tx.set(
+      challengeRef,
+      {
+        memberUids: nextMemberUids,
+        acceptedBy: nextAcceptedBy,
+        pendingInviteUids: nextPendingInviteUids,
+        leftBy,
+        status: wasActive || everyoneAccepted ? "active" : "pending",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+
+  return { ok: true };
+});
+
+export const declineSharedChallengeMemberInvite = onCall({ region: "europe-west1" }, async (request) => {
+  const uid = assertAuth(request);
+  const challengeId = safeStr((request.data ?? {}).challengeId, 256);
+
+  if (!challengeId) throw new HttpsError("invalid-argument", "Chybi challengeId.");
+
+  await db.runTransaction(async (tx) => {
+    const challengeRef = sharedChallengeRef(challengeId);
+    const challengeSnap = await tx.get(challengeRef);
+
+    if (!challengeSnap.exists) {
+      throw new HttpsError("not-found", "Spolecna vyzva nebyla nalezena.");
+    }
+
+    const data = challengeSnap.data() as any;
+    const memberUids = uniqueUids(arr(data?.memberUids));
+    const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
+
+    if (memberUids.includes(uid)) {
+      throw new HttpsError("failed-precondition", "Ucastnik musi vyzvu opustit.");
+    }
+
+    if (!pendingInviteUids.includes(uid)) {
+      return;
+    }
+
+    tx.set(
+      challengeRef,
+      {
+        pendingInviteUids: pendingInviteUids.filter((memberUid) => memberUid !== uid),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+
+  return { ok: true };
 });
 
 export const notifySharedChallengeCreated = onDocumentCreated(

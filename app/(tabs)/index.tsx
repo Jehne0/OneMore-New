@@ -7,14 +7,17 @@ import {
   acceptSharedChallenge,
   completeSharedChallengeToday,
   getTodayISO as getSharedTodayISO,
+  inviteSharedChallengeMember,
   isSharedChallengeActiveOnDate,
   leaveSharedChallenge,
+  MAX_SHARED_MEMBERS,
   subscribeSharedChallengeDay,
   subscribeSharedChallengeProgress,
   subscribeSharedChallenges,
   type SharedChallenge,
   type SharedChallengeDayProgress,
 } from "../../lib/sharedChallenges";
+import { subscribeFriends, type FriendEdge } from "../../lib/friends";
 import { getProfile } from "../../lib/usernames";
 import { doc, updateDoc } from "firebase/firestore";
 import {
@@ -62,6 +65,7 @@ import {
 import {
   AppState,
   ensureDailyPick,
+  getCachedState,
   loadState,
   purgeChallenge,
   renameChallenge,
@@ -859,6 +863,30 @@ sharedMemberCount: {
       fontWeight: "800",
       color: UI.sub,
     },
+    sharedFriendLine: {
+      marginTop: 4,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      minWidth: 0,
+    },
+    sharedFriendLineText: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 12,
+      fontWeight: "800",
+      color: UI.sub,
+    },
+    sharedInviteMiniBtn: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: UI.card2,
+      borderWidth: 1,
+      borderColor: UI.stroke,
+    },
     sharedExpandBtn: {
       width: 38,
       height: 38,
@@ -918,6 +946,11 @@ notificationCount: "Number of notifications",
       quote: "A small step today, a big change tomorrow",
       addTitle: "Add challenge",
       close: "Close",
+      invite: "Invite",
+      inviteFriend: "Invite friend",
+      invitationSent: "Invitation sent",
+      noFriendsToInvite: "No accepted friends available to invite.",
+      couldNotInvite: "Could not send invitation.",
       namePlaceholder: "Challenge name",
       add: "Add",
       manageTitle: "Manage challenge",
@@ -999,6 +1032,11 @@ notificationCount: "Liczba powiadomień",
       quote: "Mały krok dziś, wielka zmiana jutro",
       addTitle: "Dodaj wyzwanie",
       close: "Zamknij",
+      invite: "Zaproś",
+      inviteFriend: "Zaproś znajomego",
+      invitationSent: "Zaproszenie wysłane",
+      noFriendsToInvite: "Brak zaakceptowanych znajomych do zaproszenia.",
+      couldNotInvite: "Nie udało się wysłać zaproszenia.",
       namePlaceholder: "Nazwa wyzwania",
       add: "Dodaj",
       manageTitle: "Zarządzaj wyzwaniem",
@@ -1081,6 +1119,11 @@ notificationCount: "Anzahl der Benachrichtigungen",
       quote: "Ein kleiner Schritt heute, eine große Veränderung morgen",
       addTitle: "Challenge hinzufügen",
       close: "Schließen",
+      invite: "Einladen",
+      inviteFriend: "Freund einladen",
+      invitationSent: "Einladung gesendet",
+      noFriendsToInvite: "Keine angenommenen Freunde zum Einladen verfügbar.",
+      couldNotInvite: "Einladung konnte nicht gesendet werden.",
       namePlaceholder: "Name der Challenge",
       add: "Hinzufügen",
       manageTitle: "Challenge verwalten",
@@ -1161,6 +1204,11 @@ notificationCount: "Počet notifikací",
     quote: "Malý krok dnes, velká změna zítra",
     addTitle: "Přidat výzvu",
     close: "Zavřít",
+    invite: "Pozvat",
+    inviteFriend: "Pozvat přítele",
+    invitationSent: "Pozvánka odeslána",
+    noFriendsToInvite: "Žádní přijatí přátelé k pozvání.",
+    couldNotInvite: "Nepodařilo se odeslat pozvánku.",
     namePlaceholder: "Název výzvy",
     add: "Přidat",
     manageTitle: "Správa výzvy",
@@ -1262,20 +1310,81 @@ notificationCount: "Počet notifikací",
   const isChallengeActiveToday = useCallback((c: any): boolean => isChallengeActiveOnDate(c, todayISO), [isChallengeActiveOnDate, todayISO]);
 
   const [premium, setPremium] = useState(false);
-  const [appState, setAppState] = useState<AppState | null>(null);
+  const [appState, setAppState] = useState<AppState | null>(() => getCachedState());
   const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
   const [sharedChallengesLoaded, setSharedChallengesLoaded] = useState(false);
   const [sharedTodayMap, setSharedTodayMap] = useState<Record<string, SharedChallengeDayProgress | null>>({});
   const [sharedFriendNames, setSharedFriendNames] = useState<Record<string, string>>({});
   const [sharedProgressMap, setSharedProgressMap] = useState<Record<string, SharedChallengeDayProgress[]>>({});
   const [sharedCompletingMap, setSharedCompletingMap] = useState<Record<string, boolean>>({});
+  const [friendEdges, setFriendEdges] = useState<FriendEdge[]>([]);
+  const [sharedInviteOpen, setSharedInviteOpen] = useState(false);
+  const [selectedSharedInvite, setSelectedSharedInvite] = useState<SharedChallenge | null>(null);
+  const [sharedInviteSendingUid, setSharedInviteSendingUid] = useState<string | null>(null);
+  const [sharedInviteStatus, setSharedInviteStatus] = useState("");
+  const [localSharedInviteUids, setLocalSharedInviteUids] = useState<Record<string, string[]>>({});
   const [premiumReady, setPremiumReady] = useState(false);
 
   useEffect(() => {
+    const cached = getCachedState();
+    if (cached) setAppState(cached);
     return subscribeState((next) => {
       setAppState(next);
     });
   }, []);
+
+  useEffect(() => {
+    if (!auth.currentUser?.uid) {
+      setFriendEdges([]);
+      return;
+    }
+
+    return subscribeFriends(
+      (edges) => setFriendEdges(edges),
+      () => setFriendEdges([])
+    );
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const acceptedFriendUids = Array.from(
+      new Set(
+        friendEdges
+          .filter((edge) => edge.status === "accepted")
+          .map((edge) => String(edge.otherUid))
+          .filter(Boolean)
+      )
+    );
+
+    if (!acceptedFriendUids.length) return;
+
+    void (async () => {
+      const nextNames: Record<string, string> = {};
+
+      for (const uid of acceptedFriendUids) {
+        if (sharedFriendNames[uid] && sharedFriendNames[uid] !== TXT.unknownUser) continue;
+
+        try {
+          const p = await getProfile(uid);
+          const loadedName = typeof p?.username === "string" ? p.username.trim() : "";
+          nextNames[uid] = loadedName && loadedName !== uid ? loadedName : TXT.unknownUser;
+        } catch {
+          nextNames[uid] = TXT.unknownUser;
+        }
+      }
+
+      if (!mounted || !Object.keys(nextNames).length) return;
+
+      setSharedFriendNames((prev) => ({
+        ...prev,
+        ...nextNames,
+      }));
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [friendEdges, sharedFriendNames, TXT.unknownUser]);
 
   
 
@@ -1284,6 +1393,16 @@ notificationCount: "Počet notifikací",
 
     let unsubDays: Array<() => void> = [];
     let unsubProgress: Array<() => void> = [];
+
+    if (!auth.currentUser?.uid) {
+      setSharedChallenges([]);
+      setSharedChallengesLoaded(true);
+      setSharedTodayMap({});
+      setSharedProgressMap({});
+      return () => {
+        mounted = false;
+      };
+    }
 
     const unsubShared = subscribeSharedChallenges(
       async (items) => {
@@ -1406,6 +1525,10 @@ notificationCount: "Počet notifikací",
     isPremiumActive().then((p) => {
       if (!mounted) return;
       setPremium(!!p);
+      setPremiumReady(true);
+    }).catch(() => {
+      if (!mounted) return;
+      setPremium(false);
       setPremiumReady(true);
     });
     const unsub = subscribePremium((p) => {
@@ -1899,8 +2022,9 @@ const visibleChallenges = useMemo(() => {
   }, [visibleChallenges]);
 
 const visibleSharedChallenges = useMemo(() => {
+  const me = auth.currentUser?.uid ?? "";
   return sharedChallenges.filter(
-    (x) => x.enabled !== false && x.status === "active"
+    (x) => x.enabled !== false && x.status === "active" && x.memberUids.includes(me)
   );
   
 }, [sharedChallenges]);
@@ -1997,6 +2121,86 @@ const sidePadding = 18;
     if (otherNames.length === 2) return `${TXT.withFriends}: ${otherNames[0]}, ${otherNames[1]}`;
 
     return `${TXT.withFriends}: ${otherNames.slice(0, 2).join(", ")} +${otherNames.length - 2}`;
+  }
+
+  function getPendingSharedInviteUids(item: SharedChallenge): string[] {
+    const memberSet = new Set(item.memberUids.map((uid) => String(uid)));
+    const local = localSharedInviteUids[item.id] ?? [];
+    return Array.from(
+      new Set([...(item.pendingInviteUids ?? []), ...local].map((uid) => String(uid)).filter(Boolean))
+    ).filter((uid) => !memberSet.has(uid));
+  }
+
+  function canInviteToSharedChallenge(item: SharedChallenge): boolean {
+    const me = auth.currentUser?.uid ?? "";
+    return (
+      !!me &&
+      item.enabled !== false &&
+      item.status !== "declined" &&
+      item.memberUids.includes(me) &&
+      item.acceptedBy.includes(me)
+    );
+  }
+
+  function getEligibleSharedInviteFriends(item: SharedChallenge | null): FriendEdge[] {
+    if (!item) return [];
+
+    const me = auth.currentUser?.uid ?? "";
+    const pendingInviteUids = getPendingSharedInviteUids(item);
+    const excluded = new Set<string>([
+      me,
+      ...item.memberUids.map((uid) => String(uid)),
+      ...pendingInviteUids,
+    ]);
+
+    if (item.memberUids.length + pendingInviteUids.length >= MAX_SHARED_MEMBERS) {
+      return [];
+    }
+
+    return friendEdges.filter((edge) => {
+      const uid = String(edge.otherUid);
+      return edge.status === "accepted" && uid && !excluded.has(uid);
+    });
+  }
+
+  function openSharedInviteModal(item: SharedChallenge) {
+    if (!canInviteToSharedChallenge(item)) {
+      Alert.alert(TXT.sharedChallenge, TXT.challengeNotAccepted);
+      return;
+    }
+
+    setSelectedSharedInvite(item);
+    setSharedInviteStatus("");
+    setSharedInviteSendingUid(null);
+    setSharedInviteOpen(true);
+  }
+
+  function closeSharedInviteModal() {
+    setSharedInviteOpen(false);
+    setSelectedSharedInvite(null);
+    setSharedInviteSendingUid(null);
+    setSharedInviteStatus("");
+  }
+
+  async function sendSharedMemberInvite(friendUid: string) {
+    if (!selectedSharedInvite || sharedInviteSendingUid) return;
+
+    try {
+      setSharedInviteSendingUid(friendUid);
+      await inviteSharedChallengeMember(selectedSharedInvite.id, friendUid);
+      setLocalSharedInviteUids((prev) => {
+        const current = prev[selectedSharedInvite.id] ?? [];
+        return {
+          ...prev,
+          [selectedSharedInvite.id]: Array.from(new Set([...current, friendUid])),
+        };
+      });
+      setSharedInviteStatus(TXT.invitationSent);
+    } catch (e: any) {
+      Alert.alert(TXT.sharedChallenge, e?.message ?? TXT.couldNotInvite);
+    } finally {
+      setSharedInviteSendingUid(null);
+    }
   }
 
   function getSharedUserCompletedCount(item: SharedChallenge, uid: string): number {
@@ -3371,6 +3575,70 @@ useEffect(() => {
       </Modal>
 
       <Modal
+        visible={sharedInviteOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeSharedInviteModal}
+      >
+        <Pressable style={styles.backdrop} onPress={closeSharedInviteModal}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: UI.accent }]}>
+                {TXT.inviteFriend}
+              </Text>
+
+              <Pressable
+                onPress={closeSharedInviteModal}
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}
+              >
+                <Text style={styles.closeText}>{TXT.close}</Text>
+              </Pressable>
+            </View>
+
+            {!!sharedInviteStatus && (
+              <Text style={[styles.modalHint, { color: UI.accent }]}>
+                {sharedInviteStatus}
+              </Text>
+            )}
+
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {getEligibleSharedInviteFriends(selectedSharedInvite).length ? (
+                getEligibleSharedInviteFriends(selectedSharedInvite).map((edge) => {
+                  const uid = String(edge.otherUid);
+                  const sending = sharedInviteSendingUid === uid;
+                  const busy = !!sharedInviteSendingUid;
+
+                  return (
+                    <View key={uid} style={styles.modalRow}>
+                      <Text style={[styles.modalLabel, { color: UI.text, flex: 1 }]} numberOfLines={1}>
+                        {getSharedDisplayName(uid)}
+                      </Text>
+
+                      <Pressable
+                        disabled={busy}
+                        onPress={() => void sendSharedMemberInvite(uid)}
+                        style={({ pressed }) => [
+                          styles.sharedDoneBtn,
+                          busy && { opacity: 0.55 },
+                          pressed && !busy && { opacity: 0.9 },
+                        ]}
+                      >
+                        <Text style={styles.sharedDoneBtnText}>
+                          {sending ? "..." : TXT.invite}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                })
+              ) : (
+                <Text style={styles.modalHint}>{TXT.noFriendsToInvite}</Text>
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={sharedNotificationOpen}
         transparent
         animationType="fade"
@@ -3681,11 +3949,29 @@ try {
   {item.title}
 </Text>
 
-                                <Text style={styles.sharedCompactMeta} numberOfLines={1}>
-                                 {`S: ${getSharedDisplayName(
-  item.memberUids.find((uid) => String(uid) !== String(auth.currentUser?.uid ?? "")) ?? ""
-)}`}
-                                </Text>
+                                <View style={styles.sharedFriendLine}>
+                                  <Text style={styles.sharedFriendLineText} numberOfLines={1}>
+                                    {`S: ${getSharedDisplayName(
+                                      item.memberUids.find((uid) => String(uid) !== String(auth.currentUser?.uid ?? "")) ?? ""
+                                    )}`}
+                                  </Text>
+
+                                  {canInviteToSharedChallenge(item) && !lockedByFree && (
+                                    <Pressable
+                                      onPress={(e) => {
+                                        e.stopPropagation();
+                                        openSharedInviteModal(item);
+                                      }}
+                                      style={({ pressed }) => [
+                                        styles.sharedInviteMiniBtn,
+                                        pressed && { opacity: 0.88 },
+                                      ]}
+                                      hitSlop={8}
+                                    >
+                                      <Ionicons name="add" size={16} color={UI.text} />
+                                    </Pressable>
+                                  )}
+                                </View>
                               </Pressable>
 <View style={styles.sharedActionsRow}>
 
