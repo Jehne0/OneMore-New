@@ -883,9 +883,9 @@ sharedMemberCount: {
       borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: UI.card2,
+      backgroundColor: UI.accent,
       borderWidth: 1,
-      borderColor: UI.stroke,
+      borderColor: UI.accent,
     },
     sharedExpandBtn: {
       width: 38,
@@ -951,6 +951,10 @@ notificationCount: "Number of notifications",
       invitationSent: "Invitation sent",
       noFriendsToInvite: "No accepted friends available to invite.",
       couldNotInvite: "Could not send invitation.",
+      sharedInviteNotFound: "The shared challenge could not be found.",
+      sharedInviteFailed: "The invitation could not be sent. Please try again.",
+      sharedInviteAlreadyMember: "This friend is already part of this shared challenge.",
+      sharedInviteGeneric: "Something went wrong. Please try again.",
       namePlaceholder: "Challenge name",
       add: "Add",
       manageTitle: "Manage challenge",
@@ -1037,6 +1041,10 @@ notificationCount: "Liczba powiadomień",
       invitationSent: "Zaproszenie wysłane",
       noFriendsToInvite: "Brak zaakceptowanych znajomych do zaproszenia.",
       couldNotInvite: "Nie udało się wysłać zaproszenia.",
+      sharedInviteNotFound: "Nie udało się znaleźć wspólnego wyzwania.",
+      sharedInviteFailed: "Nie udało się wysłać zaproszenia. Spróbuj ponownie.",
+      sharedInviteAlreadyMember: "Ten znajomy jest już częścią tego wspólnego wyzwania.",
+      sharedInviteGeneric: "Coś poszło nie tak. Spróbuj ponownie.",
       namePlaceholder: "Nazwa wyzwania",
       add: "Dodaj",
       manageTitle: "Zarządzaj wyzwaniem",
@@ -1124,6 +1132,10 @@ notificationCount: "Anzahl der Benachrichtigungen",
       invitationSent: "Einladung gesendet",
       noFriendsToInvite: "Keine angenommenen Freunde zum Einladen verfügbar.",
       couldNotInvite: "Einladung konnte nicht gesendet werden.",
+      sharedInviteNotFound: "Die gemeinsame Challenge konnte nicht gefunden werden.",
+      sharedInviteFailed: "Die Einladung konnte nicht gesendet werden. Bitte versuche es erneut.",
+      sharedInviteAlreadyMember: "Dieser Freund ist bereits Teil dieser gemeinsamen Challenge.",
+      sharedInviteGeneric: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
       namePlaceholder: "Name der Challenge",
       add: "Hinzufügen",
       manageTitle: "Challenge verwalten",
@@ -1209,6 +1221,10 @@ notificationCount: "Počet notifikací",
     invitationSent: "Pozvánka odeslána",
     noFriendsToInvite: "Žádní přijatí přátelé k pozvání.",
     couldNotInvite: "Nepodařilo se odeslat pozvánku.",
+    sharedInviteNotFound: "Společnou výzvu se nepodařilo najít.",
+    sharedInviteFailed: "Pozvánku se nepodařilo odeslat. Zkuste to prosím znovu.",
+    sharedInviteAlreadyMember: "Tento přítel už je v této společné výzvě.",
+    sharedInviteGeneric: "Něco se nepodařilo. Zkuste to prosím znovu.",
     namePlaceholder: "Název výzvy",
     add: "Přidat",
     manageTitle: "Správa výzvy",
@@ -2182,6 +2198,41 @@ const sidePadding = 18;
     setSharedInviteStatus("");
   }
 
+  function getSharedInviteErrorMessage(e: any): string {
+    const code = String(e?.code ?? "").toLowerCase();
+    const message = String(e?.message ?? "").toLowerCase();
+
+    if (
+      code.includes("not-found") ||
+      message === "not-found" ||
+      message.includes("not found") ||
+      message.includes("nebyla nalezena")
+    ) {
+      return TXT.sharedInviteNotFound;
+    }
+
+    if (
+      code.includes("already-exists") ||
+      code.includes("already") ||
+      message.includes("already") ||
+      message.includes("už je") ||
+      message.includes("uz je")
+    ) {
+      return TXT.sharedInviteAlreadyMember;
+    }
+
+    if (
+      code.includes("unavailable") ||
+      code.includes("deadline-exceeded") ||
+      code.includes("failed-precondition") ||
+      code.includes("internal")
+    ) {
+      return TXT.sharedInviteFailed;
+    }
+
+    return TXT.sharedInviteGeneric;
+  }
+
   async function sendSharedMemberInvite(friendUid: string) {
     if (!selectedSharedInvite || sharedInviteSendingUid) return;
 
@@ -2197,7 +2248,7 @@ const sidePadding = 18;
       });
       setSharedInviteStatus(TXT.invitationSent);
     } catch (e: any) {
-      Alert.alert(TXT.sharedChallenge, e?.message ?? TXT.couldNotInvite);
+      Alert.alert(TXT.sharedChallenge, getSharedInviteErrorMessage(e));
     } finally {
       setSharedInviteSendingUid(null);
     }
@@ -3581,7 +3632,13 @@ useEffect(() => {
         onRequestClose={closeSharedInviteModal}
       >
         <Pressable style={styles.backdrop} onPress={closeSharedInviteModal}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+          <Pressable
+            style={[
+              styles.sheet,
+              { bottom: Math.max(28, insets.bottom + 28), maxHeight: "72%" },
+            ]}
+            onPress={() => {}}
+          >
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>
                 {TXT.inviteFriend}
@@ -3601,7 +3658,10 @@ useEffect(() => {
               </Text>
             )}
 
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 24) }}
+            >
               {getEligibleSharedInviteFriends(selectedSharedInvite).length ? (
                 getEligibleSharedInviteFriends(selectedSharedInvite).map((edge) => {
                   const uid = String(edge.otherUid);
@@ -3968,7 +4028,7 @@ try {
                                       ]}
                                       hitSlop={8}
                                     >
-                                      <Ionicons name="add" size={16} color={UI.text} />
+                                      <Ionicons name="add" size={16} color="#111827" />
                                     </Pressable>
                                   )}
                                 </View>

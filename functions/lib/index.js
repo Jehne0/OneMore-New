@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifySharedChallengeProgress = exports.notifySharedChallengeCreated = exports.deleteMyAccount = exports.sendTestPush = exports.acceptFriendInvite = exports.createFriendInvite = exports.blockFriend = exports.removeFriend = exports.declineFriend = exports.acceptFriend = exports.requestFriend = exports.sendSupportEmail = void 0;
+exports.notifySharedChallengeProgress = exports.notifySharedChallengeCreated = exports.declineSharedChallengeMemberInvite = exports.acceptSharedChallengeMemberInvite = exports.inviteSharedChallengeMember = exports.deleteMyAccount = exports.sendTestPush = exports.acceptFriendInvite = exports.createFriendInvite = exports.blockFriend = exports.removeFriend = exports.declineFriend = exports.acceptFriend = exports.requestFriend = exports.sendSupportEmail = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const params_1 = require("firebase-functions/params");
@@ -198,6 +198,13 @@ function isSharedDone(v) {
         v.status === "done" ||
         v.status === "completed" ||
         !!v.completedAt);
+}
+const MAX_SHARED_MEMBERS = 10;
+function sharedChallengeRef(challengeId) {
+    return db.collection("sharedChallenges").doc(challengeId);
+}
+function uniqueUids(values) {
+    return Array.from(new Set(values.map((x) => String(x ?? "").trim()).filter(Boolean)));
 }
 exports.requestFriend = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
     const uid = assertAuth(request);
@@ -416,6 +423,135 @@ exports.deleteMyAccount = (0, https_1.onCall)({ region: "europe-west1" }, async 
         deletedUid: uid,
         deletedUsername: usernameLower || null,
     };
+});
+exports.inviteSharedChallengeMember = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    const uid = assertAuth(request);
+    const challengeId = safeStr((request.data ?? {}).challengeId, 256);
+    const friendUid = normUid((request.data ?? {}).friendUid, "friendUid");
+    if (!challengeId)
+        throw new https_1.HttpsError("invalid-argument", "Chybi challengeId.");
+    if (friendUid === uid)
+        throw new https_1.HttpsError("invalid-argument", "Nemuzes pozvat sam sebe.");
+    let challengeTitle = "Spolecna vyzva";
+    await db.runTransaction(async (tx) => {
+        const challengeRef = sharedChallengeRef(challengeId);
+        const [challengeSnap, mineFriendSnap, theirFriendSnap] = await Promise.all([
+            tx.get(challengeRef),
+            tx.get(friendEdgeRef(uid, friendUid)),
+            tx.get(friendEdgeRef(friendUid, uid)),
+        ]);
+        if (!challengeSnap.exists) {
+            throw new https_1.HttpsError("not-found", "Spolecna vyzva nebyla nalezena.");
+        }
+        const data = challengeSnap.data();
+        const memberUids = uniqueUids(arr(data?.memberUids));
+        const acceptedBy = uniqueUids(arr(data?.acceptedBy));
+        const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids)).filter((pendingUid) => !memberUids.includes(pendingUid));
+        if (!memberUids.includes(uid) || !acceptedBy.includes(uid)) {
+            throw new https_1.HttpsError("permission-denied", "Pozvat muze jen prijaty ucastnik vyzvy.");
+        }
+        if (data?.enabled === false || data?.status === "declined") {
+            throw new https_1.HttpsError("failed-precondition", "Tato vyzva uz neni aktivni.");
+        }
+        if (friendStatus(mineFriendSnap) !== "accepted" || friendStatus(theirFriendSnap) !== "accepted") {
+            throw new https_1.HttpsError("failed-precondition", "Pozvat lze jen prijateho pritele.");
+        }
+        if (memberUids.includes(friendUid)) {
+            throw new https_1.HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
+        }
+        if (pendingInviteUids.includes(friendUid)) {
+            throw new https_1.HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
+        }
+        if (memberUids.length + pendingInviteUids.length >= MAX_SHARED_MEMBERS) {
+            throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
+        }
+        challengeTitle = safeStr(data?.title, 120) || challengeTitle;
+        tx.set(challengeRef, {
+            pendingInviteUids: [...pendingInviteUids, friendUid],
+            updatedAt: firestore_2.FieldValue.serverTimestamp(),
+        }, { merge: true });
+    });
+    try {
+        const fromName = await getUsernameForPush(uid);
+        await sendPushToUser(friendUid, "Nova spolecna vyzva", `${fromName} te pozval/a do spolecne vyzvy: ${challengeTitle}.`, {
+            type: "shared_challenge_invite",
+            challengeId,
+            fromUid: uid,
+        }, ["sharedChallenges", "incomingChallenges"]);
+    }
+    catch {
+        console.error("[push] shared challenge member invite notification failed");
+    }
+    return { ok: true };
+});
+exports.acceptSharedChallengeMemberInvite = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    const uid = assertAuth(request);
+    const challengeId = safeStr((request.data ?? {}).challengeId, 256);
+    if (!challengeId)
+        throw new https_1.HttpsError("invalid-argument", "Chybi challengeId.");
+    await db.runTransaction(async (tx) => {
+        const challengeRef = sharedChallengeRef(challengeId);
+        const challengeSnap = await tx.get(challengeRef);
+        if (!challengeSnap.exists) {
+            throw new https_1.HttpsError("not-found", "Spolecna vyzva nebyla nalezena.");
+        }
+        const data = challengeSnap.data();
+        const memberUids = uniqueUids(arr(data?.memberUids));
+        const acceptedBy = uniqueUids(arr(data?.acceptedBy));
+        const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
+        const leftBy = uniqueUids(arr(data?.leftBy)).filter((memberUid) => memberUid !== uid);
+        if (data?.enabled === false || data?.status === "declined") {
+            throw new https_1.HttpsError("failed-precondition", "Tato vyzva uz neni aktivni.");
+        }
+        const alreadyMember = memberUids.includes(uid);
+        if (!alreadyMember && !pendingInviteUids.includes(uid)) {
+            throw new https_1.HttpsError("permission-denied", "Pro tuto vyzvu nemas pozvanku.");
+        }
+        if (!alreadyMember && memberUids.length >= MAX_SHARED_MEMBERS) {
+            throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
+        }
+        const nextMemberUids = alreadyMember ? memberUids : [...memberUids, uid];
+        const nextAcceptedBy = uniqueUids([...acceptedBy, uid]).filter((memberUid) => nextMemberUids.includes(memberUid));
+        const nextPendingInviteUids = pendingInviteUids.filter((memberUid) => memberUid !== uid);
+        const everyoneAccepted = nextMemberUids.every((memberUid) => nextAcceptedBy.includes(memberUid));
+        const wasActive = data?.status === "active";
+        tx.set(challengeRef, {
+            memberUids: nextMemberUids,
+            acceptedBy: nextAcceptedBy,
+            pendingInviteUids: nextPendingInviteUids,
+            leftBy,
+            status: wasActive || everyoneAccepted ? "active" : "pending",
+            updatedAt: firestore_2.FieldValue.serverTimestamp(),
+        }, { merge: true });
+    });
+    return { ok: true };
+});
+exports.declineSharedChallengeMemberInvite = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    const uid = assertAuth(request);
+    const challengeId = safeStr((request.data ?? {}).challengeId, 256);
+    if (!challengeId)
+        throw new https_1.HttpsError("invalid-argument", "Chybi challengeId.");
+    await db.runTransaction(async (tx) => {
+        const challengeRef = sharedChallengeRef(challengeId);
+        const challengeSnap = await tx.get(challengeRef);
+        if (!challengeSnap.exists) {
+            throw new https_1.HttpsError("not-found", "Spolecna vyzva nebyla nalezena.");
+        }
+        const data = challengeSnap.data();
+        const memberUids = uniqueUids(arr(data?.memberUids));
+        const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
+        if (memberUids.includes(uid)) {
+            throw new https_1.HttpsError("failed-precondition", "Ucastnik musi vyzvu opustit.");
+        }
+        if (!pendingInviteUids.includes(uid)) {
+            return;
+        }
+        tx.set(challengeRef, {
+            pendingInviteUids: pendingInviteUids.filter((memberUid) => memberUid !== uid),
+            updatedAt: firestore_2.FieldValue.serverTimestamp(),
+        }, { merge: true });
+    });
+    return { ok: true };
 });
 exports.notifySharedChallengeCreated = (0, firestore_1.onDocumentCreated)({
     region: "europe-west1",
