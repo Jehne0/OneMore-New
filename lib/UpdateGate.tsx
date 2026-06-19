@@ -1,9 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useI18n } from "./i18n";
 import { useTheme } from "./theme";
 import { checkRemoteAppVersion, type VersionCheckResult } from "./versionCheck";
+
+function getUpdateOpenError(lang: string): string {
+  switch (lang) {
+    case "cs":
+      return "Odkaz na aktualizaci se nepodařilo otevřít. Zkuste prosím obchod otevřít ručně.";
+    case "pl":
+      return "Nie udało się otworzyć linku do aktualizacji. Spróbuj otworzyć sklep ręcznie.";
+    case "de":
+      return "Der Update-Link konnte nicht geöffnet werden. Bitte öffne den Store manuell.";
+    default:
+      return "Could not open the update link. Please try opening the store manually.";
+  }
+}
 
 export function UpdateGate() {
   const { lang, t } = useI18n();
@@ -67,6 +80,9 @@ export function UpdateGate() {
       btn: {
         paddingHorizontal: 14,
         paddingVertical: 10,
+        minHeight: 44,
+        justifyContent: "center",
+        alignItems: "center",
         borderRadius: 14,
         borderWidth: 1,
         borderColor: sheetBorder,
@@ -88,30 +104,71 @@ export function UpdateGate() {
   const title = required ? t.update.requiredTitle : t.update.recommendedTitle;
   const message =
     update.message || (required ? t.update.requiredMessage : t.update.recommendedMessage);
-  const canUpdate = !!update.updateUrl;
 
   function close() {
     if (!required) setUpdate(null);
   }
 
   async function openUpdateUrl() {
-    if (!update?.updateUrl) return;
+    const updateUrl = update?.updateUrl?.trim();
+
+    if (__DEV__) {
+      console.log("[UpdateGate] update button pressed", {
+        platform: Platform.OS,
+        updateUrl: updateUrl || null,
+      });
+    }
+
+    if (!updateUrl) {
+      Alert.alert(title, getUpdateOpenError(lang));
+      return;
+    }
 
     try {
-      await Linking.openURL(update.updateUrl);
-    } catch {}
+      const canOpen = await Linking.canOpenURL(updateUrl);
+
+      if (__DEV__) {
+        console.log("[UpdateGate] Linking.canOpenURL", {
+          platform: Platform.OS,
+          updateUrl,
+          result: canOpen ? "passed" : "failed",
+        });
+      }
+    } catch (error) {
+      if (__DEV__) {
+        console.log("[UpdateGate] Linking.canOpenURL failed", {
+          platform: Platform.OS,
+          updateUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    try {
+      await Linking.openURL(updateUrl);
+    } catch (error) {
+      if (__DEV__) {
+        console.log("[UpdateGate] Linking.openURL failed", {
+          platform: Platform.OS,
+          updateUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      Alert.alert(title, getUpdateOpenError(lang));
+    }
   }
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={close}>
-      <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable style={styles.card} onPress={() => {}}>
+      <View style={styles.backdrop}>
+        <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.msg}>{message}</Text>
 
           <View style={styles.btnRow}>
             {!required && (
               <Pressable
+                accessibilityRole="button"
                 onPress={close}
                 style={({ pressed }) => [styles.btn, pressed && { opacity: 0.85 }]}
               >
@@ -120,20 +177,20 @@ export function UpdateGate() {
             )}
 
             <Pressable
-              disabled={!canUpdate}
+              accessibilityRole="button"
+              hitSlop={8}
               onPress={() => void openUpdateUrl()}
               style={({ pressed }) => [
                 styles.btn,
                 styles.btnPrimary,
-                !canUpdate && { opacity: 0.45 },
-                pressed && canUpdate && { opacity: 0.85 },
+                pressed && { opacity: 0.85 },
               ]}
             >
               <Text style={styles.btnText}>{t.update.updateButton}</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

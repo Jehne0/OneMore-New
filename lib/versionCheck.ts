@@ -72,6 +72,8 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
           currentVersionCode: null,
           latestVersionCode,
           minimumRequiredVersionCode,
+          platform: Platform.OS,
+          updateUrl: null,
           updateType: "none",
         });
       }
@@ -91,6 +93,8 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
           currentVersionCode,
           latestVersionCode,
           minimumRequiredVersionCode,
+          platform: Platform.OS,
+          updateUrl,
           updateType: "required",
         });
       }
@@ -103,6 +107,8 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
           currentVersionCode,
           latestVersionCode,
           minimumRequiredVersionCode,
+          platform: Platform.OS,
+          updateUrl,
           updateType: "recommended",
         });
       }
@@ -114,6 +120,8 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
         currentVersionCode,
         latestVersionCode,
         minimumRequiredVersionCode,
+        platform: Platform.OS,
+        updateUrl,
         updateType: "none",
       });
     }
