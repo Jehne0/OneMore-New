@@ -845,16 +845,16 @@ sharedMemberCount: {
     sharedActionsRow: {
       flexDirection: "row",
       alignItems: "center",
+      justifyContent: "flex-end",
+      alignSelf: "stretch",
+      flexWrap: "wrap",
       gap: 8,
     },
     sharedCompactRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 12,
+      gap: 10,
     },
     sharedCompactLeft: {
-      flex: 1,
+      alignSelf: "stretch",
       minWidth: 0,
     },
     sharedCompactMeta: {
@@ -951,7 +951,7 @@ notificationCount: "Number of notifications",
       invitationSent: "Invitation sent",
       noFriendsToInvite: "No accepted friends available to invite.",
       couldNotInvite: "Could not send invitation.",
-      sharedInviteNotFound: "The shared challenge could not be found.",
+      sharedInviteNotFound: "The invitation could not be found. It may have been cancelled or expired.",
       sharedInviteFailed: "The invitation could not be sent. Please try again.",
       sharedInviteAlreadyMember: "This friend is already part of this shared challenge.",
       sharedInviteGeneric: "Something went wrong. Please try again.",
@@ -1041,7 +1041,7 @@ notificationCount: "Liczba powiadomień",
       invitationSent: "Zaproszenie wysłane",
       noFriendsToInvite: "Brak zaakceptowanych znajomych do zaproszenia.",
       couldNotInvite: "Nie udało się wysłać zaproszenia.",
-      sharedInviteNotFound: "Nie udało się znaleźć wspólnego wyzwania.",
+      sharedInviteNotFound: "Nie udało się znaleźć zaproszenia. Mogło zostać anulowane lub wygasło.",
       sharedInviteFailed: "Nie udało się wysłać zaproszenia. Spróbuj ponownie.",
       sharedInviteAlreadyMember: "Ten znajomy jest już częścią tego wspólnego wyzwania.",
       sharedInviteGeneric: "Coś poszło nie tak. Spróbuj ponownie.",
@@ -1132,7 +1132,7 @@ notificationCount: "Anzahl der Benachrichtigungen",
       invitationSent: "Einladung gesendet",
       noFriendsToInvite: "Keine angenommenen Freunde zum Einladen verfügbar.",
       couldNotInvite: "Einladung konnte nicht gesendet werden.",
-      sharedInviteNotFound: "Die gemeinsame Challenge konnte nicht gefunden werden.",
+      sharedInviteNotFound: "Die Einladung konnte nicht gefunden werden. Sie wurde möglicherweise abgebrochen oder ist abgelaufen.",
       sharedInviteFailed: "Die Einladung konnte nicht gesendet werden. Bitte versuche es erneut.",
       sharedInviteAlreadyMember: "Dieser Freund ist bereits Teil dieser gemeinsamen Challenge.",
       sharedInviteGeneric: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -1221,7 +1221,7 @@ notificationCount: "Počet notifikací",
     invitationSent: "Pozvánka odeslána",
     noFriendsToInvite: "Žádní přijatí přátelé k pozvání.",
     couldNotInvite: "Nepodařilo se odeslat pozvánku.",
-    sharedInviteNotFound: "Společnou výzvu se nepodařilo najít.",
+    sharedInviteNotFound: "Pozvánku se nepodařilo najít. Možná už byla zrušena nebo vypršela.",
     sharedInviteFailed: "Pozvánku se nepodařilo odeslat. Zkuste to prosím znovu.",
     sharedInviteAlreadyMember: "Tento přítel už je v této společné výzvě.",
     sharedInviteGeneric: "Něco se nepodařilo. Zkuste to prosím znovu.",
@@ -1426,6 +1426,20 @@ notificationCount: "Počet notifikací",
 
         setSharedChallenges(items);
         setSharedChallengesLoaded(true);
+        setLocalSharedInviteUids((prev) => {
+          const next: Record<string, string[]> = {};
+
+          for (const item of items) {
+            const local = prev[item.id] ?? [];
+            if (!local.length) continue;
+
+            const serverPending = new Set((item.pendingInviteUids ?? []).map((uid) => String(uid)));
+            const stillPending = local.filter((uid) => serverPending.has(String(uid)));
+            if (stillPending.length) next[item.id] = stillPending;
+          }
+
+          return next;
+        });
 
         unsubDays.forEach((u) => u());
         unsubDays = [];
@@ -2149,10 +2163,12 @@ const sidePadding = 18;
 
   function canInviteToSharedChallenge(item: SharedChallenge): boolean {
     const me = auth.currentUser?.uid ?? "";
+    const challengeId = String(item.id ?? "").trim();
     return (
       !!me &&
+      !!challengeId &&
       item.enabled !== false &&
-      item.status !== "declined" &&
+      item.status === "active" &&
       item.memberUids.includes(me) &&
       item.acceptedBy.includes(me)
     );
@@ -3978,6 +3994,10 @@ try {
                       const expanded = expandedSharedId === item.id;
                       const iAccepted = item.acceptedBy.includes(me);
                       const pending = item.status === "pending";
+                      const canShowSharedInviteButton =
+                        !lockedByFree &&
+                        canInviteToSharedChallenge(item) &&
+                        getEligibleSharedInviteFriends(item).length > 0;
 
                       return (
                         <View key={item.id} style={styles.sharedCardOuter}>
@@ -4016,7 +4036,7 @@ try {
                                     )}`}
                                   </Text>
 
-                                  {canInviteToSharedChallenge(item) && !lockedByFree && (
+                                  {canShowSharedInviteButton && (
                                     <Pressable
                                       onPress={(e) => {
                                         e.stopPropagation();
@@ -4090,22 +4110,23 @@ try {
           : TXT.complete}
   </Text>
 </Pressable>
-</View>
-                              <Pressable
-                                onPress={() =>
-                                  setExpandedSharedId((prev) => (prev === item.id ? null : item.id))
-                                }
-                                style={({ pressed }) => [
-                                  styles.sharedExpandBtn,
-                                  pressed && { opacity: 0.88 },
-                                ]}
-                              >
-                                <Ionicons
-                                  name={expanded ? "chevron-up" : "chevron-down"}
-                                  size={18}
-                                  color={UI.text}
-                                />
-                              </Pressable>
+
+                                <Pressable
+                                  onPress={() =>
+                                    setExpandedSharedId((prev) => (prev === item.id ? null : item.id))
+                                  }
+                                  style={({ pressed }) => [
+                                    styles.sharedExpandBtn,
+                                    pressed && { opacity: 0.88 },
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name={expanded ? "chevron-up" : "chevron-down"}
+                                    size={18}
+                                    color={UI.text}
+                                  />
+                                </Pressable>
+                              </View>
                             </View>
 
                             {expanded && (

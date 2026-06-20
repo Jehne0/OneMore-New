@@ -1349,6 +1349,26 @@ const getInviteCreatorName = (challenge: SharedChallenge) => {
     return `${names[0]}, ${names[1]} +${names.length - 2}`;
   };
 
+  function getSharedInviteActionErrorMessage(e: any, fallback: string) {
+    const code = String(e?.code ?? "").toLowerCase();
+    const message = String(e?.message ?? "").toLowerCase();
+
+    if (
+      code.includes("not-found") ||
+      message === "not-found" ||
+      message.includes("not found") ||
+      message.includes("nebyla nalezena") ||
+      message.includes("nepodařilo se najít")
+    ) {
+      if (lang === "en") return "The invitation could not be found. It may have been cancelled or expired.";
+      if (lang === "pl") return "Nie udało się znaleźć zaproszenia. Mogło zostać anulowane lub wygasło.";
+      if (lang === "de") return "Die Einladung konnte nicht gefunden werden. Sie wurde möglicherweise abgebrochen oder ist abgelaufen.";
+      return "Pozvánku se nepodařilo najít. Možná už byla zrušena nebo vypršela.";
+    }
+
+    return e?.message ?? fallback;
+  }
+
 async function acceptSharedInviteFromFriends(challengeId: string) {
   const blockingCountExceptThis = sharedChallenges.filter((item) => {
     const isSameChallenge = String(item.id) === String(challengeId);
@@ -1383,10 +1403,12 @@ async function acceptSharedInviteFromFriends(challengeId: string) {
     showPwdPopup(
       "error",
       p.challenges,
-      e?.message ??
-        (lang === "cs"
+      getSharedInviteActionErrorMessage(
+        e,
+        lang === "cs"
           ? "Nepodařilo se přijmout výzvu."
-          : "Could not accept the challenge.")
+          : "Could not accept the challenge."
+      )
     );
   } finally {
     setFriendsBusy(false);
@@ -1402,7 +1424,10 @@ async function declineSharedInviteFromFriends(challengeId: string) {
     showPwdPopup(
       "error",
       p.challenges,
-      e?.message ?? (lang === "cs" ? "Nepodařilo se odmítnout výzvu." : "Could not decline the challenge.")
+      getSharedInviteActionErrorMessage(
+        e,
+        lang === "cs" ? "Nepodařilo se odmítnout výzvu." : "Could not decline the challenge."
+      )
     );
   } finally {
     setFriendsBusy(false);
