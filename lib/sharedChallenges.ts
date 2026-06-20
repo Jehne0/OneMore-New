@@ -364,7 +364,11 @@ export function subscribeSharedChallenges(
     pendingItems.forEach((item, id) => merged.set(id, item));
     memberItems.forEach((item, id) => merged.set(id, item));
 
-    const items = Array.from(merged.values()).filter((item) => !(item.leftBy ?? []).includes(uid));
+    const items = Array.from(merged.values()).filter((item) => {
+      const pendingForMe = (item.pendingInviteUids ?? []).includes(uid);
+      const leftByMe = (item.leftBy ?? []).includes(uid);
+      return pendingForMe || !leftByMe;
+    });
 
     items.sort((a, b) => {
       const ta = a.createdAt?.seconds ?? 0;
@@ -380,9 +384,15 @@ export function subscribeSharedChallenges(
     (snap) => {
       memberItems.clear();
       snap.docs.forEach((d) => memberItems.set(d.id, readDoc(d)));
+      if (__DEV__) {
+        console.log("[shared-invites/query] member query", { uid, count: snap.docs.length });
+      }
       emit();
     },
-    (err) => onError?.(err)
+    (err) => {
+      if (__DEV__) console.log("[shared-invites/query] member query error", err);
+      onError?.(err);
+    }
   );
 
   const unsubPending = onSnapshot(
@@ -390,9 +400,28 @@ export function subscribeSharedChallenges(
     (snap) => {
       pendingItems.clear();
       snap.docs.forEach((d) => pendingItems.set(d.id, readDoc(d)));
+      if (__DEV__) {
+        console.log("[shared-invites/query] pending invite query", {
+          uid,
+          count: snap.docs.length,
+          items: snap.docs.map((d) => {
+            const item = readDoc(d);
+            return {
+              challengeId: item.id,
+              title: item.title,
+              pendingInviteUids: item.pendingInviteUids ?? [],
+              memberUids: item.memberUids ?? [],
+              currentUidInPendingInviteUids: (item.pendingInviteUids ?? []).includes(uid),
+            };
+          }),
+        });
+      }
       emit();
     },
-    (err) => onError?.(err)
+    (err) => {
+      if (__DEV__) console.log("[shared-invites/query] pending invite query error", err);
+      onError?.(err);
+    }
   );
 
   return () => {

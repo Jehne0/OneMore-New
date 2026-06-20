@@ -1120,6 +1120,11 @@ const sharedInvitesInitializedRef = useRef(false);
       async (items) => {
         if (cancelled) return;
 
+        if (__DEV__) {
+          console.log("[shared-invites/profile] currentUser.uid", uid);
+          console.log("[shared-invites/profile] query result count", items.length);
+        }
+
         setSharedChallenges(items);
     
         const incomingPending = items.filter((item) => {
@@ -1128,8 +1133,35 @@ const sharedInvitesInitializedRef = useRef(false);
           const iAmPendingInvite = (item.pendingInviteUids ?? []).includes(uid);
           const iAlreadyAccepted = item.acceptedBy.includes(uid);
           const createdByMe = String(item.createdBy) === String(uid);
+          const leftByMe = (item.leftBy ?? []).includes(uid);
+          const visible = ((isPending && iAmMember && !iAlreadyAccepted) || iAmPendingInvite) && !createdByMe;
 
-          return ((isPending && iAmMember && !iAlreadyAccepted) || iAmPendingInvite) && !createdByMe;
+          if (__DEV__) {
+            console.log("[shared-invites/profile] invite candidate", {
+              challengeId: item.id,
+              title: item.title,
+              status: item.status,
+              pendingInviteUids: item.pendingInviteUids ?? [],
+              memberUids: item.memberUids ?? [],
+              currentUidInPendingInviteUids: iAmPendingInvite,
+              currentUidInMemberUids: iAmMember,
+              currentUidInAcceptedBy: iAlreadyAccepted,
+              currentUidInLeftBy: leftByMe,
+              createdByMe,
+              visible,
+              filteredOutBecause: visible
+                ? null
+                : createdByMe
+                  ? "created-by-current-user"
+                  : iAlreadyAccepted
+                    ? "already-accepted"
+                    : !iAmPendingInvite && !(isPending && iAmMember)
+                      ? "not-pending-for-current-user"
+                      : "unknown",
+            });
+          }
+
+          return visible;
         });
 
         const outgoingPending = items.filter((item) => {
@@ -1198,7 +1230,10 @@ setSharedInvites(incomingPending);
 setSentSharedInvites(outgoingPending);
 setSharedInvitesLoading(false);
       },
-      () => {
+      (e) => {
+        if (__DEV__) {
+          console.log("[shared-invites/profile] subscribe error", e);
+        }
         if (cancelled) return;
         setSharedInvites([]);
         setSharedInvitesLoading(false);
