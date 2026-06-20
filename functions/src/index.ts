@@ -564,9 +564,7 @@ export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, as
     const data = challengeSnap.data() as any;
     const memberUids = uniqueUids(arr(data?.memberUids));
     const acceptedBy = uniqueUids(arr(data?.acceptedBy));
-    const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids)).filter(
-      (pendingUid) => !memberUids.includes(pendingUid)
-    );
+    const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
 
     if (!memberUids.includes(uid) || !acceptedBy.includes(uid)) {
       throw new HttpsError("permission-denied", "Pozvat muze jen prijaty ucastnik vyzvy.");
@@ -588,7 +586,7 @@ export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, as
       throw new HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
     }
 
-    if (memberUids.length + pendingInviteUids.length >= MAX_SHARED_MEMBERS) {
+    if (uniqueUids([...memberUids, ...pendingInviteUids]).length >= MAX_SHARED_MEMBERS) {
       throw new HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
     }
 
@@ -698,22 +696,40 @@ export const declineSharedChallengeMemberInvite = onCall({ region: "europe-west1
 
     const data = challengeSnap.data() as any;
     const memberUids = uniqueUids(arr(data?.memberUids));
+    const acceptedBy = uniqueUids(arr(data?.acceptedBy));
     const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
-
-    if (memberUids.includes(uid)) {
-      throw new HttpsError("failed-precondition", "Ucastnik musi vyzvu opustit.");
-    }
+    const leftBy = uniqueUids(arr(data?.leftBy));
 
     if (!pendingInviteUids.includes(uid)) {
+      if (memberUids.includes(uid)) {
+        throw new HttpsError("failed-precondition", "Ucastnik musi vyzvu opustit.");
+      }
       return;
+    }
+
+    const nextMemberUids = memberUids.filter((memberUid) => memberUid !== uid);
+    const nextAcceptedBy = acceptedBy.filter((memberUid) => memberUid !== uid);
+    const nextPendingInviteUids = pendingInviteUids.filter((memberUid) => memberUid !== uid);
+    const nextLeftBy = memberUids.includes(uid) ? uniqueUids([...leftBy, uid]) : leftBy;
+    const nextData: Record<string, unknown> = {
+      pendingInviteUids: nextPendingInviteUids,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (memberUids.includes(uid)) {
+      nextData.memberUids = nextMemberUids;
+      nextData.acceptedBy = nextAcceptedBy;
+      nextData.leftBy = nextLeftBy;
+
+      if (nextMemberUids.length < 2) {
+        nextData.enabled = false;
+        nextData.status = "declined";
+      }
     }
 
     tx.set(
       challengeRef,
-      {
-        pendingInviteUids: pendingInviteUids.filter((memberUid) => memberUid !== uid),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
+      nextData,
       { merge: true }
     );
   });

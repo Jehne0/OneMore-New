@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons, Feather  } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +28,7 @@ import {
   subscribeSharedChallenges,
   type SharedChallenge,
 } from "../../lib/sharedChallenges";
+import { getCurrentVersionCode } from "../../lib/versionCheck";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   configureRevenueCat,
@@ -107,6 +109,8 @@ type FriendPreviewStats = {
 };
 
 // ✅ veřejné HTML stránky (otevírá se v prohlížeči)
+const TEMP_SHARED_INVITE_DIAGNOSTICS = false;
+
 const PRIVACY_URL = "https://desigame.eu/privacy.html";
 const TERMS_URL = "https://desigame.eu/terms.html";
 
@@ -803,6 +807,17 @@ function getIncomingSharedChallengeInviteExclusionReason(
   return null;
 }
 
+function getCurrentVersionNameForDiagnostics() {
+  const c = Constants as any;
+  return String(
+    c?.nativeAppVersion ??
+      c?.expoConfig?.version ??
+      c?.manifest?.version ??
+      c?.manifest2?.extra?.expoClient?.version ??
+      "unknown"
+  );
+}
+
 function logProfileSharedChallengeInviteDiagnostics(
   sharedChallenges: SharedChallenge[],
   incomingSharedChallengeInvites: SharedChallenge[],
@@ -935,6 +950,7 @@ const [sharedInvites, setSharedInvites] = useState<SharedChallenge[]>([]);
 const [sentSharedInvites, setSentSharedInvites] = useState<SharedChallenge[]>([]);
 const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
 const [sharedInvitesLoading, setSharedInvitesLoading] = useState(false);
+const [pendingInviteQueryError, setPendingInviteQueryError] = useState<string | null>(null);
 
 const [shareAchievementsWithFriends, setShareAchievementsWithFriends] = useState(true);
 const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -1191,6 +1207,7 @@ const sharedInvitesInitializedRef = useRef(false);
       setSentSharedInvites([]);
       setSharedChallenges([]);
       setSharedInvitesLoading(false);
+      setPendingInviteQueryError(null);
       seenIncomingInviteIdsRef.current = [];
       sharedInvitesInitializedRef.current = false;
       return;
@@ -1287,6 +1304,20 @@ setSharedInvitesLoading(false);
         if (cancelled) return;
         setSharedInvites([]);
         setSharedInvitesLoading(false);
+      },
+      (debug) => {
+        if (cancelled || debug.queryName !== "pendingInviteUids") return;
+
+        if (debug.error) {
+          const code = String(debug.error?.code ?? "").trim();
+          const message = String(debug.error?.message ?? debug.error ?? "").trim();
+          setPendingInviteQueryError(
+            [code, message].filter(Boolean).join(": ") || "unknown pendingInviteUids query error"
+          );
+          return;
+        }
+
+        setPendingInviteQueryError(null);
       }
     );
 
@@ -1312,6 +1343,35 @@ setSharedInvitesLoading(false);
 
 const incomingSharedChallengeInvites = sharedInvites;
 const pendingInviteCount = incomingSharedChallengeInvites.length;
+const sharedInviteDiagnosticsVersionName = getCurrentVersionNameForDiagnostics();
+const sharedInviteDiagnosticsBuild = getCurrentVersionCode();
+const sharedInviteDiagnosticsRows = sharedChallenges.map((challenge) => {
+  const pendingInviteUids = Array.isArray(challenge.pendingInviteUids)
+    ? challenge.pendingInviteUids
+    : [];
+  const memberUids = Array.isArray(challenge.memberUids) ? challenge.memberUids : [];
+  const acceptedBy = Array.isArray(challenge.acceptedBy) ? challenge.acceptedBy : [];
+  const leftBy = Array.isArray(challenge.leftBy) ? challenge.leftBy : [];
+  const included = incomingSharedChallengeInvites.some(
+    (item) => String(item.id) === String(challenge.id)
+  );
+
+  return {
+    challenge,
+    pendingInviteUids,
+    memberUids,
+    acceptedBy,
+    leftBy,
+    included,
+    excludedReason: included
+      ? null
+      : getIncomingSharedChallengeInviteExclusionReason(challenge, currentUserUid),
+    isCurrentUserPending: pendingInviteUids.includes(currentUserUid),
+    isCurrentUserMember: memberUids.includes(currentUserUid),
+    isCurrentUserAccepted: acceptedBy.includes(currentUserUid),
+    isCurrentUserLeft: leftBy.includes(currentUserUid),
+  };
+});
 const sharedChallengeInvitationsTitle =
   lang === "cs"
     ? "Pozvánky do společných výzev"
@@ -5231,6 +5291,96 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
             <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
           </View>
         </Pressable>
+
+        {TEMP_SHARED_INVITE_DIAGNOSTICS && (
+          <View
+            style={[
+              styles.infoCard,
+              { borderColor: UI.stroke, backgroundColor: UI.card },
+            ]}
+          >
+            <Text style={[styles.infoTitle, { color: UI.text }]}>
+              TEMP shared invite diagnostics
+            </Text>
+            <Text style={[styles.infoText, { color: UI.sub }]}>
+              versionName: {sharedInviteDiagnosticsVersionName}
+            </Text>
+            <Text style={[styles.infoText, { color: UI.sub }]}>
+              native build/versionCode: {sharedInviteDiagnosticsBuild || "unknown"}
+            </Text>
+            <Text style={[styles.infoText, { color: UI.sub }]}>
+              Firebase UID: {currentUserUid || "none"}
+            </Text>
+            <Text style={[styles.infoText, { color: UI.sub }]}>
+              sharedChallenges received: {sharedChallenges.length}
+            </Text>
+            <Text style={[styles.infoText, { color: UI.sub }]}>
+              incomingSharedChallengeInvites: {incomingSharedChallengeInvites.length}
+            </Text>
+            <Text style={[styles.infoText, { color: pendingInviteQueryError ? "#B42318" : UI.sub }]}>
+              pending invite query error: {pendingInviteQueryError ?? "none"}
+            </Text>
+
+            {sharedInviteDiagnosticsRows.map((row) => (
+              <View
+                key={`shared_invite_diag_${row.challenge.id}`}
+                style={{
+                  marginTop: 10,
+                  paddingTop: 10,
+                  borderTopWidth: 1,
+                  borderTopColor: UI.stroke,
+                  gap: 3,
+                }}
+              >
+                <Text style={[styles.infoText, { color: UI.text, fontWeight: "900" }]}>
+                  id: {row.challenge.id}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  title/name: {row.challenge.title || "(empty)"}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  pendingInviteUids: {JSON.stringify(row.pendingInviteUids)}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  memberUids: {JSON.stringify(row.memberUids)}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  acceptedBy: {JSON.stringify(row.acceptedBy)}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  leftBy: {JSON.stringify(row.leftBy)}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  createdBy: {row.challenge.createdBy}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  status: {row.challenge.status}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  enabled: {String(row.challenge.enabled)}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  current user pending: {row.isCurrentUserPending ? "yes" : "no"}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  current user member: {row.isCurrentUserMember ? "yes" : "no"}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  current user accepted: {row.isCurrentUserAccepted ? "yes" : "no"}
+                </Text>
+                <Text style={[styles.infoText, { color: UI.sub }]}>
+                  current user left: {row.isCurrentUserLeft ? "yes" : "no"}
+                </Text>
+                <Text style={[styles.infoText, { color: row.included ? UI.sub : "#B42318" }]}>
+                  included in incoming invites: {row.included ? "yes" : "no"}
+                </Text>
+                <Text style={[styles.infoText, { color: row.excludedReason ? "#B42318" : UI.sub }]}>
+                  excluded reason: {row.excludedReason ?? "none"}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* ✅ POPUP */}

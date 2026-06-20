@@ -446,7 +446,7 @@ exports.inviteSharedChallengeMember = (0, https_1.onCall)({ region: "europe-west
         const data = challengeSnap.data();
         const memberUids = uniqueUids(arr(data?.memberUids));
         const acceptedBy = uniqueUids(arr(data?.acceptedBy));
-        const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids)).filter((pendingUid) => !memberUids.includes(pendingUid));
+        const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
         if (!memberUids.includes(uid) || !acceptedBy.includes(uid)) {
             throw new https_1.HttpsError("permission-denied", "Pozvat muze jen prijaty ucastnik vyzvy.");
         }
@@ -462,7 +462,7 @@ exports.inviteSharedChallengeMember = (0, https_1.onCall)({ region: "europe-west
         if (pendingInviteUids.includes(friendUid)) {
             throw new https_1.HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
         }
-        if (memberUids.length + pendingInviteUids.length >= MAX_SHARED_MEMBERS) {
+        if (uniqueUids([...memberUids, ...pendingInviteUids]).length >= MAX_SHARED_MEMBERS) {
             throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
         }
         challengeTitle = safeStr(data?.title, 120) || challengeTitle;
@@ -539,17 +539,33 @@ exports.declineSharedChallengeMemberInvite = (0, https_1.onCall)({ region: "euro
         }
         const data = challengeSnap.data();
         const memberUids = uniqueUids(arr(data?.memberUids));
+        const acceptedBy = uniqueUids(arr(data?.acceptedBy));
         const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
-        if (memberUids.includes(uid)) {
-            throw new https_1.HttpsError("failed-precondition", "Ucastnik musi vyzvu opustit.");
-        }
+        const leftBy = uniqueUids(arr(data?.leftBy));
         if (!pendingInviteUids.includes(uid)) {
+            if (memberUids.includes(uid)) {
+                throw new https_1.HttpsError("failed-precondition", "Ucastnik musi vyzvu opustit.");
+            }
             return;
         }
-        tx.set(challengeRef, {
-            pendingInviteUids: pendingInviteUids.filter((memberUid) => memberUid !== uid),
+        const nextMemberUids = memberUids.filter((memberUid) => memberUid !== uid);
+        const nextAcceptedBy = acceptedBy.filter((memberUid) => memberUid !== uid);
+        const nextPendingInviteUids = pendingInviteUids.filter((memberUid) => memberUid !== uid);
+        const nextLeftBy = memberUids.includes(uid) ? uniqueUids([...leftBy, uid]) : leftBy;
+        const nextData = {
+            pendingInviteUids: nextPendingInviteUids,
             updatedAt: firestore_2.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        };
+        if (memberUids.includes(uid)) {
+            nextData.memberUids = nextMemberUids;
+            nextData.acceptedBy = nextAcceptedBy;
+            nextData.leftBy = nextLeftBy;
+            if (nextMemberUids.length < 2) {
+                nextData.enabled = false;
+                nextData.status = "declined";
+            }
+        }
+        tx.set(challengeRef, nextData, { merge: true });
     });
     return { ok: true };
 });

@@ -69,6 +69,12 @@ export type SharedChallengeDayProgress = {
   updatedAt?: any;
 };
 
+export type SharedChallengesQueryDebug = {
+  queryName: "memberUids" | "pendingInviteUids";
+  count?: number;
+  error?: any;
+};
+
 function myUid() {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Nejsi přihlášený.");
@@ -162,6 +168,7 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
 
   const friendUidsRaw = Array.isArray(input.friendUids) ? input.friendUids : [];
   const memberUids = dedupeMemberUids(friendUidsRaw, uid);
+  const pendingInviteUids = memberUids.filter((memberUid) => memberUid !== uid);
 
   if (memberUids.length < 2) {
     throw new Error("Vyber aspoň jednoho kamaráda.");
@@ -199,7 +206,7 @@ export async function createSharedChallenge(input: SharedChallengeCreateInput) {
     enabled: true,
     status: "pending",
     acceptedBy: [uid],
-    pendingInviteUids: [],
+    pendingInviteUids,
     leftBy: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -318,7 +325,8 @@ export async function inviteSharedChallengeMember(challengeId: string, friendUid
 
 export function subscribeSharedChallenges(
   onItems: (items: SharedChallenge[]) => void,
-  onError?: (e: any) => void
+  onError?: (e: any) => void,
+  onQueryDebug?: (debug: SharedChallengesQueryDebug) => void
 ): Unsubscribe {
   const uid = myUid();
 
@@ -395,6 +403,7 @@ export function subscribeSharedChallenges(
     (snap) => {
       memberItems.clear();
       snap.docs.forEach((d) => memberItems.set(d.id, readDoc(d)));
+      onQueryDebug?.({ queryName: "memberUids", count: snap.docs.length });
       if (__DEV__) {
         console.log("[shared-invites/query] member query", { uid, count: snap.docs.length });
       }
@@ -402,6 +411,7 @@ export function subscribeSharedChallenges(
     },
     (err) => {
       if (__DEV__) console.log("[shared-invites/query] member query error", err);
+      onQueryDebug?.({ queryName: "memberUids", error: err });
       onError?.(err);
     }
   );
@@ -411,6 +421,7 @@ export function subscribeSharedChallenges(
     (snap) => {
       pendingItems.clear();
       snap.docs.forEach((d) => pendingItems.set(d.id, readDoc(d)));
+      onQueryDebug?.({ queryName: "pendingInviteUids", count: snap.docs.length });
       if (__DEV__) {
         console.log("[shared-invites/query] pending invite query", {
           uid,
@@ -431,6 +442,7 @@ export function subscribeSharedChallenges(
     },
     (err) => {
       if (__DEV__) console.log("[shared-invites/query] pending invite query error", err);
+      onQueryDebug?.({ queryName: "pendingInviteUids", error: err });
       onError?.(err);
     }
   );
