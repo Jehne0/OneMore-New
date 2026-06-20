@@ -22,6 +22,7 @@ import {
   createSharedChallenge,
   declineSharedChallenge,
   dowMon0,
+  isIncomingSharedChallengeInviteForUid,
   MAX_SHARED_MEMBERS,
   subscribeSharedChallenges,
   type SharedChallenge,
@@ -783,6 +784,83 @@ history: "Herausforderungsverlauf",
 
 } as const;
 
+function getIncomingSharedChallengeInvitesForUid(
+  sharedChallenges: SharedChallenge[],
+  uid: string
+) {
+  return sharedChallenges.filter((challenge) =>
+    isIncomingSharedChallengeInviteForUid(challenge, uid)
+  );
+}
+
+function getIncomingSharedChallengeInviteExclusionReason(
+  challenge: SharedChallenge,
+  uid: string
+) {
+  if (!uid) return "missing-current-user-uid";
+  if (!Array.isArray(challenge.pendingInviteUids)) return "pendingInviteUids-not-array";
+  if (!challenge.pendingInviteUids.includes(uid)) return "current-user-not-in-pendingInviteUids";
+  return null;
+}
+
+function logProfileSharedChallengeInviteDiagnostics(
+  sharedChallenges: SharedChallenge[],
+  incomingSharedChallengeInvites: SharedChallenge[],
+  uid: string
+) {
+  if (!__DEV__) return;
+
+  const incomingBeforeFilters = sharedChallenges.filter((challenge) =>
+    isIncomingSharedChallengeInviteForUid(challenge, uid)
+  ).length;
+
+  console.log("[DEV][profile/friends/shared-invites] currentUser.uid", uid);
+  console.log(
+    "[DEV][profile/friends/shared-invites] sharedChallenges total count received by Profile",
+    sharedChallenges.length
+  );
+  console.log(
+    "[DEV][profile/friends/shared-invites] incoming shared challenge invites count before filters",
+    incomingBeforeFilters
+  );
+  console.log(
+    "[DEV][profile/friends/shared-invites] incoming shared challenge invites count after filters",
+    incomingSharedChallengeInvites.length
+  );
+
+  sharedChallenges.forEach((challenge) => {
+    const pendingInviteUids = Array.isArray(challenge.pendingInviteUids)
+      ? challenge.pendingInviteUids
+      : [];
+    const memberUids = Array.isArray(challenge.memberUids) ? challenge.memberUids : [];
+    const acceptedBy = Array.isArray(challenge.acceptedBy) ? challenge.acceptedBy : [];
+    const leftBy = Array.isArray(challenge.leftBy) ? challenge.leftBy : [];
+    const included = incomingSharedChallengeInvites.some(
+      (item) => String(item.id) === String(challenge.id)
+    );
+
+    console.log("[DEV][profile/friends/shared-invites] shared challenge", {
+      challengeId: challenge.id,
+      title: challenge.title,
+      name: null,
+      pendingInviteUids,
+      memberUids,
+      acceptedBy,
+      leftBy,
+      enabled: challenge.enabled,
+      status: challenge.status,
+      isCurrentUserPending: pendingInviteUids.includes(uid),
+      isCurrentUserMember: memberUids.includes(uid),
+      isCurrentUserAccepted: acceptedBy.includes(uid),
+      isCurrentUserLeft: leftBy.includes(uid),
+      includedInIncomingInvites: included,
+      excludedReason: included
+        ? null
+        : getIncomingSharedChallengeInviteExclusionReason(challenge, uid),
+    });
+  });
+}
+
 export default function ProfileTabScreen() {
   const router = useRouter();
   const { open, t } = useLocalSearchParams<{ open?: string; t?: string }>();
@@ -795,6 +873,7 @@ const profileLang =
     : "en";
 
 const p = PROFILE_STRINGS[profileLang];
+const currentUserUid = auth.currentUser?.uid ?? "";
 
 const medalDayUnit =
   profileLang === "cs"
@@ -1106,10 +1185,14 @@ const sharedInvitesInitializedRef = useRef(false);
     // ✅ Nepřijaté společné výzvy pro mě
   useEffect(() => {
    
-    const uid = auth.currentUser?.uid;
+    const uid = currentUserUid;
     if (!uid) {
       setSharedInvites([]);
+      setSentSharedInvites([]);
+      setSharedChallenges([]);
       setSharedInvitesLoading(false);
+      seenIncomingInviteIdsRef.current = [];
+      sharedInvitesInitializedRef.current = false;
       return;
     }
 
@@ -1120,49 +1203,16 @@ const sharedInvitesInitializedRef = useRef(false);
       async (items) => {
         if (cancelled) return;
 
-        if (__DEV__) {
-          console.log("[shared-invites/profile] currentUser.uid", uid);
-          console.log("[shared-invites/profile] query result count", items.length);
-        }
-
         setSharedChallenges(items);
     
-        const incomingPending = items.filter((item) => {
-          const isPending = item.status === "pending";
-          const iAmMember = item.memberUids.includes(uid);
-          const iAmPendingInvite = (item.pendingInviteUids ?? []).includes(uid);
-          const iAlreadyAccepted = item.acceptedBy.includes(uid);
-          const createdByMe = String(item.createdBy) === String(uid);
-          const leftByMe = (item.leftBy ?? []).includes(uid);
-          const visible = ((isPending && iAmMember && !iAlreadyAccepted) || iAmPendingInvite) && !createdByMe;
+        const incomingSharedChallengeInvites =
+          getIncomingSharedChallengeInvitesForUid(items, uid);
 
-          if (__DEV__) {
-            console.log("[shared-invites/profile] invite candidate", {
-              challengeId: item.id,
-              title: item.title,
-              status: item.status,
-              pendingInviteUids: item.pendingInviteUids ?? [],
-              memberUids: item.memberUids ?? [],
-              currentUidInPendingInviteUids: iAmPendingInvite,
-              currentUidInMemberUids: iAmMember,
-              currentUidInAcceptedBy: iAlreadyAccepted,
-              currentUidInLeftBy: leftByMe,
-              createdByMe,
-              visible,
-              filteredOutBecause: visible
-                ? null
-                : createdByMe
-                  ? "created-by-current-user"
-                  : iAlreadyAccepted
-                    ? "already-accepted"
-                    : !iAmPendingInvite && !(isPending && iAmMember)
-                      ? "not-pending-for-current-user"
-                      : "unknown",
-            });
-          }
-
-          return visible;
-        });
+        logProfileSharedChallengeInviteDiagnostics(
+          items,
+          incomingSharedChallengeInvites,
+          uid
+        );
 
         const outgoingPending = items.filter((item) => {
   const isPending = item.status === "pending";
@@ -1173,7 +1223,7 @@ const sharedInvitesInitializedRef = useRef(false);
 
         const extraUids = Array.from(
           new Set(
-            incomingPending.flatMap((item) => item.memberUids)
+            incomingSharedChallengeInvites.flatMap((item) => item.memberUids)
           )
         ).filter(Boolean);
 
@@ -1204,7 +1254,7 @@ await Promise.all(
           ...nextNames,
         }));
 
-   const nextIncomingIds = incomingPending.map((item) => String(item.id));
+   const nextIncomingIds = incomingSharedChallengeInvites.map((item) => String(item.id));
 
 if (sharedInvitesInitializedRef.current) {
   const hasNewInvite = nextIncomingIds.some(
@@ -1226,7 +1276,7 @@ if (sharedInvitesInitializedRef.current) {
 
 seenIncomingInviteIdsRef.current = nextIncomingIds;
 
-setSharedInvites(incomingPending);
+setSharedInvites(incomingSharedChallengeInvites);
 setSentSharedInvites(outgoingPending);
 setSharedInvitesLoading(false);
       },
@@ -1244,7 +1294,7 @@ setSharedInvitesLoading(false);
       cancelled = true;
       unsub?.();
     };
-  }, [friendsOpen, lang, unknownUserText]);
+  }, [currentUserUid, friendsOpen, lang, unknownUserText]);
 
   const email = (auth.currentUser?.email ?? "").trim();
 
@@ -1260,7 +1310,8 @@ setSharedInvitesLoading(false);
         : "Friend";
 };
 
-const pendingInviteCount = sharedInvites.length;
+const incomingSharedChallengeInvites = sharedInvites;
+const pendingInviteCount = incomingSharedChallengeInvites.length;
 const sharedChallengeInvitationsTitle =
   lang === "cs"
     ? "Pozvánky do společných výzev"
@@ -4368,7 +4419,7 @@ const incomingCount = incoming.length;
           ) : (
             <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
               <View style={{ gap: 12 }}>
-             {!sharedInvites.length && !sentSharedInvites.length ? (
+             {!incomingSharedChallengeInvites.length && !sentSharedInvites.length ? (
   <View
     style={[
       styles.infoCard,
@@ -4384,13 +4435,13 @@ const incomingCount = incoming.length;
   </View>
 ) : (
   <>
-    {!!sharedInvites.length && (
+    {!!incomingSharedChallengeInvites.length && (
       <Text style={[styles.infoTitle, { color: UI.text }]}>
         {sharedChallengeInvitationsTitle}
       </Text>
     )}
 
-    {sharedInvites.map((item) => (
+    {incomingSharedChallengeInvites.map((item) => (
       <View
         key={item.id}
         style={[

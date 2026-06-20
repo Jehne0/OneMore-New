@@ -37,6 +37,17 @@ export type SharedChallenge = {
   updatedAt?: any;
 };
 
+export function isIncomingSharedChallengeInviteForUid(
+  challenge: Pick<SharedChallenge, "pendingInviteUids">,
+  uid: string
+) {
+  return (
+    !!uid &&
+    Array.isArray(challenge.pendingInviteUids) &&
+    challenge.pendingInviteUids.includes(uid)
+  );
+}
+
 export type SharedChallengeCreateInput = {
   title: string;
   friendUids: string[];
@@ -203,7 +214,7 @@ export async function acceptSharedChallenge(challengeId: string) {
   const uid = myUid();
   const challenge = await getSharedChallenge(challengeId);
 
-  if (challenge && !challenge.memberUids.includes(uid) && (challenge.pendingInviteUids ?? []).includes(uid)) {
+  if (challenge && isIncomingSharedChallengeInviteForUid(challenge, uid)) {
     const call = httpsCallable(functions, "acceptSharedChallengeMemberInvite");
     await call({ challengeId });
     return;
@@ -231,7 +242,7 @@ export async function declineSharedChallenge(challengeId: string) {
   const uid = myUid();
   const challenge = await getSharedChallenge(challengeId);
 
-  if (challenge && !challenge.memberUids.includes(uid) && (challenge.pendingInviteUids ?? []).includes(uid)) {
+  if (challenge && isIncomingSharedChallengeInviteForUid(challenge, uid)) {
     const call = httpsCallable(functions, "declineSharedChallengeMemberInvite");
     await call({ challengeId });
     return;
@@ -365,7 +376,7 @@ export function subscribeSharedChallenges(
     memberItems.forEach((item, id) => merged.set(id, item));
 
     const items = Array.from(merged.values()).filter((item) => {
-      const pendingForMe = (item.pendingInviteUids ?? []).includes(uid);
+      const pendingForMe = isIncomingSharedChallengeInviteForUid(item, uid);
       const leftByMe = (item.leftBy ?? []).includes(uid);
       return pendingForMe || !leftByMe;
     });
