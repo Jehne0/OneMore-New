@@ -64,8 +64,10 @@ import {
 } from "../../lib/sharedReminders";
 import {
   AppState,
+  challengeDisplayText,
   ensureDailyPick,
   getCachedState,
+  isChallengeEasyMode,
   loadState,
   purgeChallenge,
   renameChallenge,
@@ -964,6 +966,12 @@ notificationCount: "Number of notifications",
       add: "Add",
       manageTitle: "Manage challenge",
       active: "Active",
+      easyMode: "Easy mode",
+      easyModeActive: "Easy Mode active",
+      easyModeConfirmTitle: "Turn on Easy Mode?",
+      easyModeConfirmMessage: "Easy Mode is permanent. This challenge will not lose fire streaks, but it will not count toward the total streak or earn new medals. Do you want to continue?",
+      easyModeConfirm: "Turn on",
+      easyModeCancel: "Cancel",
       perDayCount: "Count per day",
       period: "Period",
       daily: "Daily",
@@ -1054,6 +1062,12 @@ notificationCount: "Liczba powiadomień",
       add: "Dodaj",
       manageTitle: "Zarządzaj wyzwaniem",
       active: "Aktywne",
+      easyMode: "Tryb easy",
+      easyModeActive: "Tryb easy aktywny",
+      easyModeConfirmTitle: "Włączyć tryb easy?",
+      easyModeConfirmMessage: "Tryb easy jest nieodwracalny. Wyzwanie nie będzie tracić płomieni, ale nie będzie liczyć się do ogólnej serii ani zdobywać nowych medali. Czy chcesz kontynuować?",
+      easyModeConfirm: "Włącz",
+      easyModeCancel: "Anuluj",
       perDayCount: "Liczba dziennie",
       period: "Okres",
       daily: "Codziennie",
@@ -1145,6 +1159,12 @@ notificationCount: "Anzahl der Benachrichtigungen",
       add: "Hinzufügen",
       manageTitle: "Challenge verwalten",
       active: "Aktiv",
+      easyMode: "Easy Mode",
+      easyModeActive: "Easy Mode aktiv",
+      easyModeConfirmTitle: "Easy Mode aktivieren?",
+      easyModeConfirmMessage: "Der Easy Mode ist dauerhaft. Diese Challenge verliert keine Feuer-Serie, zählt aber nicht zum Gesamt-Streak und sammelt keine neuen Medaillen. Möchtest du fortfahren?",
+      easyModeConfirm: "Aktivieren",
+      easyModeCancel: "Abbrechen",
       perDayCount: "Anzahl pro Tag",
       period: "Zeitraum",
       daily: "Täglich",
@@ -1234,6 +1254,12 @@ notificationCount: "Počet notifikací",
     add: "Přidat",
     manageTitle: "Správa výzvy",
     active: "Aktivní",
+    easyMode: "Easy mode",
+    easyModeActive: "Easy mode aktivní",
+    easyModeConfirmTitle: "Zapnout Easy mode?",
+    easyModeConfirmMessage: "Easy mode je nevratný. Výzva nebude ztrácet ohýnky, ale nebude se počítat do celkového streaku ani sbírat nové medaile. Chcete pokračovat?",
+    easyModeConfirm: "Zapnout",
+    easyModeCancel: "Zrušit",
     perDayCount: "Počet výzev za den",
     period: "Perioda",
     daily: "Denně",
@@ -1636,6 +1662,7 @@ async function openSharedNotificationSettings() {
   }, [appState?.challenges, manageId]);
 
   const [manageEnabled, setManageEnabled] = useState(true);
+  const [manageEasyMode, setManageEasyMode] = useState(false);
   const [manageTarget, setManageTarget] = useState(1);
   const [managePeriod, setManagePeriod] = useState<"daily" | "every2" | "custom">("daily");
   const [manageCustomDays, setManageCustomDays] = useState<number[]>([]);
@@ -1679,6 +1706,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
 
       setManageId(String(id));
       setManageEnabled(enabled);
+      setManageEasyMode(isChallengeEasyMode(c));
       setManageTarget(target);
       setManagePeriod(period);
       setManageCustomDays(uniqueDays);
@@ -1696,6 +1724,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     Keyboard.dismiss();
     setManageOpen(false);
     setManageId(null);
+    setManageEasyMode(false);
   }, []);
 
   const persist = useCallback(async (updater: (latest: AppState) => AppState) => {
@@ -1796,6 +1825,36 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     },
     [manageId, manageRemCount, manageRemEnabled, persist]
   );
+
+  const enableEasyMode = useCallback(async () => {
+    if (!manageId) return;
+    const id = String(manageId);
+
+    await persist((latest) => ({
+      ...(latest as any),
+      easyModeChallengeIds: Array.from(
+        new Set([...(latest.easyModeChallengeIds ?? []).map(String), id])
+      ),
+      challenges: (latest.challenges ?? []).map((c: any) =>
+        String(c.id) === id ? { ...c, easyMode: true } : c
+      ),
+    }) as any);
+
+    setManageEasyMode(true);
+  }, [manageId, persist]);
+
+  const confirmEnableEasyMode = useCallback(() => {
+    if (manageEasyMode) return;
+
+    Alert.alert(TXT.easyModeConfirmTitle, TXT.easyModeConfirmMessage, [
+      { text: TXT.easyModeCancel, style: "cancel" },
+      {
+        text: TXT.easyModeConfirm,
+        style: "destructive",
+        onPress: () => void enableEasyMode(),
+      },
+    ]);
+  }, [enableEasyMode, manageEasyMode, TXT.easyModeCancel, TXT.easyModeConfirm, TXT.easyModeConfirmMessage, TXT.easyModeConfirmTitle]);
 
   const savePeriodImmediate = useCallback(
     async (nextPeriod: "daily" | "every2" | "custom", nextCustomDays?: number[]) => {
@@ -2114,6 +2173,29 @@ const sidePadding = 18;
     const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId));
     const t = Number((c as any)?.targetPerDay ?? 1);
     return Number.isFinite(t) && t > 0 ? Math.floor(t) : 1;
+  }
+
+  function getChallengeById(challengeId: string) {
+    return (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
+  }
+
+  function isEasyChallengeId(challengeId: string): boolean {
+    return isChallengeEasyMode(getChallengeById(challengeId));
+  }
+
+  function easyHistoryStreakForChallenge(challengeId: string): number {
+    const completedDates = new Set<string>();
+
+    for (const [date, summary] of dayIndex.byChallenge.get(String(challengeId)) ?? new Map()) {
+      const target = targetForChallenge(challengeId);
+      if ((summary.completed ?? 0) >= Math.max(1, target)) {
+        completedDates.add(String(date));
+      }
+    }
+
+    const stats = appState?.challengeStats?.[String(challengeId)];
+    const stored = Number((stats as any)?.currentStreak ?? 0);
+    return Math.max(Number.isFinite(stored) ? Math.floor(stored) : 0, completedDates.size);
   }
 
   function completedTodayCount(challengeId: string): number {
@@ -2504,6 +2586,8 @@ const sidePadding = 18;
   }
 
   function streakForChallenge(challengeId: string) {
+    if (isEasyChallengeId(challengeId)) return easyHistoryStreakForChallenge(challengeId);
+
     const stats = appState?.challengeStats?.[String(challengeId)];
     const s = Number((stats as any)?.currentStreak ?? 0);
     if ((stats as any)?.lastCompletedDay === tdy && Number.isFinite(s) && s > 0) return s;
@@ -2518,6 +2602,7 @@ const bestStreak = useMemo(() => {
 
   for (const ch of challenges) {
     if (!ch) continue;
+    if (isChallengeEasyMode(ch as any)) continue;
 
     const id = String(ch.id);
     const v = streakForChallenge(id);
@@ -2565,13 +2650,16 @@ const bestStreakForFriends = useMemo(() => {
   const stats = appState?.challengeStats ?? {};
   let best = 0;
 
-  for (const value of Object.values(stats as Record<string, any>)) {
+  for (const [id, value] of Object.entries(stats as Record<string, any>)) {
+    const challenge = (appState?.challenges ?? []).find((c: any) => String(c.id) === String(id));
+    if (isChallengeEasyMode(challenge as any)) continue;
+
     const n = Number((value as any)?.bestStreak ?? 0);
     if (Number.isFinite(n)) best = Math.max(best, Math.floor(n));
   }
 
   return best;
-}, [appState?.challengeStats]);
+}, [appState?.challengeStats, appState?.challenges]);
 
 const activeChallengesForFriends = useMemo(() => {
   const list = (appState?.challenges ?? []) as any[];
@@ -2644,7 +2732,11 @@ useEffect(() => {
   }
 
   const selectedChallengeMedal: MedalTier = selectedId
-    ? currentMedalTierForStreak(streakForChallenge(String(selectedId)))
+    ? currentMedalTierForStreak(
+        isEasyChallengeId(String(selectedId))
+          ? Number(appState?.challengeStats?.[String(selectedId)]?.currentStreak ?? 0)
+          : streakForChallenge(String(selectedId))
+      )
     : "none";
 
   const selectedChallengeBestStreak = useMemo(() => {
@@ -2685,6 +2777,7 @@ useEffect(() => {
   const challenge = (appState.challenges ?? []).find(
     (c) => String(c.id) === String(challengeId)
   );
+  const challengeEasyMode = isChallengeEasyMode(challenge as any);
 
   if (challenge && !isChallengeActiveToday(challenge)) {
     Alert.alert(TXT.freeDay, TXT.freeRelax);
@@ -2751,7 +2844,7 @@ useEffect(() => {
     ],
 
     // Kvůli starší kompatibilitě nastavujeme lastCompletedDate až při úplném dokončení dne.
-    lastCompletedDate: completesDay ? tdy : appState.lastCompletedDate,
+    lastCompletedDate: completesDay && !challengeEasyMode ? tdy : appState.lastCompletedDate,
 
     everCompletedKeys: Array.from(ever),
   };
@@ -2760,7 +2853,7 @@ useEffect(() => {
   await saveState(next);
 
   const isDayCompleteNext = (() => {
-    const enabled = (next.challenges ?? []).filter((c: any) => c.enabled !== false);
+    const enabled = (next.challenges ?? []).filter((c: any) => c.enabled !== false && !isChallengeEasyMode(c));
     const visible = premium ? enabled : enabled.slice(0, FREE_MAX);
 
     for (const c of visible as any[]) {
@@ -3133,6 +3226,17 @@ useEffect(() => {
                     void saveBasicsImmediate(v, manageTarget);
                   }}
                 />
+              </View>
+
+              <View style={styles.modalRow}>
+                <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.easyMode}</Text>
+                {manageEasyMode ? (
+                  <Text style={[styles.modalLabel, { color: UI.accent }]}>
+                    {TXT.easyModeActive}
+                  </Text>
+                ) : (
+                  <Switch value={false} onValueChange={(v) => v && confirmEnableEasyMode()} />
+                )}
               </View>
 
               <View style={styles.modalRow}>
@@ -4313,7 +4417,7 @@ try {
                           <View style={styles.rowMain}>
                            <Text style={styles.rowTitle} numberOfLines={1}>
   {lockedByFree ? "🔒 " : ""}
-  {item.text}
+  {challengeDisplayText(item as any)}
 </Text>
                            <Text style={styles.rowDoneSmall}>
   {lockedByFree

@@ -4,7 +4,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppState, getCachedState, loadState, subscribeState } from "../lib/storage";
+import { AppState, easyModeChallengeIdSet, getCachedState, isChallengeEasyMode, loadState, subscribeState } from "../lib/storage";
 import { isPremiumActive, subscribePremium } from "../lib/premium";
 import { useTheme } from "../lib/theme";
 import { useTodayISO } from "../lib/clock";
@@ -106,14 +106,17 @@ export default function ProfileScreen() {
     const archived = ((state as any)?.archivedChallenges ?? []) as any[];
     const challenges = (state?.challenges ?? []) as any[];
 
-    const totalCompleted = history.filter((h) => h.status === "completed").length;
+    const easyIds = easyModeChallengeIdSet(state);
+    const normalHistory = history.filter((h: any) => !easyIds.has(String(h?.challengeId ?? "")));
+
+    const totalCompleted = normalHistory.filter((h) => h.status === "completed").length;
     const totalSkipped = history.filter((h) => h.status === "skipped").length;
 
-    const daysWithCompleted = new Set(history.filter((h) => h.status === "completed").map((h) => h.date));
+    const daysWithCompleted = new Set(normalHistory.filter((h) => h.status === "completed").map((h) => h.date));
     const longestStreak = computeLongestStreakDays(daysWithCompleted);
     const currentStreak = computeCurrentStreakDays(daysWithCompleted, todayISO);
 
-    const activeChallengesCount = challenges.filter((c) => !c?.deletedAt && c?.enabled !== false).length;
+    const activeChallengesCount = challenges.filter((c) => !c?.deletedAt && c?.enabled !== false && !isChallengeEasyMode(c)).length;
 
     // výzvy, které jsem kdy splnil (aktivní + dřívější)
     const everActive = challenges.filter((c) => hasEverCompleted(state, String(c.id), String(c.text ?? ""))).length;

@@ -1,4 +1,4 @@
-import { AppState, HistoryEntry } from "./storage";
+import { AppState, HistoryEntry, easyModeChallengeIdSet } from "./storage";
 
 export type MedalTier = "bronze" | "silver" | "gold";
 export type MedalCounts = Record<MedalTier, number>;
@@ -62,6 +62,12 @@ function sortByDateAsc(history: HistoryEntry[]): HistoryEntry[] {
   return arr;
 }
 
+function normalHistory(state: AppStateWithMedals): HistoryEntry[] {
+  const easyIds = easyModeChallengeIdSet(state);
+
+  return (state.history ?? []).filter((h: any) => !easyIds.has(String(h?.challengeId ?? "")));
+}
+
 export function getMedalCounts(state: AppStateWithMedals): MedalCounts {
   const counts: MedalCounts = { bronze: 0, silver: 0, gold: 0 };
 
@@ -77,7 +83,7 @@ export function getMedalCounts(state: AppStateWithMedals): MedalCounts {
 }
 
 export function getTotalCompletedDays(state: AppStateWithMedals): number {
-  const history = sortByDateAsc(dedupeByDate(state.history ?? []));
+  const history = sortByDateAsc(dedupeByDate(normalHistory(state)));
   const completedDates = new Set<string>();
 
   for (const h of history) {
@@ -108,7 +114,7 @@ export function getDaysWithAnyEntry(state: AppStateWithMedals): number {
  * Dílčí progress 1/4, 2/4, 3/4 se nepočítá.
  */
 export function getLongestStreak(state: AppStateWithMedals): number {
-  const history = sortByDateAsc(dedupeByDate(state.history ?? []));
+  const history = sortByDateAsc(dedupeByDate(normalHistory(state)));
 
   const completedDates = history
     .filter(isFullCompleted)

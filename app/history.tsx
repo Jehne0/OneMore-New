@@ -9,13 +9,14 @@ import {
   Text,
   View,
 } from "react-native";
-import { loadChallengesFast, loadChallengeStatsFast } from "../lib/storage";
+import { challengeDisplayText, isChallengeEasyMode, loadChallengesFast, loadChallengeStatsFast } from "../lib/storage";
 import { useTheme } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 
 type StatRow = {
   id: string;
   text: string;
+  easyMode?: boolean;
   enabled: boolean;
   completed: number;
   skipped: number;
@@ -121,7 +122,7 @@ let MEM_ROWS_AT = 0;
 function computeSummary(rows: StatRow[]): SummaryStats {
   return rows.reduce(
     (acc, r) => {
-      acc.bestStreak = Math.max(acc.bestStreak, Number(r.streak ?? 0));
+      if (!r.easyMode) acc.bestStreak = Math.max(acc.bestStreak, Number(r.streak ?? 0));
       acc.totalCompleted += Number(r.completed ?? 0);
       if (r.enabled) acc.activeChallenges += 1;
       return acc;
@@ -301,7 +302,8 @@ const p = HISTORY_STRINGS[historyLang];
 
         return {
           id,
-          text: String(c.text ?? ""),
+          text: challengeDisplayText(c as any),
+          easyMode: isChallengeEasyMode(c as any),
           enabled: !!c.enabled && !c.deletedAt,
           completed: Number(st.completedCount ?? 0),
           skipped: Number(st.skippedCount ?? 0),

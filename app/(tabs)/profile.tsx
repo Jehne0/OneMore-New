@@ -1225,7 +1225,23 @@ setSharedInvitesLoading(false);
         : "Friend";
 };
 
-const pendingInviteCount = sharedInvites.length + sentSharedInvites.length;
+const pendingInviteCount = sharedInvites.length;
+const sharedChallengeInvitationsTitle =
+  lang === "cs"
+    ? "Pozvánky do společných výzev"
+    : lang === "pl"
+      ? "Zaproszenia do wspólnych wyzwań"
+      : lang === "de"
+        ? "Einladungen zu gemeinsamen Challenges"
+        : "Shared challenge invitations";
+const noNewSharedInvitationsText =
+  lang === "cs"
+    ? "Nemáte žádné nové pozvánky."
+    : lang === "pl"
+      ? "Nie masz nowych zaproszeń."
+      : lang === "de"
+        ? "Du hast keine neuen Einladungen."
+        : "You have no new invitations.";
 
 const myUid = auth.currentUser?.uid ?? "";
 
@@ -1480,6 +1496,10 @@ const faqItems = useMemo(() => {
         a: "Shared challenges let you complete a goal with friends and see everyone’s progress. In Free, only one shared challenge can be active or pending.",
       },
       {
+        q: "What is Easy Mode?",
+        a: "Easy Mode is a fun mode. A challenge in Easy Mode does not lose fire streaks when you miss a day. However, it does not count toward the total streak and does not earn new medals. Once Easy Mode is enabled, it cannot be turned off. Challenge history remains visible so you can see which days you completed and which days you missed.",
+      },
+      {
         q: "How do I cancel Premium?",
         a: "Premium is managed by Google Play or the App Store. Open the Premium section in OneMore and use the subscription management button.",
       },
@@ -1515,6 +1535,10 @@ const faqItems = useMemo(() => {
       {
         q: "Jak działają wspólne wyzwania?",
         a: "Wspólne wyzwania pozwalają realizować cel ze znajomymi i śledzić postęp wszystkich osób. W wersji Free aktywne lub oczekujące może być tylko jedno wspólne wyzwanie.",
+      },
+      {
+        q: "Czym jest tryb easy?",
+        a: "Tryb easy to tryb dla zabawy. Wyzwanie w trybie easy nie traci płomieni, gdy opuścisz dzień. Jednocześnie nie liczy się do ogólnej serii i nie zdobywa nowych medali. Po włączeniu trybu easy nie można go wyłączyć. Historia wyzwania pozostaje widoczna, aby było widać, które dni zostały wykonane, a które pominięte.",
       },
       {
         q: "Jak anulować Premium?",
@@ -1554,6 +1578,10 @@ const faqItems = useMemo(() => {
         a: "Gemeinsame Challenges ermöglichen es dir, ein Ziel zusammen mit Freunden zu erfüllen und den Fortschritt aller zu sehen. In Free kann nur eine gemeinsame Challenge aktiv oder ausstehend sein.",
       },
       {
+        q: "Was ist der Easy Mode?",
+        a: "Der Easy Mode ist ein Spaßmodus. Eine Challenge im Easy Mode verliert keine Feuer-Serie, wenn du einen Tag auslässt. Gleichzeitig zählt sie nicht zum Gesamt-Streak und sammelt keine neuen Medaillen. Sobald der Easy Mode aktiviert ist, kann er nicht mehr deaktiviert werden. Der Challenge-Verlauf bleibt sichtbar, damit du sehen kannst, welche Tage du geschafft und welche du verpasst hast.",
+      },
+      {
         q: "Wie kündige ich Premium?",
         a: "Premium wird über Google Play oder den App Store verwaltet. Öffne den Premium-Bereich in OneMore und nutze den Button zur Abo-Verwaltung.",
       },
@@ -1588,6 +1616,10 @@ const faqItems = useMemo(() => {
     {
       q: "Jak fungují společné výzvy?",
       a: "Společné výzvy ti umožní plnit cíl s přáteli a sledovat pokrok všech členů. Ve Free verzi může být aktivní nebo rozpracovaná jen jedna společná výzva.",
+    },
+    {
+      q: "Co je Easy mode?",
+      a: "Easy mode je režim pro zábavu. Výzva v Easy mode neztrácí ohýnky, když některý den vynecháte. Zároveň se ale nepočítá do celkového streaku a nesbírá nové medaile. Jakmile Easy mode zapnete, nejde ho vypnout. Historie výzvy zůstává viditelná, abyste viděli, které dny jste splnili a které ne.",
     },
     {
       q: "Jak zruším Premium?",
@@ -2069,6 +2101,7 @@ const incomingCount = friendEdges.filter(
     e.status === "pending" &&
     String(e.initiatedBy) !== String(myUid)
 ).length;
+const friendsBadgeCount = incomingCount + pendingInviteCount;
 
   return (
     <View style={[styles.screen, { backgroundColor: UI.bg }]}>
@@ -4308,14 +4341,20 @@ const incomingCount = incoming.length;
     ]}
   >
     <Text style={[styles.infoTitle, { color: UI.text }]}>
-      {p.challenges}
+      {sharedChallengeInvitationsTitle}
     </Text>
     <Text style={[styles.infoText, { color: UI.sub }]}>
-      {p.noPendingChallenges}
+      {noNewSharedInvitationsText}
     </Text>
   </View>
 ) : (
   <>
+    {!!sharedInvites.length && (
+      <Text style={[styles.infoTitle, { color: UI.text }]}>
+        {sharedChallengeInvitationsTitle}
+      </Text>
+    )}
+
     {sharedInvites.map((item) => (
       <View
         key={item.id}
@@ -5073,7 +5112,7 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
 
                <Pressable
           onPress={() => {
-            setFriendsTab("friends");
+            setFriendsTab(pendingInviteCount > 0 ? "invites" : incomingCount > 0 ? "requests" : "friends");
             setFriendsOpen(true);
           }}
           style={({ pressed }) => [
@@ -5082,8 +5121,29 @@ showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Requ
             pressed && { opacity: 0.88 },
           ]}
         >
-          <Text style={[styles.bigItemText, { color: UI.text }]}>{p.friendsLabel}</Text>
-          <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
+          <Text style={[styles.bigItemText, { color: UI.text, flex: 1 }]} numberOfLines={1}>
+            {p.friendsLabel}
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            {friendsBadgeCount > 0 && (
+              <View
+                style={{
+                  minWidth: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  paddingHorizontal: 7,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: UI.accent,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "900", color: "#0B1220" }}>
+                  +{friendsBadgeCount}
+                </Text>
+              </View>
+            )}
+            <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
+          </View>
         </Pressable>
       </ScrollView>
 

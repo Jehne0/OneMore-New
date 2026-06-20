@@ -29,14 +29,32 @@ function normalizeStats(s?: ChallengeStats): ChallengeStats {
   };
 }
 
+export function isChallengeEasyMode(challenge?: Pick<Challenge, "easyMode"> | null): boolean {
+  return challenge?.easyMode === true;
+}
+
+export function challengeDisplayText(challenge?: Pick<Challenge, "text" | "easyMode"> | null, fallback = ""): string {
+  const text = String(challenge?.text ?? fallback);
+  return isChallengeEasyMode(challenge) ? `${text} (easy)` : text;
+}
+
 export function updateStatsOnCompleted(
   state: AppState,
   challengeId: string,
   today: string
 ): Record<string, ChallengeStats> {
   const map = { ...(state.challengeStats ?? {}) };
-  const prev = normalizeStats(map[challengeId]);
   const ch = (state.challenges ?? []).find((c: any) => String(c.id) === String(challengeId)) as any;
+  const prev = normalizeStats(map[challengeId]);
+  if (isChallengeEasyMode(ch) || isChallengeIdEasyMode(state, challengeId)) {
+    map[challengeId] = {
+      ...prev,
+      completedCount: prev.completedCount + 1,
+      lastCompletedDay: today,
+    };
+    return map;
+  }
+
   const prevActive = prevActiveDayISO(ch ?? null, today);
   const lastStreakDay = prev.lastStreakDay ?? prev.lastCompletedDay;
 
@@ -69,7 +87,16 @@ export function updateStatsOnSkipped(
   today: string
 ): Record<string, ChallengeStats> {
   const map = { ...(state.challengeStats ?? {}) };
+  const ch = (state.challenges ?? []).find((c: any) => String(c.id) === String(challengeId)) as any;
   const prev = normalizeStats(map[challengeId]);
+  if (isChallengeEasyMode(ch) || isChallengeIdEasyMode(state, challengeId)) {
+    map[challengeId] = {
+      ...prev,
+      skippedCount: prev.skippedCount + 1,
+    };
+    return map;
+  }
+
   const usesFreeze = prev.skipCredits > 0 && prev.currentStreak >= 10;
 
   const next: ChallengeStats = {
@@ -142,6 +169,9 @@ export type Challenge = {
   // Připomínky pro danou výzvu
   reminderEnabled?: boolean; // default false
   reminderTimes?: string[]; // ["HH:mm", ...] (např. ["09:00","18:00"])
+
+  /** Irreversible fun mode: no streak reset, no new competitive stats/medals. */
+  easyMode?: boolean;
 };
 
 
@@ -150,6 +180,7 @@ export type ArchivedChallenge = {
   text: string;
   enabled: boolean;
   deletedAtISO: string;
+  easyMode?: boolean;
 };
 
 export type HistoryEntry = {
@@ -186,6 +217,7 @@ export type ChallengeStats = {
 
 export type AppState = {
   challenges: Challenge[];
+  easyModeChallengeIds?: string[];
 
   // ✅ map challengeId -> scheduled notificationId(s) (kvůli rušení/změně)
   reminderNotifIds?: Record<string, string[]>;
@@ -228,11 +260,37 @@ export const defaultState: AppState = {
   lastOpenDate: undefined,
   history: [],
   archivedChallenges: [],
+  easyModeChallengeIds: [],
   everCompletedKeys: [],
 
   // ✅ free reminder storage
   reminderNotifIds: {},
 };
+
+export function easyModeChallengeIdSet(
+  state?: Pick<AppState, "challenges" | "archivedChallenges" | "easyModeChallengeIds"> | null
+): Set<string> {
+  const ids = new Set<string>();
+
+  for (const id of state?.easyModeChallengeIds ?? []) {
+    const normalized = String(id ?? "");
+    if (normalized) ids.add(normalized);
+  }
+
+  for (const c of [...(state?.challenges ?? []), ...(state?.archivedChallenges ?? [])] as Array<Challenge | ArchivedChallenge>) {
+    if (isChallengeEasyMode(c)) ids.add(String(c.id));
+  }
+
+  return ids;
+}
+
+export function isChallengeIdEasyMode(
+  state: Pick<AppState, "challenges" | "archivedChallenges" | "easyModeChallengeIds"> | null | undefined,
+  challengeId: string | number | null | undefined
+): boolean {
+  const id = String(challengeId ?? "");
+  return !!id && easyModeChallengeIdSet(state).has(id);
+}
 
 // ---------- DATE HELPERS ----------
 function timeHM(d: Date): string {
@@ -407,6 +465,7 @@ function normalizeArchived(raw: unknown): ArchivedChallenge[] {
       text: String(a.text ?? ""),
       enabled: a.enabled ?? true,
       deletedAtISO: String(a.deletedAtISO ?? a.deletedAt ?? new Date(0).toISOString()),
+      easyMode: a.easyMode === true,
     }))
     .filter((a: ArchivedChallenge) => !!a.id);
 }
@@ -466,7 +525,20 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
   };
 
   merged.history = migrateHistory(merged.history);
-  merged.archivedChallenges = normalizeArchived(merged.archivedChallenges);
+  const existingEasyIds = easyModeChallengeIdSet(existing);
+  for (const id of normalizeEverCompletedKeys((incoming as any).easyModeChallengeIds)) {
+    existingEasyIds.add(id);
+  }
+  const existingArchivedEasyIds = new Set(
+    (existing.archivedChallenges ?? [])
+      .filter((c: any) => c?.easyMode === true || existingEasyIds.has(String(c.id)))
+      .map((c: any) => String(c.id))
+  );
+
+  merged.archivedChallenges = normalizeArchived(merged.archivedChallenges).map((c: any) => ({
+    ...c,
+    easyMode: c.easyMode === true || existingArchivedEasyIds.has(String(c.id)),
+  }));
   merged.everCompletedKeys = normalizeEverCompletedKeys(merged.everCompletedKeys);
 
   merged.reminderNotifIds = normalizeReminderNotifIds(merged.reminderNotifIds);
@@ -506,7 +578,16 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
       : normalizeTimeHHMM(c.reminderTime)
         ? [normalizeTimeHHMM(c.reminderTime) as string]
         : [],
+    easyMode: c.easyMode === true || existingEasyIds.has(String(c.id)),
   }));
+
+  merged.easyModeChallengeIds = Array.from(
+    new Set([
+      ...normalizeEverCompletedKeys((incoming as any).easyModeChallengeIds),
+      ...Array.from(existingEasyIds),
+      ...Array.from(easyModeChallengeIdSet(merged)),
+    ])
+  );
     // keep fast keys updated
     void persistFastKeys(merged as AppState);
     return merged;
@@ -514,8 +595,19 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
 
 function parseAndMerge(raw: string): AppState {
   const parsed = JSON.parse(raw) as Partial<AppState>;
+  const parsedChallenges = Array.isArray(parsed.challenges) ? parsed.challenges : [];
+  const parsedArchivedChallenges = Array.isArray((parsed as any).archivedChallenges)
+    ? ((parsed as any).archivedChallenges as any[])
+    : [];
+  const parsedEasyIds = new Set(normalizeEverCompletedKeys((parsed as any).easyModeChallengeIds));
+  for (const c of parsedChallenges as any[]) {
+    if (c?.easyMode === true) parsedEasyIds.add(String(c.id));
+  }
+  for (const c of parsedArchivedChallenges) {
+    if (c?.easyMode === true) parsedEasyIds.add(String(c.id));
+  }
 
-  const challenges: Challenge[] = (parsed.challenges ?? []).map((c: any) => ({
+  const challenges: Challenge[] = parsedChallenges.map((c: any) => ({
     id: String(c.id),
     text: String(c.text ?? ""),
     enabled: c.enabled ?? true,
@@ -549,10 +641,15 @@ reminderTimes: Array.isArray(c.reminderTimes)
   : normalizeTimeHHMM(c.reminderTime)
     ? [normalizeTimeHHMM(c.reminderTime) as string]
     : [],
+easyMode: c.easyMode === true || parsedEasyIds.has(String(c.id)),
 
   }));
 
   const history: HistoryEntry[] = migrateHistory((parsed as any).history);
+  const archivedChallenges = normalizeArchived(parsedArchivedChallenges).map((c: any) => ({
+    ...c,
+    easyMode: c.easyMode === true || parsedEasyIds.has(String(c.id)),
+  }));
 
   const merged: AppState = {
     ...defaultState,
@@ -560,13 +657,15 @@ reminderTimes: Array.isArray(c.reminderTimes)
     challenges,
     history,
     streak: typeof parsed.streak === "number" ? parsed.streak : defaultState.streak,
-    archivedChallenges: normalizeArchived((parsed as any).archivedChallenges),
+    archivedChallenges,
     lastOpenDate: parsed.lastOpenDate ? String(parsed.lastOpenDate) : undefined,
     everCompletedKeys: normalizeEverCompletedKeys((parsed as any).everCompletedKeys),
 
     // ✅ reminder notif map
     reminderNotifIds: normalizeReminderNotifIds((parsed as any).reminderNotifIds),
   };
+
+  merged.easyModeChallengeIds = Array.from(easyModeChallengeIdSet(merged));
 
   return merged;
 }
@@ -650,6 +749,7 @@ function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; c
       "(smazaná výzva)";
 
     const stats = normalizeStats((state.challengeStats ?? {})[id]);
+    const easyMode = isChallengeIdEasyMode(state, id);
 
     additions.push({
       date: y,
@@ -658,7 +758,7 @@ function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; c
       challengeId: id,
       challengeText: text,
       status: "skipped",
-      protectedByFreeze: stats.skipCredits > 0 && stats.currentStreak >= 10,
+      protectedByFreeze: !easyMode && stats.skipCredits > 0 && stats.currentStreak >= 10,
     });
   }
 
@@ -687,6 +787,12 @@ const hadAnyCompletedYesterday =
 const hadProtectedFreezeYesterday = additions.some(
   (e) => e.protectedByFreeze === true
 );
+const wasEasySkip = (entry: HistoryEntry) => {
+  const cid = String(entry.challengeId ?? "");
+  const challenge = (state.challenges ?? []).find((c: any) => String(c.id) === cid);
+  return isChallengeIdEasyMode(state, cid) || isChallengeEasyMode(challenge);
+};
+const hadOnlyEasySkipsYesterday = additions.length > 0 && additions.every(wasEasySkip);
 
 let repairedStreak = Number(state.streak ?? 0);
 
@@ -710,7 +816,7 @@ const next: AppState = {
   // ✅ Hlavní streak "Držíš se už X. den" nesmí spadnout jen proto,
   // že některá konkrétní výzva byla včera vynechaná.
   // Padá jen tehdy, když včera nebyla splněná žádná výzva.
-  streak: hadProtectedFreezeYesterday ? state.streak : hadAnyCompletedYesterday ? Math.max(1, repairedStreak) : 0,
+  streak: hadProtectedFreezeYesterday || hadOnlyEasySkipsYesterday ? state.streak : hadAnyCompletedYesterday ? Math.max(1, repairedStreak) : 0,
 
   lastOpenDate: today,
   challengeStats: nextStats,
@@ -762,6 +868,7 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
             : normalizeTimeHHMM((c as any).reminderTime)
               ? [normalizeTimeHHMM((c as any).reminderTime) as string]
               : [],
+          easyMode: c.easyMode === true,
         })) as Challenge[];
 
         _fastChallengesCache = parsed;
@@ -963,6 +1070,7 @@ export async function softDeleteChallenge(challengeId: string): Promise<AppState
       text: snapshotText,
       enabled: false,
       deletedAtISO: nowISO,
+      easyMode: isChallengeEasyMode(ch),
     };
 
     return {
@@ -1059,7 +1167,7 @@ export async function ensureDailyPick(): Promise<AppState> {
       ).length;
 
       // Pokud dnešní completed není >= target, invalidujeme dnešní "completed" marker.
-      if (completedToday < target) {
+      if (!isChallengeIdEasyMode(updated, pickedId) && completedToday < target) {
         updated = {
           ...updated,
           lastCompletedDate: undefined,
@@ -1093,6 +1201,7 @@ export async function markTodayCompleted(): Promise<AppState> {
     : undefined;
 
   const pickedText = pickedChallenge?.text ?? "(smazaná výzva)";
+  const pickedEasyMode = isChallengeIdEasyMode(state, pickedId);
 
   const rawTarget = Number(pickedChallenge?.targetPerDay ?? 1);
   const targetPerDay =
@@ -1156,14 +1265,18 @@ export async function markTodayCompleted(): Promise<AppState> {
   }
 
 const fixedLastCompletedDate =
-  isFullyCompletedNow
+  pickedEasyMode
+    ? state.lastCompletedDate
+    : isFullyCompletedNow
     ? today
     : state.lastCompletedDate === today
       ? undefined
       : state.lastCompletedDate;
 
 const fixedStreak =
-  isFullyCompletedNow
+  pickedEasyMode
+    ? state.streak
+    : isFullyCompletedNow
     ? nextStreak
     : state.lastCompletedDate === today
       ? Math.max(0, (state.streak ?? 0) - 1)
@@ -1200,7 +1313,11 @@ export async function markTodaySkipped(): Promise<AppState> {
     : "(bez výzvy)";
 
   const pickedStats = pickedId ? normalizeStats((state.challengeStats ?? {})[String(pickedId)]) : null;
-  const usesFreeze = pickedStats ? pickedStats.skipCredits > 0 && pickedStats.currentStreak >= 10 : false;
+  const pickedChallenge = pickedId
+    ? state.challenges.find((c) => String(c.id) === String(pickedId))
+    : undefined;
+  const pickedEasyMode = isChallengeIdEasyMode(state, pickedId);
+  const usesFreeze = pickedEasyMode || (pickedStats ? pickedStats.skipCredits > 0 && pickedStats.currentStreak >= 10 : false);
 
   const now = new Date();
   const entry: HistoryEntry = {

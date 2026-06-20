@@ -29,7 +29,7 @@ import {
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
-import { AppState, loadState, renameChallenge, saveState } from "../../lib/storage";
+import { AppState, challengeDisplayText, loadState, renameChallenge, saveState } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 
 const FREE_MAX = FREE_MAX_CHALLENGES;
@@ -1206,7 +1206,7 @@ export default function ChallengesScreen() {
 
                           <View style={styles.rowLeft}>
                             <Text style={styles.text} numberOfLines={2}>
-                              {a.text}
+                              {challengeDisplayText(a as any)}
                             </Text>
                             <Text style={styles.subtitle}>Smazáno: {String(a.deletedAtISO).slice(0, 10)}</Text>
                           </View>
@@ -1240,7 +1240,12 @@ export default function ChallengesScreen() {
                                   return {
                                     ...latest,
                                     challenges: [
-                                      { id: restoreId, text: String(item.text ?? ""), enabled: true },
+                                      {
+                                        id: restoreId,
+                                        text: String(item.text ?? ""),
+                                        enabled: true,
+                                        easyMode: item.easyMode === true,
+                                      },
                                       ...(latest.challenges ?? []),
                                     ],
                                     archivedChallenges: archived.filter(
@@ -1321,7 +1326,7 @@ export default function ChallengesScreen() {
                 >
                   <View style={styles.rowTop}>
                     <Text style={styles.rowTitle} numberOfLines={1}>
-                      {c.text}
+                      {challengeDisplayText(c as any)}
                     </Text>
 
                     <View style={styles.rightTop}>
