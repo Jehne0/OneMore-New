@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { getTodayISO } from "./clock";
+import { loadNotificationSettings } from "./notificationSettings";
 import { getCachedState, isChallengeActiveOnDate, loadState, type Challenge } from "./storage";
 import { updateState } from "./storage";
 
@@ -141,6 +142,48 @@ async function cancelReminderNotifications(
   } catch {}
 }
 
+async function cancelAllReminderNotifications(Notifications: NotificationsModule): Promise<void> {
+  const latest = getCachedState() ?? (await loadState());
+
+  for (const [reminderKey, nids] of Object.entries(latest.reminderNotifIds ?? {})) {
+    await cancelReminderNotifications(Notifications, String(reminderKey), nids ?? []);
+  }
+
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const item of scheduled) {
+      const id = String((item as any)?.identifier ?? "");
+      const data = ((item as any)?.content?.data ?? {}) as Record<string, unknown>;
+      const kind = String(data[REMINDER_DATA_KIND] ?? "");
+      if (!id || (kind !== "challenge" && kind !== "shared")) continue;
+
+      try {
+        await Notifications.cancelScheduledNotificationAsync(id);
+      } catch {}
+    }
+  } catch {}
+}
+
+async function saveReminderSettingWithoutScheduling(
+  challengeId: string,
+  times: string[]
+): Promise<void> {
+  const reminderKey = String(challengeId);
+  const reminderKind = reminderKindForId(reminderKey);
+
+  await updateState((s) => ({
+    ...s,
+    challenges:
+      reminderKind === "challenge"
+        ? (s.challenges ?? []).map((c) =>
+            String(c.id) === reminderKey
+              ? { ...c, reminderEnabled: true, reminderTimes: times }
+              : c
+          )
+        : s.challenges ?? [],
+  }));
+}
+
 let handlerSet = false;
 async function ensureHandler() {
   if (handlerSet) return;
@@ -204,10 +247,6 @@ export async function setDailyRemindersForChallenge(
   timesHHMM: string[],
   scheduleOverride?: ReminderSchedule
 ): Promise<void> {
-  if (isExpoGo()) {
-    throw new Error("NOTIFICATIONS_EXPO_GO_UNSUPPORTED");
-  }
-
   const maxTimes = _premiumEnabled ? PREMIUM_MAX_TIMES : FREE_MAX_TIMES;
   const parsed = Array.from(new Set((timesHHMM ?? []).filter(Boolean)))
     .map((t) => ({ t, p: parseHHMM(t) }))
@@ -215,9 +254,27 @@ export async function setDailyRemindersForChallenge(
     .slice(0, maxTimes) as { t: string; p: { hour: number; minute: number } }[];
   if (!parsed.length) return;
 
-  const Notifications = await N();
   const reminderKey = String(challengeId);
   const reminderKind = reminderKindForId(reminderKey);
+  const notificationSettings = await loadNotificationSettings();
+
+  if (!notificationSettings.challengeReminders) {
+    if (!isExpoGo()) {
+      const Notifications = await N();
+      const latest = getCachedState() ?? (await loadState());
+      const oldIds = (latest.reminderNotifIds?.[reminderKey] ?? []) as string[];
+      await cancelReminderNotifications(Notifications, reminderKey, oldIds);
+    }
+
+    await saveReminderSettingWithoutScheduling(reminderKey, parsed.map((x) => x.t));
+    return;
+  }
+
+  if (isExpoGo()) {
+    throw new Error("NOTIFICATIONS_EXPO_GO_UNSUPPORTED");
+  }
+
+  const Notifications = await N();
   const schedule = await resolveReminderSchedule(reminderKey, scheduleOverride);
 
   await ensureHandler();
@@ -376,6 +433,12 @@ export function getFreeActiveReminderChallengeId(state: any): string | null {
 }
 
 export async function refreshScheduledChallengeReminders(): Promise<void> {
+  const notificationSettings = await loadNotificationSettings();
+  if (!notificationSettings.challengeReminders) {
+    await cancelScheduledChallengeReminderNotifications();
+    return;
+  }
+
   const latest = getCachedState() ?? (await loadState());
 
   for (const challenge of latest.challenges ?? []) {
@@ -393,6 +456,13 @@ export async function refreshScheduledChallengeReminders(): Promise<void> {
       await clearDailyRemindersForChallenge(id);
     }
   }
+}
+
+export async function cancelScheduledChallengeReminderNotifications(): Promise<void> {
+  if (isExpoGo()) return;
+
+  const Notifications = await N();
+  await cancelAllReminderNotifications(Notifications);
 }
 
 export const setDailyReminderForChallenge = async (

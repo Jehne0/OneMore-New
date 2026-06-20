@@ -46,6 +46,12 @@ import {
   type NotificationSettings,
 } from "../../lib/notificationSettings";
 import {
+  cancelScheduledChallengeReminderNotifications,
+  refreshScheduledChallengeReminders,
+  setRemindersPremiumEnabled,
+} from "../../lib/reminders";
+import { refreshScheduledSharedReminders } from "../../lib/sharedReminders";
+import {
   EmailAuthProvider,
   deleteUser,
   reauthenticateWithCredential,
@@ -947,6 +953,16 @@ const updateNotificationSetting = async (
 
   try {
     await saveNotificationSettings(next);
+
+    if (key === "challengeReminders") {
+      setRemindersPremiumEnabled(!!premium);
+      if (value) {
+        await refreshScheduledChallengeReminders();
+        await refreshScheduledSharedReminders(sharedChallenges);
+      } else {
+        await cancelScheduledChallengeReminderNotifications();
+      }
+    }
   } catch {
     showPwdPopup(
       "error",
@@ -2634,32 +2650,59 @@ const incomingCount = friendEdges.filter(
             {[
               {
                 key: "challengeReminders" as const,
-                title: lang === "cs" ? "Notifikace výzev" : "Challenge reminders",
-              },
-              {
-                key: "friendRequests" as const,
-                title: lang === "cs" ? "Žádosti o přátelství" : "Friend requests",
-              },
-              {
-                key: "incomingChallenges" as const,
-                title: lang === "cs" ? "Když mě někdo vyzve" : "When someone challenges me",
+                title:
+                  lang === "cs"
+                    ? "Notifikace výzev"
+                    : lang === "pl"
+                    ? "Powiadomienia o wyzwaniach"
+                    : lang === "de"
+                    ? "Challenge-Benachrichtigungen"
+                    : "Challenge notifications",
               },
               {
                 key: "sharedChallenges" as const,
-                title: lang === "cs" ? "Společné výzvy" : "Shared challenges",
+                title:
+                  lang === "cs"
+                    ? "Notifikace společných výzev"
+                    : lang === "pl"
+                    ? "Powiadomienia o wspólnych wyzwaniach"
+                    : lang === "de"
+                    ? "Benachrichtigungen zu gemeinsamen Challenges"
+                    : "Shared challenge notifications",
               },
               {
-  key: "friendCompletedSharedChallenge" as const,
-  title:
-    lang === "cs"
-      ? "Když kamarád splní společnou výzvu"
-      : lang === "pl"
-      ? "Gdy znajomy ukończy wspólne wyzwanie"
-      : lang === "de"
-      ? "Wenn ein Freund eine gemeinsame Challenge abschließt"
-      : "When a friend completes a shared challenge",
-},
-              
+                key: "friendRequests" as const,
+                title:
+                  lang === "cs"
+                    ? "Žádosti o přátelství"
+                    : lang === "pl"
+                    ? "Prośby o dodanie do znajomych"
+                    : lang === "de"
+                    ? "Freundschaftsanfragen"
+                    : "Friend requests",
+              },
+              {
+                key: "incomingChallenges" as const,
+                title:
+                  lang === "cs"
+                    ? "Když mě někdo vyzve"
+                    : lang === "pl"
+                    ? "Gdy ktoś mnie wyzwie"
+                    : lang === "de"
+                    ? "Wenn mich jemand herausfordert"
+                    : "When someone challenges me",
+              },
+              {
+                key: "friendCompletedSharedChallenge" as const,
+                title:
+                  lang === "cs"
+                    ? "Když kamarád splní společnou výzvu"
+                    : lang === "pl"
+                    ? "Gdy znajomy ukończy wspólne wyzwanie"
+                    : lang === "de"
+                    ? "Wenn ein Freund eine gemeinsame Challenge abschließt"
+                    : "When a friend completes a shared challenge",
+              },
             ].map((item) => (
               <View
                 key={item.key}

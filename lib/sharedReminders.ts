@@ -1,9 +1,11 @@
 import {
+  cancelScheduledChallengeReminderNotifications,
   clearDailyRemindersForChallenge,
   setDailyRemindersForChallenge,
 } from "./reminders";
 import { getCachedState, loadState } from "./storage";
 import { isSharedChallengeActiveOnDate, type SharedChallenge } from "./sharedChallenges";
+import { loadNotificationSettings } from "./notificationSettings";
 import { loadSharedNotificationSettings } from "./sharedNotificationSettings";
 
 const SHARED_PREFIX = "shared_";
@@ -43,6 +45,12 @@ export async function clearSharedRemindersForChallenge(
 }
 
 export async function refreshScheduledSharedReminders(challenges: SharedChallenge[]): Promise<void> {
+  const notificationSettings = await loadNotificationSettings();
+  if (!notificationSettings.challengeReminders) {
+    await cancelScheduledChallengeReminderNotifications();
+    return;
+  }
+
   const settings = await loadSharedNotificationSettings();
   const byId = new Map((challenges ?? []).map((challenge) => [String(challenge.id), challenge]));
 
