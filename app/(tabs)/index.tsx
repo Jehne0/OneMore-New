@@ -2242,11 +2242,10 @@ const sidePadding = 18;
   }
 
   function getPendingSharedInviteUids(item: SharedChallenge): string[] {
-    const memberSet = new Set(item.memberUids.map((uid) => String(uid)));
     const local = localSharedInviteUids[item.id] ?? [];
     return Array.from(
       new Set([...(item.pendingInviteUids ?? []), ...local].map((uid) => String(uid)).filter(Boolean))
-    ).filter((uid) => !memberSet.has(uid));
+    );
   }
 
   function canInviteToSharedChallenge(item: SharedChallenge): boolean {
@@ -2267,19 +2266,25 @@ const sidePadding = 18;
 
     const me = auth.currentUser?.uid ?? "";
     const pendingInviteUids = getPendingSharedInviteUids(item);
-    const excluded = new Set<string>([
-      me,
-      ...item.memberUids.map((uid) => String(uid)),
-      ...pendingInviteUids,
-    ]);
-
-    if (item.memberUids.length + pendingInviteUids.length >= MAX_SHARED_MEMBERS) {
-      return [];
-    }
+    const pendingSet = new Set(pendingInviteUids);
+    const acceptedSet = new Set((item.acceptedBy ?? []).map((uid) => String(uid)));
+    const leftSet = new Set((item.leftBy ?? []).map((uid) => String(uid)));
+    const memberSet = new Set(item.memberUids.map((uid) => String(uid)));
+    const occupiedUids = new Set([...item.memberUids, ...pendingInviteUids].map((uid) => String(uid)));
 
     return friendEdges.filter((edge) => {
       const uid = String(edge.otherUid);
-      return edge.status === "accepted" && uid && !excluded.has(uid);
+      const alreadyAccepted = acceptedSet.has(uid) && !leftSet.has(uid);
+      const wouldIncreaseMemberCount = !memberSet.has(uid) && !pendingSet.has(uid);
+
+      return (
+        edge.status === "accepted" &&
+        uid &&
+        uid !== me &&
+        !pendingSet.has(uid) &&
+        !alreadyAccepted &&
+        (!wouldIncreaseMemberCount || occupiedUids.size < MAX_SHARED_MEMBERS)
+      );
     });
   }
 
@@ -2337,8 +2342,76 @@ const sidePadding = 18;
     return TXT.sharedInviteGeneric;
   }
 
+  function getSharedInviteClientBlockReason(item: SharedChallenge | null, friendUid: string): string | null {
+    const challengeId = String(item?.id ?? "").trim();
+    const safeFriendUid = String(friendUid ?? "").trim();
+
+    if (!challengeId) return "missing challengeId";
+    if (!safeFriendUid) return "missing friendUid";
+
+    const me = auth.currentUser?.uid ?? "";
+    const pendingSet = new Set(getPendingSharedInviteUids(item as SharedChallenge));
+    const acceptedSet = new Set((item?.acceptedBy ?? []).map((uid) => String(uid)));
+    const leftSet = new Set((item?.leftBy ?? []).map((uid) => String(uid)));
+    const memberSet = new Set((item?.memberUids ?? []).map((uid) => String(uid)));
+    const occupiedUids = new Set([...(item?.memberUids ?? []), ...Array.from(pendingSet)].map((uid) => String(uid)));
+    const friendEdge = friendEdges.find((edge) => String(edge.otherUid) === safeFriendUid);
+
+    if (!canInviteToSharedChallenge(item as SharedChallenge)) return "permission denied";
+    if (!friendEdge || friendEdge.status !== "accepted") return "not friends";
+    if (pendingSet.has(safeFriendUid)) return "friend already pending";
+    if (acceptedSet.has(safeFriendUid) && !leftSet.has(safeFriendUid)) return "friend already accepted";
+    if (safeFriendUid === me) return "permission denied";
+    if (!memberSet.has(safeFriendUid) && occupiedUids.size >= MAX_SHARED_MEMBERS) {
+      return "max members reached";
+    }
+
+    return null;
+  }
+
+  function getSharedInviteCallableFailureReason(e: any): string {
+    const code = String(e?.code ?? "").trim();
+    const message = String(e?.message ?? "").trim();
+    const lower = `${code} ${message}`.toLowerCase();
+
+    if (lower.includes("challengeid")) return "missing challengeId";
+    if (lower.includes("frienduid")) return "missing friendUid";
+    if (lower.includes("pozvanku") || lower.includes("ma pozv") || lower.includes("pending")) {
+      return "friend already pending";
+    }
+    if (lower.includes("ucastnik") || lower.includes("already")) return "friend already accepted";
+    if (lower.includes("maximalni") || lower.includes("maximum") || lower.includes("max")) {
+      return "max members reached";
+    }
+    if (lower.includes("pritele") || lower.includes("friend")) return "not friends";
+    if (lower.includes("permission-denied") || lower.includes("permission")) return "permission denied";
+
+    return `callable error code/message: ${[code, message].filter(Boolean).join(" / ") || "unknown"}`;
+  }
+
+  function showSharedInviteFailure(message: string, reason: string, details?: any) {
+    if (__DEV__) {
+      console.log("[shared-invite/member] failed", { reason, details });
+      Alert.alert(TXT.sharedChallenge, `${message}\n\n${reason}`);
+      return;
+    }
+
+    Alert.alert(TXT.sharedChallenge, message);
+  }
+
   async function sendSharedMemberInvite(friendUid: string) {
-    if (!selectedSharedInvite || sharedInviteSendingUid) return;
+    if (sharedInviteSendingUid) return;
+
+    const clientBlockReason = getSharedInviteClientBlockReason(selectedSharedInvite, friendUid);
+    if (clientBlockReason) {
+      showSharedInviteFailure(TXT.sharedInviteGeneric, clientBlockReason, {
+        challengeId: selectedSharedInvite?.id,
+        friendUid,
+      });
+      return;
+    }
+
+    if (!selectedSharedInvite) return;
 
     try {
       setSharedInviteSendingUid(friendUid);
@@ -2352,7 +2425,7 @@ const sidePadding = 18;
       });
       setSharedInviteStatus(TXT.invitationSent);
     } catch (e: any) {
-      Alert.alert(TXT.sharedChallenge, getSharedInviteErrorMessage(e));
+      showSharedInviteFailure(getSharedInviteErrorMessage(e), getSharedInviteCallableFailureReason(e), e);
     } finally {
       setSharedInviteSendingUid(null);
     }
@@ -4105,7 +4178,6 @@ try {
                       const iAccepted = item.acceptedBy.includes(me);
                       const pending = item.status === "pending";
                       const canShowSharedInviteButton =
-                        !lockedByFree &&
                         canInviteToSharedChallenge(item) &&
                         getEligibleSharedInviteFriends(item).length > 0;
 

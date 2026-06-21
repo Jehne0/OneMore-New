@@ -447,6 +447,7 @@ exports.inviteSharedChallengeMember = (0, https_1.onCall)({ region: "europe-west
         const memberUids = uniqueUids(arr(data?.memberUids));
         const acceptedBy = uniqueUids(arr(data?.acceptedBy));
         const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
+        const leftBy = uniqueUids(arr(data?.leftBy));
         if (!memberUids.includes(uid) || !acceptedBy.includes(uid)) {
             throw new https_1.HttpsError("permission-denied", "Pozvat muze jen prijaty ucastnik vyzvy.");
         }
@@ -456,18 +457,25 @@ exports.inviteSharedChallengeMember = (0, https_1.onCall)({ region: "europe-west
         if (friendStatus(mineFriendSnap) !== "accepted" || friendStatus(theirFriendSnap) !== "accepted") {
             throw new https_1.HttpsError("failed-precondition", "Pozvat lze jen prijateho pritele.");
         }
-        if (memberUids.includes(friendUid)) {
-            throw new https_1.HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
-        }
         if (pendingInviteUids.includes(friendUid)) {
             throw new https_1.HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
         }
-        if (uniqueUids([...memberUids, ...pendingInviteUids]).length >= MAX_SHARED_MEMBERS) {
+        const friendAlreadyAccepted = acceptedBy.includes(friendUid) && !leftBy.includes(friendUid);
+        if (friendAlreadyAccepted) {
+            throw new https_1.HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
+        }
+        const nextMemberUids = uniqueUids([...memberUids, friendUid]);
+        if (nextMemberUids.length > MAX_SHARED_MEMBERS) {
+            throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
+        }
+        if (uniqueUids([...nextMemberUids, ...pendingInviteUids]).length > MAX_SHARED_MEMBERS) {
             throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
         }
         challengeTitle = safeStr(data?.title, 120) || challengeTitle;
         tx.set(challengeRef, {
-            pendingInviteUids: [...pendingInviteUids, friendUid],
+            memberUids: nextMemberUids,
+            acceptedBy: acceptedBy.filter((memberUid) => memberUid !== friendUid),
+            pendingInviteUids: uniqueUids([...pendingInviteUids, friendUid]),
             updatedAt: firestore_2.FieldValue.serverTimestamp(),
         }, { merge: true });
     });

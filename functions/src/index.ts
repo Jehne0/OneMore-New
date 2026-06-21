@@ -565,6 +565,7 @@ export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, as
     const memberUids = uniqueUids(arr(data?.memberUids));
     const acceptedBy = uniqueUids(arr(data?.acceptedBy));
     const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
+    const leftBy = uniqueUids(arr(data?.leftBy));
 
     if (!memberUids.includes(uid) || !acceptedBy.includes(uid)) {
       throw new HttpsError("permission-denied", "Pozvat muze jen prijaty ucastnik vyzvy.");
@@ -578,15 +579,21 @@ export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, as
       throw new HttpsError("failed-precondition", "Pozvat lze jen prijateho pritele.");
     }
 
-    if (memberUids.includes(friendUid)) {
-      throw new HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
-    }
-
     if (pendingInviteUids.includes(friendUid)) {
       throw new HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
     }
 
-    if (uniqueUids([...memberUids, ...pendingInviteUids]).length >= MAX_SHARED_MEMBERS) {
+    const friendAlreadyAccepted = acceptedBy.includes(friendUid) && !leftBy.includes(friendUid);
+    if (friendAlreadyAccepted) {
+      throw new HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
+    }
+
+    const nextMemberUids = uniqueUids([...memberUids, friendUid]);
+    if (nextMemberUids.length > MAX_SHARED_MEMBERS) {
+      throw new HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
+    }
+
+    if (uniqueUids([...nextMemberUids, ...pendingInviteUids]).length > MAX_SHARED_MEMBERS) {
       throw new HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
     }
 
@@ -595,7 +602,9 @@ export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, as
     tx.set(
       challengeRef,
       {
-        pendingInviteUids: [...pendingInviteUids, friendUid],
+        memberUids: nextMemberUids,
+        acceptedBy: acceptedBy.filter((memberUid) => memberUid !== friendUid),
+        pendingInviteUids: uniqueUids([...pendingInviteUids, friendUid]),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
