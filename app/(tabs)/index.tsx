@@ -8,6 +8,7 @@ import {
   completeSharedChallengeToday,
   getTodayISO as getSharedTodayISO,
   inviteSharedChallengeMember,
+  isAcceptedSharedChallengeForUid,
   isSharedChallengeActiveOnDate,
   leaveSharedChallenge,
   MAX_SHARED_MEMBERS,
@@ -2118,7 +2119,7 @@ const visibleChallenges = useMemo(() => {
 const visibleSharedChallenges = useMemo(() => {
   const me = auth.currentUser?.uid ?? "";
   return sharedChallenges.filter(
-    (x) => x.enabled !== false && x.status === "active" && x.memberUids.includes(me)
+    (x) => x.status === "active" && isAcceptedSharedChallengeForUid(x, me)
   );
   
 }, [sharedChallenges]);

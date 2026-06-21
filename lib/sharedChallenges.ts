@@ -48,6 +48,24 @@ export function isIncomingSharedChallengeInviteForUid(
   );
 }
 
+export function isAcceptedSharedChallengeForUid(
+  challenge: Pick<
+    SharedChallenge,
+    "memberUids" | "acceptedBy" | "pendingInviteUids" | "leftBy" | "enabled" | "status" | "createdBy"
+  >,
+  uid: string
+) {
+  if (!uid) return false;
+  if (!Array.isArray(challenge.memberUids) || !challenge.memberUids.includes(uid)) return false;
+  if (!Array.isArray(challenge.acceptedBy) || !challenge.acceptedBy.includes(uid)) return false;
+  if (Array.isArray(challenge.pendingInviteUids) && challenge.pendingInviteUids.includes(uid)) return false;
+  if (Array.isArray(challenge.leftBy) && challenge.leftBy.includes(uid)) return false;
+  if (challenge.enabled === false) return false;
+  if (challenge.status === "declined") return false;
+  if (challenge.status === "pending" && String(challenge.createdBy) === String(uid)) return false;
+  return true;
+}
+
 export type SharedChallengeCreateInput = {
   title: string;
   friendUids: string[];

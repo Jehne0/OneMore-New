@@ -23,6 +23,7 @@ import {
   createSharedChallenge,
   declineSharedChallenge,
   dowMon0,
+  isAcceptedSharedChallengeForUid,
   isIncomingSharedChallengeInviteForUid,
   MAX_SHARED_MEMBERS,
   subscribeSharedChallenges,
@@ -1391,16 +1392,45 @@ const noNewSharedInvitationsText =
 
 const myUid = auth.currentUser?.uid ?? "";
 
-const sharedChallengeLimitCount = sharedChallenges.filter((item) => {
-  const isMine = item.memberUids.includes(myUid);
-  const notLeft = !(item.leftBy ?? []).includes(myUid);
-  const enabled = item.enabled !== false;
+const acceptedSharedChallengesForLimit = sharedChallenges.filter((item) =>
+  isAcceptedSharedChallengeForUid(item, myUid)
+);
+const sharedChallengeLimitCount = acceptedSharedChallengesForLimit.length;
 
-  const blocksFreeLimit =
-    item.status === "active" || item.status === "pending";
+if (__DEV__) {
+  const countedIds = acceptedSharedChallengesForLimit.map((item) => String(item.id));
+  const excluded = sharedChallenges
+    .filter((item) => !countedIds.includes(String(item.id)))
+    .map((item) => {
+      const pendingInviteUids = Array.isArray(item.pendingInviteUids) ? item.pendingInviteUids : [];
+      const memberUids = Array.isArray(item.memberUids) ? item.memberUids : [];
+      const acceptedBy = Array.isArray(item.acceptedBy) ? item.acceptedBy : [];
+      const leftBy = Array.isArray(item.leftBy) ? item.leftBy : [];
+      let reason = "not-current-user-member";
 
-  return isMine && notLeft && enabled && blocksFreeLimit;
-}).length;
+      if (!myUid) reason = "missing-current-user-uid";
+      else if (!memberUids.includes(myUid)) reason = "current-user-not-in-memberUids";
+      else if (!acceptedBy.includes(myUid)) reason = "current-user-not-in-acceptedBy";
+      else if (pendingInviteUids.includes(myUid)) reason = "current-user-still-pending-invite";
+      else if (leftBy.includes(myUid)) reason = "current-user-left";
+      else if (item.enabled === false) reason = "disabled";
+      else if (item.status === "declined") reason = "declined";
+      else if (item.status === "pending" && String(item.createdBy) === String(myUid)) {
+        reason = "outgoing-pending-invite";
+      }
+
+      return { id: item.id, reason };
+    });
+
+  console.log("[DEV][profile/shared-limit]", {
+    currentUid: myUid,
+    totalLoadedSharedChallenges: sharedChallenges.length,
+    acceptedSharedChallengeCount: sharedChallengeLimitCount,
+    pendingIncomingInviteCount: incomingSharedChallengeInvites.length,
+    countedIds,
+    excluded,
+  });
+}
 
 const freeSharedLimitReached =
   !premium && sharedChallengeLimitCount >= 1;
@@ -1534,13 +1564,7 @@ const getInviteCreatorName = (challenge: SharedChallenge) => {
 async function acceptSharedInviteFromFriends(challengeId: string) {
   const blockingCountExceptThis = sharedChallenges.filter((item) => {
     const isSameChallenge = String(item.id) === String(challengeId);
-    const isMine = item.memberUids.includes(myUid);
-    const notLeft = !(item.leftBy ?? []).includes(myUid);
-    const enabled = item.enabled !== false;
-    const blocksFreeLimit =
-      item.status === "active" || item.status === "pending";
-
-    return !isSameChallenge && isMine && notLeft && enabled && blocksFreeLimit;
+    return !isSameChallenge && isAcceptedSharedChallengeForUid(item, myUid);
   }).length;
 
   if (!premium && blockingCountExceptThis >= 1) {
