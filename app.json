@@ -26,14 +26,15 @@
     "scheme": "onemore",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "eu.desigame.onemore",
-      "buildNumber": "1",
-      "config": {
-        "usesNonExemptEncryption": false
-      }
-    },
+ "ios": {
+  "supportsTablet": false,
+  "bundleIdentifier": "eu.desigame.onemore",
+  "buildNumber": "1",
+  "googleServicesFile": "./GoogleService-Info.plist",
+  "config": {
+    "usesNonExemptEncryption": false
+  }
+},
     "android": {
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

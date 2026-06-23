@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>1082535851082-e2a8invriqefboenefhi7pksqncqha2p.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.1082535851082-e2a8invriqefboenefhi7pksqncqha2p</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDFRAw_hVv5AEbPg6cmAOGOo-c-2z3a7yE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1082535851082</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>eu.desigame.onemore</string>
+	<key>PROJECT_ID</key>
+	<string>onemore-ca918</string>
+	<key>STORAGE_BUCKET</key>
+	<string>onemore-ca918.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1082535851082:ios:aa2cdd12c888437ecb22b3</string>
+	<key>DATABASE_URL</key>
+	<string>https://onemore-ca918-default-rtdb.europe-west1.firebasedatabase.app</string>
+</dict>
+</plist>
