@@ -23,6 +23,7 @@ import { getProfile } from "../../lib/usernames";
 import { doc, updateDoc } from "firebase/firestore";
 import {
   Animated,
+  Alert as NativeAlert,
   FlatList,
   Image,
   Keyboard,
@@ -1847,7 +1848,8 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   const confirmEnableEasyMode = useCallback(() => {
     if (manageEasyMode) return;
 
-    Alert.alert(TXT.easyModeConfirmTitle, TXT.easyModeConfirmMessage, [
+    const easyModeAlert = Platform.OS === "ios" ? NativeAlert : Alert;
+    easyModeAlert.alert(TXT.easyModeConfirmTitle, TXT.easyModeConfirmMessage, [
       { text: TXT.easyModeCancel, style: "cancel" },
       {
         text: TXT.easyModeConfirm,

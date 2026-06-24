@@ -5,9 +5,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert as NativeAlert,
   Image,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -4220,10 +4222,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
 </Text>
 
  <Pressable
-  onPress={() => {
-    setFriendsOpen(false);
-    setTimeout(() => setAddFriendOpen(true), 300);
-  }}
+  onPress={() => setAddFriendOpen(true)}
   style={({ pressed }) => [
     styles.smallBtn,
     pressed && { opacity: 0.9 },
@@ -4232,6 +4231,147 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
     <Text style={styles.smallBtnText}>{p.addShort}</Text>
   </Pressable>
 </View>
+
+{addFriendOpen && (
+  <View
+    style={[
+      styles.infoCard,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+    ]}
+  >
+    <View style={styles.sheetHeader}>
+      <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 0 }]}>
+        Přidat přítele
+      </Text>
+      <Pressable
+        onPress={() => setAddFriendOpen(false)}
+        style={({ pressed }) => [
+          styles.closeBtn,
+          { borderColor: UI.stroke, backgroundColor: UI.card2 },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
+      </Pressable>
+    </View>
+
+    <Text style={[styles.infoTitle, { color: UI.text, marginTop: 12 }]}>
+      Přidat podle username
+    </Text>
+    <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
+      Zadej uživatelské jméno člověka, kterého chceš přidat.
+    </Text>
+
+    <View
+      style={{
+        flexDirection: "row",
+        gap: 10,
+        alignItems: "center",
+        marginTop: 12,
+      }}
+    >
+      <TextInput
+        value={addUsername}
+        onChangeText={setAddUsername}
+        placeholder={p.usernamePlaceholder}
+        placeholderTextColor={UI.sub}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={[
+          styles.input,
+          {
+            flex: 1,
+            color: UI.text,
+            borderColor: UI.stroke,
+            backgroundColor: UI.card2,
+          },
+        ]}
+      />
+      <Pressable
+        disabled={friendsBusy}
+        onPress={async () => {
+          const friendAlert = Platform.OS === "ios" ? NativeAlert : Alert;
+
+          try {
+            if (!auth.currentUser?.uid) return;
+            const me = auth.currentUser.uid;
+            const username = addUsername.trim();
+            if (!username) {
+              friendAlert.alert(
+                p.friends,
+                lang === "cs" ? "Zadej uživatelské jméno." : "Enter a username."
+              );
+              return;
+            }
+
+            const acceptedCount = friendEdges.filter(
+              (e) => e.status === "accepted"
+            ).length;
+            if (!premium && acceptedCount >= 1) {
+              friendAlert.alert(
+                p.friends,
+                lang === "cs"
+                  ? "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium."
+                  : "In the Free version you can have only 1 friend. Premium is required for more."
+              );
+              return;
+            }
+
+            setFriendsBusy(true);
+            const otherUid = await resolveUidByUsername(username);
+            if (!otherUid) {
+              friendAlert.alert(
+                p.friends,
+                lang === "cs"
+                  ? "Uživatel s tímto username nebyl nalezen."
+                  : "No user with this username was found."
+              );
+              return;
+            }
+            if (otherUid === me) {
+              friendAlert.alert(
+                p.friends,
+                lang === "cs"
+                  ? "Nemůžeš přidat sám sebe 🙂"
+                  : "You can’t add yourself 🙂"
+              );
+              return;
+            }
+
+            await sendFriendRequest(otherUid);
+            setAddUsername("");
+            setAddFriendOpen(false);
+            setFriendsOpen(false);
+            setTimeout(() => {
+              showPwdPopup(
+                "success",
+                p.friends,
+                lang === "cs" ? "Žádost odeslána." : "Request sent."
+              );
+            }, 300);
+          } catch (e: any) {
+            friendAlert.alert(
+              p.friends,
+              e?.message ??
+                (lang === "cs"
+                  ? "Nepodařilo se odeslat žádost."
+                  : "Could not send the request.")
+            );
+          } finally {
+            setFriendsBusy(false);
+          }
+        }}
+        style={({ pressed }) => [
+          styles.smallBtn,
+          pressed && { opacity: 0.9 },
+          friendsBusy && { opacity: 0.6 },
+        ]}
+      >
+        <Text style={styles.smallBtnText}>{p.add}</Text>
+      </Pressable>
+    </View>
+  </View>
+)}
 
 {!accepted.length ? (
   <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
@@ -4627,145 +4767,6 @@ const incomingCount = incoming.length;
               </View>
             </ScrollView>
           )}
-        </View>
-      </Modal>
-
-      {/* ✅ MODAL – Přidat přítele */}
-      <Modal
-        visible={addFriendOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAddFriendOpen(false)}
-      >
-        <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
-          onPress={() => setAddFriendOpen(false)}
-        />
-        <View
-          style={[
-            styles.sheet,
-            {
-              height: "68%",
-              backgroundColor: isDark ? UI.sheetBg : "#FFE0C2",
-              borderColor: isDark ? UI.sheetStroke : "#FF8A1F",
-            },
-          ]}
-        >
-          <View style={styles.sheetHeader}>
-            <Text style={[styles.sheetTitle, { color: UI.text }]}>
-              Přidat přítele
-            </Text>
-            <Pressable
-              onPress={() => setAddFriendOpen(false)}
-              style={({ pressed }) => [
-                styles.closeBtn,
-                { borderColor: UI.stroke, backgroundColor: UI.card2 },
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <Text style={[styles.closeText, { color: UI.text }]}>{p.close}</Text>
-            </Pressable>
-          </View>
-
-          <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
-            <View
-              style={[
-                styles.infoCard,
-                { borderColor: UI.stroke, backgroundColor: UI.card },
-              ]}
-            >
-              <Text style={[styles.infoTitle, { color: UI.text }]}>
-                Přidat podle username
-              </Text>
-              <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
-                Zadej uživatelské jméno člověka, kterého chceš přidat.
-              </Text>
-
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 10,
-                  alignItems: "center",
-                  marginTop: 12,
-                }}
-              >
-                <TextInput
-                  value={addUsername}
-                  onChangeText={setAddUsername}
-                  placeholder={p.usernamePlaceholder}
-                  placeholderTextColor={UI.sub}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={[
-                    styles.input,
-                    {
-                      flex: 1,
-                      color: UI.text,
-                      borderColor: UI.stroke,
-                      backgroundColor: UI.card2,
-                    },
-                  ]}
-                />
-                <Pressable
-                  disabled={friendsBusy}
-                  onPress={async () => {
-                    try {
-                      if (!auth.currentUser?.uid) return;
-                      const me = auth.currentUser.uid;
-                      const username = addUsername.trim();
-                      if (!username) {
-                        Alert.alert(p.friends, lang === "cs" ? "Zadej uživatelské jméno." : "Enter a username.");
-                        return;
-                      }
-
-                      const acceptedCount = friendEdges.filter(
-                        (e) => e.status === "accepted"
-                      ).length;
-                      if (!premium && acceptedCount >= 1) {
-                        Alert.alert(
-                          p.friends,
-                          lang === "cs" ? "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium." : "In the Free version you can have only 1 friend. Premium is required for more."
-                        );
-                        return;
-                      }
-
-                      setFriendsBusy(true);
-                      const otherUid = await resolveUidByUsername(username);
-                      if (!otherUid) {
-                        Alert.alert(
-                          p.friends,
-                          lang === "cs" ? "Uživatel s tímto username nebyl nalezen." : "No user with this username was found."
-                        );
-                        return;
-                      }
-                      if (otherUid === me) {
-                        Alert.alert(p.friends, lang === "cs" ? "Nemůžeš přidat sám sebe 🙂" : "You can’t add yourself 🙂");
-                        return;
-                      }
-                      await sendFriendRequest(otherUid);
-                  setAddUsername("");
-setAddFriendOpen(false);
-showPwdPopup("success", p.friends, lang === "cs" ? "Žádost odeslána." : "Request sent.");
-                    } catch (e: any) {
-                      Alert.alert(
-                        p.friends,
-                        e?.message ?? (lang === "cs" ? "Nepodařilo se odeslat žádost." : "Could not send the request.")
-                      );
-                    } finally {
-                      setFriendsBusy(false);
-                    }
-                  }}
-                  style={({ pressed }) => [
-                    styles.smallBtn,
-                    pressed && { opacity: 0.9 },
-                    friendsBusy && { opacity: 0.6 },
-                  ]}
-                >
-                  <Text style={styles.smallBtnText}>{p.add}</Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScrollView>
         </View>
       </Modal>
 
