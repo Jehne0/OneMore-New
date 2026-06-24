@@ -32,9 +32,39 @@ export function tierForBestStreak(bestStreak: number): MedalTier {
 }
 
 export type MedalCounts = Record<Exclude<MedalTier, "none">, number>;
+export type EarnedMedalTier = Exclude<MedalTier, "none">;
+
+export type MedalChallengeEntry = {
+  challengeId: string;
+  tier: EarnedMedalTier;
+  bestStreak: number;
+};
 
 export function emptyMedalCounts(): MedalCounts {
   return { brambora: 0, steel: 0, bronze: 0, silver: 0, gold: 0, diamond: 0 };
+}
+
+export function medalChallengesFromStats(
+  stats?: Record<string, ChallengeStats>,
+  challengeIds?: Iterable<string>
+): MedalChallengeEntry[] {
+  const entries: MedalChallengeEntry[] = [];
+  const map = stats ?? {};
+  const allowedIds = challengeIds
+    ? new Set(Array.from(challengeIds).map(String))
+    : null;
+
+  for (const id of Object.keys(map)) {
+    if (allowedIds && !allowedIds.has(String(id))) continue;
+
+    const bestStreak = safeStreak(Number(map[id]?.bestStreak ?? 0));
+    const tier = tierForBestStreak(bestStreak);
+    if (tier === "none") continue;
+
+    entries.push({ challengeId: String(id), tier, bestStreak });
+  }
+
+  return entries;
 }
 
 /**
@@ -46,17 +76,8 @@ export function medalCountsFromChallengeStats(
   activeChallengeIds?: Iterable<string>
 ): MedalCounts {
   const counts = emptyMedalCounts();
-  const map = stats ?? {};
-  const activeIds = activeChallengeIds ? new Set(Array.from(activeChallengeIds).map(String)) : null;
-
-  for (const id of Object.keys(map)) {
-    if (activeIds && !activeIds.has(String(id))) continue;
-    const s = map[id];
-    const bestStreak = safeStreak(Number(s?.bestStreak ?? 0));
-    if (bestStreak <= 0) continue;
-
-    const tier = tierForBestStreak(bestStreak);
-    if (tier !== "none") counts[tier] += 1;
+  for (const entry of medalChallengesFromStats(stats, activeChallengeIds)) {
+    counts[entry.tier] += 1;
   }
 
   return counts;

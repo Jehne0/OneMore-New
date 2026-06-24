@@ -79,8 +79,10 @@ import {
 } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 import {
+  medalChallengesFromStats,
   medalCountsFromChallengeStats,
   tierForBestStreak,
+  type EarnedMedalTier,
   type MedalTier,
 } from "../../lib/medals";
 import * as Haptics from "expo-haptics";
@@ -95,6 +97,19 @@ const MEDAL_BRONZE = require("../../assets/medals/bronze_medal.png");
 const MEDAL_SILVER = require("../../assets/medals/silver_medal.png");
 const MEDAL_GOLD = require("../../assets/medals/gold_medal.png");
 const MEDAL_DIAMOND = require("../../assets/medals/diamond_medal.png");
+
+const MEDAL_OVERVIEW_TIERS: {
+  tier: EarnedMedalTier;
+  days: number;
+  image: any;
+}[] = [
+  { tier: "brambora", days: 5, image: MEDAL_BRAMBORA },
+  { tier: "steel", days: 10, image: MEDAL_STEEL },
+  { tier: "bronze", days: 20, image: MEDAL_BRONZE },
+  { tier: "silver", days: 30, image: MEDAL_SILVER },
+  { tier: "gold", days: 90, image: MEDAL_GOLD },
+  { tier: "diamond", days: 180, image: MEDAL_DIAMOND },
+];
 
 const FREE_MAX = FREE_MAX_CHALLENGES;
 const FREE_SHARED_MAX = 1;
@@ -399,6 +414,47 @@ function makeStyles(UI: any) {
     },
     medalCountDim: {
       opacity: 0.22,
+    },
+    medalOverviewTier: {
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: UI.card,
+      borderWidth: 1,
+      borderColor: UI.stroke,
+      marginBottom: 10,
+    },
+    medalOverviewHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    medalOverviewIcon: {
+      width: 38,
+      height: 38,
+      resizeMode: "contain",
+    },
+    medalOverviewTitle: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "900",
+      color: UI.text,
+    },
+    medalOverviewChallenge: {
+      marginTop: 8,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: UI.stroke,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 19,
+      color: UI.sub,
+    },
+    medalOverviewEmpty: {
+      marginTop: 8,
+      fontSize: 13,
+      fontWeight: "700",
+      color: UI.sub,
+      opacity: 0.65,
     },
 
     heroCard: {
@@ -987,6 +1043,11 @@ notificationCount: "Number of notifications",
       historyOfChallenge: "Challenge history",
       currentMedal: "Current medal",
       bestStreakOfChallenge: "Best streak of this challenge",
+      medalOverviewTitle: "Medal overview",
+      medalBestStreak: "best streak",
+      medalNoChallenges: "No challenge yet",
+      medalChallengeFallback: "Challenge",
+      medalDays: "days",
       completed: "Completed",
       skipped: "Skipped",
       freeDay: "Free day",
@@ -1083,6 +1144,11 @@ notificationCount: "Liczba powiadomień",
       historyOfChallenge: "Historia wyzwania",
       currentMedal: "Aktualny medal",
       bestStreakOfChallenge: "Najlepsza seria tego wyzwania",
+      medalOverviewTitle: "Przegląd medali",
+      medalBestStreak: "najlepsza seria",
+      medalNoChallenges: "Na razie brak wyzwań",
+      medalChallengeFallback: "Wyzwanie",
+      medalDays: "dni",
       completed: "Ukończono",
       skipped: "Pominięto",
       freeDay: "Dzień wolny",
@@ -1180,6 +1246,11 @@ notificationCount: "Anzahl der Benachrichtigungen",
       historyOfChallenge: "Challenge-Verlauf",
       currentMedal: "Aktuelle Medaille",
       bestStreakOfChallenge: "Beste Serie dieser Challenge",
+      medalOverviewTitle: "Medaillenübersicht",
+      medalBestStreak: "beste Serie",
+      medalNoChallenges: "Noch keine Challenge",
+      medalChallengeFallback: "Challenge",
+      medalDays: "Tage",
       completed: "Erledigt",
       skipped: "Übersprungen",
       freeDay: "Freier Tag",
@@ -1275,6 +1346,11 @@ notificationCount: "Počet notifikací",
     historyOfChallenge: "Historie výzvy",
     currentMedal: "Aktuální medaile",
     bestStreakOfChallenge: "Nejlepší streak této výzvy",
+    medalOverviewTitle: "Přehled medailí",
+    medalBestStreak: "nejlepší série",
+    medalNoChallenges: "Zatím žádná výzva",
+    medalChallengeFallback: "Výzva",
+    medalDays: "dní",
     completed: "Splněno",
     skipped: "Přeskočeno",
     freeDay: "Volný den",
@@ -1623,6 +1699,7 @@ notificationCount: "Počet notifikací",
 
   const [manageOpen, setManageOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [medalsOverviewOpen, setMedalsOverviewOpen] = useState(false);
   const [addModalText, setAddModalText] = useState("");
   const [manageId, setManageId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -2696,6 +2773,53 @@ const bestStreak = useMemo(() => {
     [appState?.challengeStats]
   );
 
+  const medalOverview = useMemo(() => {
+    const names = new Map<string, string>();
+
+    for (const challenge of appState?.challenges ?? []) {
+      names.set(String(challenge.id), String(challenge.text ?? "").trim());
+    }
+    for (const challenge of appState?.archivedChallenges ?? []) {
+      if (!names.get(String(challenge.id))) {
+        names.set(String(challenge.id), String(challenge.text ?? "").trim());
+      }
+    }
+    for (const entry of appState?.history ?? []) {
+      const id = String(entry.challengeId ?? "");
+      if (id && !names.get(id)) {
+        names.set(id, String(entry.challengeText ?? "").trim());
+      }
+    }
+
+    const grouped = new Map<EarnedMedalTier, {
+      challengeId: string;
+      name: string;
+      bestStreak: number;
+    }[]>();
+
+    for (const entry of medalChallengesFromStats(appState?.challengeStats)) {
+      const list = grouped.get(entry.tier) ?? [];
+      list.push({
+        challengeId: entry.challengeId,
+        name: names.get(entry.challengeId) || TXT.medalChallengeFallback,
+        bestStreak: entry.bestStreak,
+      });
+      grouped.set(entry.tier, list);
+    }
+
+    for (const list of grouped.values()) {
+      list.sort((a, b) => b.bestStreak - a.bestStreak || a.name.localeCompare(b.name));
+    }
+
+    return grouped;
+  }, [
+    appState?.archivedChallenges,
+    appState?.challengeStats,
+    appState?.challenges,
+    appState?.history,
+    TXT.medalChallengeFallback,
+  ]);
+
 const highestMedalForFriends = useMemo(() => {
   if (medalState.counts.diamond > 0) return "diamond";
   if (medalState.counts.gold > 0) return "gold";
@@ -3065,7 +3189,12 @@ useEffect(() => {
             </View>
           )}
 
-          <View style={styles.medalsRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={TXT.medalOverviewTitle}
+            onPress={() => setMedalsOverviewOpen(true)}
+            style={({ pressed }) => [styles.medalsRow, pressed && { opacity: 0.78 }]}
+          >
             <View style={styles.medalItem}>
               <View style={styles.medalIconBox}>
                 <Image
@@ -3167,7 +3296,7 @@ useEffect(() => {
                 {medalState.counts.diamond}
               </Text>
             </View>
-          </View>
+          </Pressable>
         </View>
 
         <Animated.View style={[styles.heroCard, { transform: [{ scale: heroScale }] }]}>
@@ -3206,6 +3335,64 @@ useEffect(() => {
           </View>
         )}
       </View>
+
+      <Modal
+        visible={medalsOverviewOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMedalsOverviewOpen(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setMedalsOverviewOpen(false)}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: UI.accent }]}>
+                {TXT.medalOverviewTitle}
+              </Text>
+              <Pressable
+                onPress={() => setMedalsOverviewOpen(false)}
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}
+              >
+                <Text style={styles.closeText}>{TXT.close}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: Math.max(8, insets.bottom) }}
+            >
+              {MEDAL_OVERVIEW_TIERS.map((medal) => {
+                const challenges = medalOverview.get(medal.tier) ?? [];
+
+                return (
+                  <View key={medal.tier} style={styles.medalOverviewTier}>
+                    <View style={styles.medalOverviewHeader}>
+                      <Image source={medal.image} style={styles.medalOverviewIcon} />
+                      <Text style={styles.medalOverviewTitle}>
+                        {`${medal.days} ${TXT.medalDays} — ${medalLabel(medal.tier)}`}
+                      </Text>
+                    </View>
+
+                    {challenges.length ? (
+                      challenges.map((challenge) => (
+                        <Text
+                          key={challenge.challengeId}
+                          style={styles.medalOverviewChallenge}
+                        >
+                          {`${challenge.name} — ${TXT.medalBestStreak} ${challenge.bestStreak} ${TXT.medalDays}`}
+                        </Text>
+                      ))
+                    ) : (
+                      <Text style={styles.medalOverviewEmpty}>
+                        {TXT.medalNoChallenges}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
    <Modal
   visible={addModalOpen}
