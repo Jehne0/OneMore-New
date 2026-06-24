@@ -4219,13 +4219,16 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
   {p.myFriends}
 </Text>
 
-  <Pressable
-    onPress={() => setAddFriendOpen(true)}
-    style={({ pressed }) => [
-      styles.smallBtn,
-      pressed && { opacity: 0.9 },
-    ]}
-  >
+ <Pressable
+  onPress={() => {
+    setFriendsOpen(false);
+    setTimeout(() => setAddFriendOpen(true), 300);
+  }}
+  style={({ pressed }) => [
+    styles.smallBtn,
+    pressed && { opacity: 0.9 },
+  ]}
+>
     <Text style={styles.smallBtnText}>{p.addShort}</Text>
   </Pressable>
 </View>
