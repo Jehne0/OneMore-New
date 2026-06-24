@@ -34,12 +34,12 @@ import {
 import { getCurrentVersionCode } from "../../lib/versionCheck";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  configureRevenueCat,
   getOfferingPackages,
   openCancelSubscription,
   purchasePackage,
   restorePurchases,
   revenueCatLogout,
+  syncPremiumFromRevenueCat,
 } from "../../lib/revenuecat";
 
 import { useTheme } from "../../lib/theme";
@@ -1087,10 +1087,10 @@ useEffect(() => {
 
   (async () => {
     try {
-      await configureRevenueCat();
+      await syncPremiumFromRevenueCat();
     } catch (e: any) {
       if (__DEV__) {
-        console.log("[RevenueCat] configure error from profile screen", String(e?.code ?? ""));
+        console.log("[RevenueCat] sync error from profile screen", String(e?.code ?? ""));
       }
     }
   })();

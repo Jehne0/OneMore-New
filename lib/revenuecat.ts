@@ -1,40 +1,65 @@
-import Purchases from "react-native-purchases";
+import Purchases, { type CustomerInfo } from "react-native-purchases";
 import { Linking, Platform } from "react-native";
-import { activatePremium, cancelPremium } from "./premium";
+import { applyPremiumEntitlement, clearPremiumState } from "./premium";
 import { auth } from "./firebase";
 
 const ENTITLEMENT_ID = "premium";
 
-// 🔴 DEV key (Test Store – používá se jen při vývoji)
+// RevenueCat Test Store key (development only).
 const TEST_API_KEY = "test_xYHcUmOjDUuuTuZcuFxAMynxvKe";
 
-// 🟢 Produkční klíče z RevenueCat dashboardu
+// Production RevenueCat public SDK keys.
 const ANDROID_API_KEY = "goog_qBDfAHXdhHnQlqwvyXKYRHVTGtq";
 const IOS_API_KEY = "appl_iqHdLUlZeNUdRvTWTDVLDpoKpdX";
 
-// ✅ RevenueCat je zapnutý
 const REVENUECAT_ENABLED = true;
-
-// ✅ false = Google Play / App Store
-// ✅ true = RevenueCat Test Store
 const USE_REVENUECAT_TEST_STORE = false;
 
 let configured = false;
 let listenerAdded = false;
 let configuringPromise: Promise<void> | null = null;
 
-async function applyCustomerInfo(info: any) {
-  const active = !!info.entitlements.active[ENTITLEMENT_ID];
+function hasActivePremiumEntitlement(info: CustomerInfo): boolean {
+  const entitlement =
+    info.entitlements.all[ENTITLEMENT_ID] ??
+    info.entitlements.active[ENTITLEMENT_ID];
 
-  if (active) await activatePremium();
-  else await cancelPremium();
+  return entitlement?.isActive === true;
+}
+
+async function applyCustomerInfo(info: CustomerInfo) {
+  const entitlement =
+    info.entitlements.all[ENTITLEMENT_ID] ??
+    info.entitlements.active[ENTITLEMENT_ID];
+
+  await applyPremiumEntitlement({
+    isPremium: entitlement?.isActive === true,
+    entitlementId: entitlement?.identifier ?? ENTITLEMENT_ID,
+    expiresDate: entitlement?.expirationDate ?? null,
+    lastVerifiedAt: info.requestDate || new Date().toISOString(),
+  });
+}
+
+async function refreshAfterConfirmedCustomerInfo(
+  info: CustomerInfo,
+  source: "purchase" | "restore"
+) {
+  try {
+    await syncPremiumFromRevenueCat();
+  } catch (error) {
+    if (!hasActivePremiumEntitlement(info)) throw error;
+
+    if (__DEV__) {
+      console.log(`[RC ${source.toUpperCase()} FOLLOW-UP SYNC ERROR]`, error);
+    }
+  }
 }
 
 function ensureCustomerInfoListener() {
   if (listenerAdded) return;
 
-  Purchases.addCustomerInfoUpdateListener(async (info) => {
-    await applyCustomerInfo(info);
+  Purchases.addCustomerInfoUpdateListener((info) => {
+    void applyCustomerInfo(info);
   });
 
   listenerAdded = true;
@@ -121,6 +146,7 @@ export async function configureRevenueCat() {
       const info = await Purchases.getCustomerInfo();
       await applyCustomerInfo(info);
     } catch {
+      // Keep a still-valid local cache when RevenueCat is temporarily unavailable.
       if (__DEV__) {
         console.log("[RC CUSTOMER INFO ERROR]");
       }
@@ -139,6 +165,7 @@ export async function syncPremiumFromRevenueCat() {
 
   await configureRevenueCat();
 
+  await Purchases.invalidateCustomerInfoCache();
   const info = await Purchases.getCustomerInfo();
   await applyCustomerInfo(info);
 }
@@ -159,11 +186,11 @@ export async function purchasePackage(pkg: any) {
 
   await configureRevenueCat();
 
-  
   try {
-    const res = await Purchases.purchasePackage(pkg);
-    await applyCustomerInfo(res.customerInfo);
-    return res;
+    const result = await Purchases.purchasePackage(pkg);
+    await applyCustomerInfo(result.customerInfo);
+    await refreshAfterConfirmedCustomerInfo(result.customerInfo, "purchase");
+    return result;
   } catch (e: any) {
     const fullMessage = buildRevenueCatErrorMessage(e);
 
@@ -183,9 +210,10 @@ export async function restorePurchases() {
 
   const info = await Purchases.restorePurchases();
   await applyCustomerInfo(info);
+  await refreshAfterConfirmedCustomerInfo(info, "restore");
+  return info;
 }
 
-// ✅ otevře systémovou správu předplatného
 export async function openCancelSubscription() {
   if (Platform.OS === "android") {
     await Linking.openURL("https://play.google.com/store/account/subscriptions");
@@ -195,7 +223,6 @@ export async function openCancelSubscription() {
   await Linking.openURL("https://apps.apple.com/account/subscriptions");
 }
 
-// ✅ Zavolej po úspěšném Firebase loginu
 export async function revenueCatLogin(uid: string) {
   if (!REVENUECAT_ENABLED) return;
 
@@ -213,10 +240,9 @@ export async function revenueCatLogin(uid: string) {
   ensureCustomerInfoListener();
 }
 
-// ✅ Zavolej při logout
 export async function revenueCatLogout() {
   if (!REVENUECAT_ENABLED) {
-    await cancelPremium();
+    await clearPremiumState();
     return;
   }
 
@@ -230,5 +256,5 @@ export async function revenueCatLogout() {
     }
   }
 
-  await cancelPremium();
+  await clearPremiumState();
 }

@@ -2,11 +2,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React, { useEffect } from "react";
-import { InteractionManager } from "react-native";
+import { AppState, InteractionManager } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../lib/theme";
 import { ensureFastKeys } from "../../lib/storage";
 import { useI18n } from "../../lib/i18n";
+import { auth } from "../../lib/firebase";
+import { syncPremiumFromRevenueCat } from "../../lib/revenuecat";
 
 
 export default function TabsLayout() {
@@ -19,6 +21,24 @@ export default function TabsLayout() {
       void ensureFastKeys();
     });
     return () => task.cancel();
+  }, []);
+
+  useEffect(() => {
+    const refreshPremium = () => {
+      if (!auth.currentUser?.uid) return;
+
+      void syncPremiumFromRevenueCat().catch(() => {
+        // Keep the expiration-limited local cache while offline.
+      });
+    };
+
+    refreshPremium();
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") refreshPremium();
+    });
+
+    return () => subscription.remove();
   }, []);
 
   const tabBg = isDark ? UI.tabBg : UI.accent;
