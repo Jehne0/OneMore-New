@@ -29,6 +29,36 @@ function normalizeStats(s?: ChallengeStats): ChallengeStats {
   };
 }
 
+function safeNonNegativeStreak(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+}
+
+function mergeChallengeStatsMonotonic(
+  existing?: Record<string, ChallengeStats>,
+  incoming?: Record<string, ChallengeStats>
+): Record<string, ChallengeStats> {
+  const existingMap = existing ?? {};
+  if (!incoming || typeof incoming !== "object") return existingMap;
+
+  const merged: Record<string, ChallengeStats> = { ...existingMap };
+
+  for (const [id, incomingStats] of Object.entries(incoming)) {
+    const existingStats = existingMap[id];
+    const nextStats = { ...(existingStats ?? {}), ...(incomingStats ?? {}) } as ChallengeStats;
+
+    nextStats.bestStreak = Math.max(
+      safeNonNegativeStreak(existingStats?.bestStreak),
+      safeNonNegativeStreak(incomingStats?.bestStreak),
+      safeNonNegativeStreak(incomingStats?.currentStreak)
+    );
+
+    merged[id] = nextStats;
+  }
+
+  return merged;
+}
+
 export function isChallengeEasyMode(challenge?: Pick<Challenge, "easyMode"> | null): boolean {
   return challenge?.easyMode === true;
 }
@@ -524,6 +554,11 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
     lastOpenDate: incoming.lastOpenDate ?? existing.lastOpenDate,
   };
 
+  merged.challengeStats = mergeChallengeStatsMonotonic(
+    existing.challengeStats,
+    incoming.challengeStats
+  );
+
   merged.history = migrateHistory(merged.history);
   const existingEasyIds = easyModeChallengeIdSet(existing);
   for (const id of normalizeEverCompletedKeys((incoming as any).easyModeChallengeIds)) {
@@ -691,6 +726,29 @@ for (const h of state.history ?? []) {
 
   if (ever.size === before) return { next: state, changed: false };
   return { next: { ...state, everCompletedKeys: Array.from(ever) }, changed: true };
+}
+
+/**
+ * One-time normalization for older stats where currentStreak could be higher
+ * than the stored historical maximum. Only raises bestStreak; never lowers it.
+ */
+function migrateBestStreakFromCurrent(state: AppState): { next: AppState; changed: boolean } {
+  const stats = state.challengeStats ?? {};
+  let changed = false;
+  const nextStats: Record<string, ChallengeStats> = { ...stats };
+
+  for (const [id, value] of Object.entries(stats)) {
+    const currentStreak = safeNonNegativeStreak(value?.currentStreak);
+    const bestStreak = safeNonNegativeStreak(value?.bestStreak);
+
+    if (currentStreak > bestStreak) {
+      nextStats[id] = { ...value, bestStreak: currentStreak };
+      changed = true;
+    }
+  }
+
+  if (!changed) return { next: state, changed: false };
+  return { next: { ...state, challengeStats: nextStats }, changed: true };
 }
 
 /**
@@ -957,20 +1015,36 @@ export async function loadState(): Promise<AppState> {
     }
 
     const merged = parseAndMerge(raw);
-    _cache = merged;
+    const { next: normalized, changed: bestStreakMigrated } =
+      migrateBestStreakFromCurrent(merged);
+    _cache = normalized;
 
-    if (usedKey && usedKey !== STORAGE_KEY) {
-      await saveState(merged);
+    if ((usedKey && usedKey !== STORAGE_KEY) || bestStreakMigrated) {
+      try {
+        await saveState(normalized);
+      } catch (error) {
+        if (__DEV__) {
+          console.log("[STATE MIGRATION SAVE ERROR]", error);
+        }
+      }
     }
 
-    return merged;
+    return normalized;
   } catch {
     try {
       const backupRaw = await readStateFromKey(BACKUP_KEY);
       if (backupRaw) {
         const merged = parseAndMerge(backupRaw);
-        await saveState(merged);
-        return merged;
+        const { next: normalized } = migrateBestStreakFromCurrent(merged);
+        _cache = normalized;
+        try {
+          await saveState(normalized);
+        } catch (error) {
+          if (__DEV__) {
+            console.log("[STATE BACKUP MIGRATION SAVE ERROR]", error);
+          }
+        }
+        return normalized;
       }
     } catch {}
     _cache = defaultState;
@@ -1183,7 +1257,10 @@ export async function ensureDailyPick(): Promise<AppState> {
     updated = { ...updated, lastOpenDate: today };
   }
 
-  const changed = migratedChanged || backfillChanged || JSON.stringify(state0) !== JSON.stringify(updated);
+  const changed =
+    migratedChanged ||
+    backfillChanged ||
+    JSON.stringify(state0) !== JSON.stringify(updated);
   if (changed) await saveState(updated);
 
   return updated;

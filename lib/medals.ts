@@ -25,13 +25,6 @@ function tierForCycleDays(days: number): MedalTier {
   return "none";
 }
 
-export function currentMedalTierForStreak(currentStreak: number): MedalTier {
-  const s = safeStreak(currentStreak);
-  if (s <= 0) return "none";
-  const cycleDays = s % MEDAL_CYCLE_DAYS || MEDAL_CYCLE_DAYS;
-  return tierForCycleDays(cycleDays);
-}
-
 export function tierForBestStreak(bestStreak: number): MedalTier {
   const s = safeStreak(bestStreak);
   if (s >= MEDAL_CYCLE_DAYS) return "diamond";
@@ -45,8 +38,8 @@ export function emptyMedalCounts(): MedalCounts {
 }
 
 /**
- * Spočítá počty medailí napříč výzvami podle aktuálního streaku.
- * Dokončené diamantové cykly zůstávají započítané a další cyklus začíná znovu od bramborové.
+ * Spočítá jednu nejlepší trvale odemčenou medaili za každou výzvu.
+ * Vyšší tier nahrazuje nižší; stejná výzva nikdy nepřidá duplicitní medaili.
  */
 export function medalCountsFromChallengeStats(
   stats?: Record<string, ChallengeStats>,
@@ -59,17 +52,11 @@ export function medalCountsFromChallengeStats(
   for (const id of Object.keys(map)) {
     if (activeIds && !activeIds.has(String(id))) continue;
     const s = map[id];
-    const currentStreak = safeStreak(Number(s?.currentStreak ?? 0));
-    const bestStreak = safeStreak(Number(s?.bestStreak ?? currentStreak));
-    if (currentStreak <= 0 && bestStreak <= 0) continue;
+    const bestStreak = safeStreak(Number(s?.bestStreak ?? 0));
+    if (bestStreak <= 0) continue;
 
-    counts.diamond += Math.floor(bestStreak / MEDAL_CYCLE_DAYS);
-
-    const cycleDays = currentStreak % MEDAL_CYCLE_DAYS;
-    if (cycleDays <= 0) continue;
-
-    const tier = tierForCycleDays(cycleDays);
-    if (tier !== "none") counts[tier] = (counts[tier] ?? 0) + 1;
+    const tier = tierForBestStreak(bestStreak);
+    if (tier !== "none") counts[tier] += 1;
   }
 
   return counts;

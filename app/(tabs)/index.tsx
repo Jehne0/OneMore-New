@@ -79,8 +79,8 @@ import {
 } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 import {
-  currentMedalTierForStreak,
   medalCountsFromChallengeStats,
+  tierForBestStreak,
   type MedalTier,
 } from "../../lib/medals";
 import * as Haptics from "expo-haptics";
@@ -2692,13 +2692,8 @@ const bestStreak = useMemo(() => {
 }, [appState?.challenges, appState?.challengeStats, dayIndex, tdy]);
 
   const medalState = useMemo(
-    () => {
-      const activeIds = ((appState?.challenges ?? []) as any[])
-        .filter((c) => c && c.enabled !== false && !c.deletedAt)
-        .map((c) => String(c.id));
-      return medalsFromChallengeStats(appState?.challengeStats, activeIds);
-    },
-    [appState?.challengeStats, appState?.challenges]
+    () => medalsFromChallengeStats(appState?.challengeStats),
+    [appState?.challengeStats]
   );
 
 const highestMedalForFriends = useMemo(() => {
@@ -2808,10 +2803,8 @@ useEffect(() => {
   }
 
   const selectedChallengeMedal: MedalTier = selectedId
-    ? currentMedalTierForStreak(
-        isEasyChallengeId(String(selectedId))
-          ? Number(appState?.challengeStats?.[String(selectedId)]?.currentStreak ?? 0)
-          : streakForChallenge(String(selectedId))
+    ? tierForBestStreak(
+        Number(appState?.challengeStats?.[String(selectedId)]?.bestStreak ?? 0)
       )
     : "none";
 
