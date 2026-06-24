@@ -14,9 +14,22 @@ export type VersionCheckResult = {
 };
 
 type VersionConfig = {
+  // Původní společné hodnoty necháváme jako fallback,
+  // aby se nerozbila aktuální Android produkce.
   latestVersionCode?: unknown;
   minimumRequiredVersionCode?: unknown;
   latestVersionName?: unknown;
+
+  // Nové hodnoty zvlášť pro Android.
+  latestVersionCodeAndroid?: unknown;
+  minimumRequiredVersionCodeAndroid?: unknown;
+  latestVersionNameAndroid?: unknown;
+
+  // Nové hodnoty zvlášť pro iOS.
+  latestVersionCodeIos?: unknown;
+  minimumRequiredVersionCodeIos?: unknown;
+  latestVersionNameIos?: unknown;
+
   updateUrlAndroid?: unknown;
   updateUrlIos?: unknown;
   message?: Partial<Record<Lang, unknown>>;
@@ -25,6 +38,10 @@ type VersionConfig = {
 function toPositiveNumber(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function toTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 export function getCurrentVersionCode(): number {
@@ -56,6 +73,36 @@ export function getCurrentVersionCode(): number {
   return 0;
 }
 
+function getPlatformVersionConfig(data: VersionConfig) {
+  if (Platform.OS === "ios") {
+    return {
+      latestVersionCode:
+        toPositiveNumber(data.latestVersionCodeIos) ||
+        toPositiveNumber(data.latestVersionCode),
+      minimumRequiredVersionCode:
+        toPositiveNumber(data.minimumRequiredVersionCodeIos) ||
+        toPositiveNumber(data.minimumRequiredVersionCode),
+      latestVersionName:
+        toTrimmedString(data.latestVersionNameIos) ||
+        toTrimmedString(data.latestVersionName),
+      updateUrl: toTrimmedString(data.updateUrlIos),
+    };
+  }
+
+  return {
+    latestVersionCode:
+      toPositiveNumber(data.latestVersionCodeAndroid) ||
+      toPositiveNumber(data.latestVersionCode),
+    minimumRequiredVersionCode:
+      toPositiveNumber(data.minimumRequiredVersionCodeAndroid) ||
+      toPositiveNumber(data.minimumRequiredVersionCode),
+    latestVersionName:
+      toTrimmedString(data.latestVersionNameAndroid) ||
+      toTrimmedString(data.latestVersionName),
+    updateUrl: toTrimmedString(data.updateUrlAndroid),
+  };
+}
+
 export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckResult | null> {
   try {
     const snap = await getDoc(doc(db, "appConfig", "versionCheck"));
@@ -63,8 +110,12 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
 
     const data = snap.data() as VersionConfig;
     const currentVersionCode = getCurrentVersionCode();
-    const latestVersionCode = toPositiveNumber(data.latestVersionCode);
-    const minimumRequiredVersionCode = toPositiveNumber(data.minimumRequiredVersionCode);
+    const {
+      latestVersionCode,
+      minimumRequiredVersionCode,
+      latestVersionName,
+      updateUrl,
+    } = getPlatformVersionConfig(data);
 
     if (!currentVersionCode) {
       if (__DEV__) {
@@ -80,12 +131,8 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
       return null;
     }
 
-    const latestVersionName =
-      typeof data.latestVersionName === "string" ? data.latestVersionName.trim() : "";
     const messageValue = data.message?.[lang];
     const message = typeof messageValue === "string" ? messageValue.trim() : undefined;
-    const updateUrlRaw = Platform.OS === "ios" ? data.updateUrlIos : data.updateUrlAndroid;
-    const updateUrl = typeof updateUrlRaw === "string" ? updateUrlRaw.trim() : undefined;
 
     if (minimumRequiredVersionCode > currentVersionCode) {
       if (__DEV__) {
