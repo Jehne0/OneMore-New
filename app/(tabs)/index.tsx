@@ -3309,7 +3309,19 @@ useEffect(() => {
                     {TXT.easyModeActive}
                   </Text>
                 ) : (
-                  <Switch value={false} onValueChange={(v) => v && confirmEnableEasyMode()} />
+                  <Switch
+  value={manageEasyMode}
+  disabled={manageEasyMode}
+  onValueChange={(v) => {
+    if (!v || manageEasyMode) {
+      return;
+    }
+
+    setTimeout(() => {
+      confirmEnableEasyMode();
+    }, 80);
+  }}
+/>
                 )}
               </View>
 
