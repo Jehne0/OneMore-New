@@ -3277,7 +3277,12 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             <ScrollView
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingBottom: 12 }}
+              contentContainerStyle={{
+                paddingBottom:
+                  infoScreen === "streak_medals"
+                    ? Math.max(insets.bottom + 32, 48)
+                    : 12,
+              }}
             >
               {infoScreen === "streak_medals" && (
                 <View
