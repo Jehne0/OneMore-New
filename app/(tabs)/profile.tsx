@@ -34,12 +34,15 @@ import {
 import { getCurrentVersionCode } from "../../lib/versionCheck";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  getPremiumSubscriptionState,
   getOfferingPackages,
   openCancelSubscription,
   purchasePackage,
   restorePurchases,
   revenueCatLogout,
+  subscribePremiumSubscriptionState,
   syncPremiumFromRevenueCat,
+  type PremiumSubscriptionState,
 } from "../../lib/revenuecat";
 
 import { useTheme } from "../../lib/theme";
@@ -167,6 +170,8 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     medals: "Medaile",
     premiumBuy: "Koupit Premium",
     premiumCancel: "Zrušit předplatné",
+    premiumManage: "Spravovat předplatné",
+    premiumChecking: "Kontroluji Premium…",
     open: "Otevřít",
     subject: "Předmět",
     message: "Zpráva",
@@ -334,6 +339,8 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   medals: "Medals",
   premiumBuy: "Buy Premium",
   premiumCancel: "Cancel subscription",
+  premiumManage: "Manage subscription",
+  premiumChecking: "Checking Premium…",
   open: "Open",
   subject: "Subject",
   message: "Message",
@@ -515,6 +522,8 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   medals: "Medale",
   premiumBuy: "Kup Premium",
   premiumCancel: "Anuluj subskrypcję",
+  premiumManage: "Zarządzaj subskrypcją",
+  premiumChecking: "Sprawdzam Premium…",
   open: "Otwórz",
   subject: "Temat",
   message: "Wiadomość",
@@ -690,6 +699,8 @@ history: "Herausforderungsverlauf",
   medals: "Medaillen",
   premiumBuy: "Premium kaufen",
   premiumCancel: "Abo kündigen",
+  premiumManage: "Abo verwalten",
+  premiumChecking: "Premium wird geprüft…",
   open: "Öffnen",
   subject: "Betreff",
   message: "Nachricht",
@@ -932,6 +943,8 @@ const unknownUserText =
 
   // ✅ Premium sjednocené s OneMore
   const [premium, setPremium] = useState(false);
+  const [premiumSubscription, setPremiumSubscription] =
+    useState<PremiumSubscriptionState>(() => getPremiumSubscriptionState());
   const [premiumBusy, setPremiumBusy] = useState(false);
 
   // ✅ Modaly – všechno schované
@@ -1076,9 +1089,13 @@ const updateNotificationSetting = async (
     let mounted = true;
     isPremiumActive().then((p) => mounted && setPremium(!!p));
     const unsub = subscribePremium((p) => mounted && setPremium(!!p));
+    const unsubSubscription = subscribePremiumSubscriptionState((state) => {
+      if (mounted) setPremiumSubscription(state);
+    });
     return () => {
       mounted = false;
       unsub?.();
+      unsubSubscription();
     };
   }, []);
 useEffect(() => {
@@ -1831,7 +1848,7 @@ const faqItems = useMemo(() => {
   }, [infoScreen]);
 
 const buyPremium = async () => {
-  if (premiumBusy) return;
+  if (!premiumSubscription.loaded || premium || premiumBusy) return;
   setPremiumBusy(true);
 
   try {
@@ -1874,8 +1891,31 @@ const buyPremium = async () => {
   }
 };
 
-  const cancelPremiumNow = async () => {
-    if (premiumBusy) return;
+  const openPremiumManagement = async () => {
+    if (!premiumSubscription.loaded || premiumBusy) return;
+    setPremiumBusy(true);
+    try {
+      await openCancelSubscription(premiumSubscription.managementURL);
+    } catch {
+      Alert.alert(
+        p.premium,
+        lang === "cs"
+          ? "Nepodařilo se otevřít správu předplatného."
+          : "Could not open subscription management."
+      );
+    } finally {
+      setPremiumBusy(false);
+    }
+  };
+
+  const managePremiumNow = async () => {
+    if (!premiumSubscription.loaded || premiumBusy) return;
+
+    if (premiumSubscription.willRenew !== true) {
+      await openPremiumManagement();
+      return;
+    }
+
     Alert.alert(
       lang === "cs" ? "Zrušit Premium" : "Cancel Premium",
       lang === "cs" ? "Zrušení předplatného se provádí ve Store (Google Play / App Store). Chceš otevřít správu předplatného?" : "Subscription cancellation is handled in the Store (Google Play / App Store). Do you want to open subscription management?",
@@ -1884,19 +1924,7 @@ const buyPremium = async () => {
         {
           text: p.open,
           style: "default",
-          onPress: async () => {
-            setPremiumBusy(true);
-            try {
-              await openCancelSubscription();
-            } catch {
-              Alert.alert(
-                p.premium,
-                lang === "cs" ? "Nepodařilo se otevřít správu předplatného." : "Could not open subscription management."
-              );
-            } finally {
-              setPremiumBusy(false);
-            }
-          },
+          onPress: openPremiumManagement,
         },
       ]
     );
@@ -3843,31 +3871,49 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
 
                   {!premium ? (
                     <Pressable
-                      disabled={premiumBusy}
+                      disabled={!premiumSubscription.loaded || premiumBusy}
                       onPress={buyPremium}
                       style={({ pressed }) => [
                         styles.primaryBtn,
-                        { marginTop: 14, opacity: premiumBusy ? 0.6 : 1 },
-                        pressed && !premiumBusy && { opacity: 0.9 },
+                        {
+                          marginTop: 14,
+                          opacity:
+                            !premiumSubscription.loaded || premiumBusy ? 0.6 : 1,
+                        },
+                        pressed &&
+                          premiumSubscription.loaded &&
+                          !premiumBusy && { opacity: 0.9 },
                       ]}
                     >
-                      {premiumBusy ? (
-                        <ActivityIndicator />
-                      ) : (
-                        <Text style={styles.primaryBtnText}>{p.premiumBuy}</Text>
-                      )}
+                      <Text style={styles.primaryBtnText}>
+                        {!premiumSubscription.loaded || premiumBusy
+                          ? p.premiumChecking
+                          : p.upgrade}
+                      </Text>
                     </Pressable>
                   ) : (
                     <Pressable
-                      disabled={premiumBusy}
-                      onPress={cancelPremiumNow}
+                      disabled={!premiumSubscription.loaded || premiumBusy}
+                      onPress={managePremiumNow}
                       style={({ pressed }) => [
                         styles.dangerBtn,
-                        { marginTop: 14, opacity: premiumBusy ? 0.6 : 1 },
-                        pressed && !premiumBusy && { opacity: 0.9 },
+                        {
+                          marginTop: 14,
+                          opacity:
+                            !premiumSubscription.loaded || premiumBusy ? 0.6 : 1,
+                        },
+                        pressed &&
+                          premiumSubscription.loaded &&
+                          !premiumBusy && { opacity: 0.9 },
                       ]}
                     >
-                      <Text style={styles.dangerText}>{p.premiumCancel}</Text>
+                      <Text style={styles.dangerText}>
+                        {!premiumSubscription.loaded || premiumBusy
+                          ? p.premiumChecking
+                          : premiumSubscription.willRenew === true
+                          ? p.premiumCancel
+                          : p.premiumManage}
+                      </Text>
                     </Pressable>
                   )}
 

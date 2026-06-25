@@ -19,24 +19,68 @@ let configured = false;
 let listenerAdded = false;
 let configuringPromise: Promise<void> | null = null;
 
+export type PremiumSubscriptionState = {
+  loaded: boolean;
+  willRenew: boolean | null;
+  expirationDate: string | null;
+  managementURL: string | null;
+};
+
+type PremiumSubscriptionListener = (state: PremiumSubscriptionState) => void;
+
+let premiumSubscriptionState: PremiumSubscriptionState = {
+  loaded: false,
+  willRenew: null,
+  expirationDate: null,
+  managementURL: null,
+};
+const premiumSubscriptionListeners = new Set<PremiumSubscriptionListener>();
+
+export function getPremiumSubscriptionState(): PremiumSubscriptionState {
+  return premiumSubscriptionState;
+}
+
+export function subscribePremiumSubscriptionState(
+  listener: PremiumSubscriptionListener
+): () => void {
+  premiumSubscriptionListeners.add(listener);
+  listener(premiumSubscriptionState);
+  return () => premiumSubscriptionListeners.delete(listener);
+}
+
+function updatePremiumSubscriptionState(state: PremiumSubscriptionState) {
+  premiumSubscriptionState = state;
+  for (const listener of Array.from(premiumSubscriptionListeners)) {
+    listener(state);
+  }
+}
+
 function hasActivePremiumEntitlement(info: CustomerInfo): boolean {
   const entitlement =
-    info.entitlements.all[ENTITLEMENT_ID] ??
-    info.entitlements.active[ENTITLEMENT_ID];
+    info.entitlements.active[ENTITLEMENT_ID] ??
+    info.entitlements.all[ENTITLEMENT_ID];
 
   return entitlement?.isActive === true;
 }
 
 async function applyCustomerInfo(info: CustomerInfo) {
   const entitlement =
-    info.entitlements.all[ENTITLEMENT_ID] ??
-    info.entitlements.active[ENTITLEMENT_ID];
+    info.entitlements.active[ENTITLEMENT_ID] ??
+    info.entitlements.all[ENTITLEMENT_ID];
 
   await applyPremiumEntitlement({
     isPremium: entitlement?.isActive === true,
     entitlementId: entitlement?.identifier ?? ENTITLEMENT_ID,
     expiresDate: entitlement?.expirationDate ?? null,
     lastVerifiedAt: info.requestDate || new Date().toISOString(),
+  });
+
+  updatePremiumSubscriptionState({
+    loaded: true,
+    willRenew:
+      typeof entitlement?.willRenew === "boolean" ? entitlement.willRenew : null,
+    expirationDate: entitlement?.expirationDate ?? null,
+    managementURL: info.managementURL ?? null,
   });
 }
 
@@ -214,7 +258,12 @@ export async function restorePurchases() {
   return info;
 }
 
-export async function openCancelSubscription() {
+export async function openCancelSubscription(managementURL?: string | null) {
+  if (managementURL) {
+    await Linking.openURL(managementURL);
+    return;
+  }
+
   if (Platform.OS === "android") {
     await Linking.openURL("https://play.google.com/store/account/subscriptions");
     return;
@@ -243,6 +292,12 @@ export async function revenueCatLogin(uid: string) {
 export async function revenueCatLogout() {
   if (!REVENUECAT_ENABLED) {
     await clearPremiumState();
+    updatePremiumSubscriptionState({
+      loaded: false,
+      willRenew: null,
+      expirationDate: null,
+      managementURL: null,
+    });
     return;
   }
 
@@ -257,4 +312,10 @@ export async function revenueCatLogout() {
   }
 
   await clearPremiumState();
+  updatePremiumSubscriptionState({
+    loaded: false,
+    willRenew: null,
+    expirationDate: null,
+    managementURL: null,
+  });
 }
