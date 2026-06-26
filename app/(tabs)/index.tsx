@@ -3358,7 +3358,7 @@ useEffect(() => {
 
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: Math.max(8, insets.bottom) }}
+              contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 32) }}
             >
               {MEDAL_OVERVIEW_TIERS.map((medal) => {
                 const challenges = medalOverview.get(medal.tier) ?? [];

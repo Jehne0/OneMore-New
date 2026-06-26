@@ -21,6 +21,7 @@ type StatRow = {
   completed: number;
   skipped: number;
   streak: number;
+  bestStreak: number;
   lastCompleted?: string;
 };
 
@@ -122,7 +123,7 @@ let MEM_ROWS_AT = 0;
 function computeSummary(rows: StatRow[]): SummaryStats {
   return rows.reduce(
     (acc, r) => {
-      if (!r.easyMode) acc.bestStreak = Math.max(acc.bestStreak, Number(r.streak ?? 0));
+      if (!r.easyMode) acc.bestStreak = Math.max(acc.bestStreak, Number(r.bestStreak ?? r.streak ?? 0));
       acc.totalCompleted += Number(r.completed ?? 0);
       if (r.enabled) acc.activeChallenges += 1;
       return acc;
@@ -308,6 +309,7 @@ const p = HISTORY_STRINGS[historyLang];
           completed: Number(st.completedCount ?? 0),
           skipped: Number(st.skippedCount ?? 0),
           streak: Number(st.currentStreak ?? 0),
+          bestStreak: Number(st.bestStreak ?? st.currentStreak ?? 0),
           lastCompleted: st.lastCompletedDay
             ? String(st.lastCompletedDay)
             : undefined,
