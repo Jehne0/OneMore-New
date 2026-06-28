@@ -259,6 +259,34 @@ export async function restorePurchases() {
 }
 
 export async function openCancelSubscription(managementURL?: string | null) {
+  if (Platform.OS === "ios") {
+    try {
+      await configureRevenueCat();
+      await Purchases.showManageSubscriptions();
+      return;
+    } catch {
+      // Fall through to the native App Store URL schemes below.
+    }
+
+    const appStoreSubscriptionUrls = [
+      "itms-apps://apps.apple.com/account/subscriptions",
+      "https://apps.apple.com/account/subscriptions",
+    ];
+
+    for (const url of appStoreSubscriptionUrls) {
+      try {
+        const canOpen = await Linking.canOpenURL(url);
+        if (!canOpen) continue;
+        await Linking.openURL(url);
+        return;
+      } catch {
+        // Try the next App Store fallback.
+      }
+    }
+
+    throw new Error("IOS_SUBSCRIPTION_MANAGEMENT_UNAVAILABLE");
+  }
+
   if (managementURL) {
     await Linking.openURL(managementURL);
     return;
