@@ -311,14 +311,18 @@ export async function leaveSharedChallenge(challengeId: string) {
 
   const nextMemberUids = challenge.memberUids.filter((memberUid) => memberUid !== uid);
   const nextAcceptedBy = (challenge.acceptedBy ?? []).filter((memberUid) => memberUid !== uid);
+  const nextPendingInviteUids = (challenge.pendingInviteUids ?? []).filter(
+    (memberUid) => memberUid !== uid
+  );
   const nextLeftBy = (challenge.leftBy ?? []).filter((memberUid) => memberUid !== uid);
 
   const ref = doc(db, "sharedChallenges", String(challengeId));
 
-  if (nextMemberUids.length < 2) {
+  if (nextMemberUids.length === 0) {
     await updateDoc(ref, {
       memberUids: nextMemberUids,
       acceptedBy: nextAcceptedBy,
+      pendingInviteUids: nextPendingInviteUids,
       leftBy: nextLeftBy,
       enabled: false,
       status: "declined",
@@ -330,6 +334,7 @@ export async function leaveSharedChallenge(challengeId: string) {
   await updateDoc(ref, {
     memberUids: nextMemberUids,
     acceptedBy: nextAcceptedBy,
+    pendingInviteUids: nextPendingInviteUids,
     leftBy: nextLeftBy,
     updatedAt: serverTimestamp(),
   });

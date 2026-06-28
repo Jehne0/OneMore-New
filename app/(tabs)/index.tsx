@@ -819,6 +819,16 @@ sharedMemberCol: {
   backgroundColor: UI.card2,
 },
 
+sharedMemberColCompact: {
+  width: 0,
+  minWidth: 0,
+  flexBasis: 0,
+  flexGrow: 1,
+  borderBottomWidth: 0,
+  paddingHorizontal: 8,
+  paddingVertical: 8,
+},
+
 sharedMemberColLastInRow: {
   borderRightWidth: 0,
 },
@@ -841,6 +851,8 @@ sharedMemberCount: {
       fontSize: 13,
       fontWeight: "900",
       color: UI.text,
+      minWidth: 0,
+      flexShrink: 1,
     },
     sharedPlayerMeta: {
       marginTop: 3,
@@ -4363,6 +4375,7 @@ try {
                           flame: getSharedUserFlame(item, safeUid),
                         };
                       });
+                      const compactMemberRow = memberRows.length <= 3;
 
                       const myDone = getSharedUserCompletedCount(item, me);
                       const activeToday = isSharedChallengeActiveOnDate(item, getSharedTodayISO());
@@ -4548,18 +4561,20 @@ try {
      <View style={styles.sharedMembersGrid}>
   {memberRows.map((member, memberIndex) => {
     const colIndex = memberIndex % 5;
-    const isLastInRow = colIndex === 4;
+    const isLastInRow =
+      compactMemberRow ? memberIndex === memberRows.length - 1 : colIndex === 4;
 
     return (
       <View
         key={member.uid}
         style={[
           styles.sharedMemberCol,
+          compactMemberRow && styles.sharedMemberColCompact,
           isLastInRow && styles.sharedMemberColLastInRow,
         ]}
       >
        <View style={styles.sharedMemberTop}>
-  <Text style={styles.sharedPlayerName} numberOfLines={1}>
+  <Text style={styles.sharedPlayerName} numberOfLines={1} ellipsizeMode="tail">
     {member.name}
   </Text>
 </View>

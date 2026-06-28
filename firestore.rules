@@ -93,8 +93,24 @@ service cloud.firestore {
         && (
           request.resource.data.pendingInviteUids == resource.data.pendingInviteUids
           || (
+            resource.data.pendingInviteUids is list
+            && request.resource.data.pendingInviteUids is list
+            && request.auth.uid in resource.data.pendingInviteUids
+            && !(request.auth.uid in request.resource.data.pendingInviteUids)
+            && request.resource.data.pendingInviteUids.size()
+              == resource.data.pendingInviteUids.size() - 1
+            && request.resource.data.pendingInviteUids.hasOnly(
+              resource.data.pendingInviteUids
+            )
+          )
+          || (
             !("pendingInviteUids" in resource.data)
             && !("pendingInviteUids" in request.resource.data)
+          )
+          || (
+            !("pendingInviteUids" in resource.data)
+            && request.resource.data.pendingInviteUids is list
+            && request.resource.data.pendingInviteUids.size() == 0
           )
         );
 

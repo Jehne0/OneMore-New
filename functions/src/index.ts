@@ -583,17 +583,11 @@ export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, as
       throw new HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
     }
 
-    const friendAlreadyAccepted = acceptedBy.includes(friendUid) && !leftBy.includes(friendUid);
-    if (friendAlreadyAccepted) {
+    if (memberUids.includes(friendUid)) {
       throw new HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
     }
 
-    const nextMemberUids = uniqueUids([...memberUids, friendUid]);
-    if (nextMemberUids.length > MAX_SHARED_MEMBERS) {
-      throw new HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
-    }
-
-    if (uniqueUids([...nextMemberUids, ...pendingInviteUids]).length > MAX_SHARED_MEMBERS) {
+    if (uniqueUids([...memberUids, ...pendingInviteUids, friendUid]).length > MAX_SHARED_MEMBERS) {
       throw new HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
     }
 
@@ -602,9 +596,9 @@ export const inviteSharedChallengeMember = onCall({ region: "europe-west1" }, as
     tx.set(
       challengeRef,
       {
-        memberUids: nextMemberUids,
         acceptedBy: acceptedBy.filter((memberUid) => memberUid !== friendUid),
         pendingInviteUids: uniqueUids([...pendingInviteUids, friendUid]),
+        leftBy: leftBy.filter((memberUid) => memberUid !== friendUid),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
