@@ -147,6 +147,8 @@ type InfoScreen =
   | "terms"
   | "paywall";
 
+type AccountModalDestination = "password" | "username" | "premium" | "info";
+
 type FriendsTab = "friends" | "requests" | "invites";
 
 type FriendPreviewStats = {
@@ -195,6 +197,7 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     language: "Jazyk",
     premium: "Premium",
     managePremium: "Spravovat Premium",
+    premiumManagementOpenFailed: "Nepodařilo se otevřít správu předplatného.",
     logout: "Odhlásit se",
     deleteAccount: "Odstranit účet",
     info: "Informace a historie",
@@ -375,6 +378,7 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   language: "Language",
   premium: "Premium",
   managePremium: "Manage Premium",
+  premiumManagementOpenFailed: "Could not open subscription management.",
   logout: "Log out",
   deleteAccount: "Delete account",
   info: "Information & History",
@@ -569,6 +573,7 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   language: "Język",
   premium: "Premium",
   managePremium: "Zarządzaj Premium",
+  premiumManagementOpenFailed: "Nie udało się otworzyć zarządzania subskrypcją.",
   logout: "Wyloguj się",
   deleteAccount: "Usuń konto",
   info: "Informacje i historia",
@@ -757,6 +762,7 @@ medalDiamondDesc: "Ein halbes Jahr Ausdauer. Top-Leistung.",
   language: "Sprache",
   premium: "Premium",
   managePremium: "Premium verwalten",
+  premiumManagementOpenFailed: "Die Aboverwaltung konnte nicht geöffnet werden.",
   logout: "Abmelden",
   deleteAccount: "Konto löschen",
   info: "Informationen und Verlauf",
@@ -1038,6 +1044,9 @@ const unknownUserText =
   const [infoOpen, setInfoOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [addFriendOpen, setAddFriendOpen] = useState(false);
+  const accountModalVisibleRef = useRef(false);
+  const pendingAccountDestinationRef =
+    useRef<AccountModalDestination | null>(null);
 
   // ✅ Přátelé (Firestore)
   const [friendEdges, setFriendEdges] = useState<FriendEdge[]>([]);
@@ -1912,10 +1921,46 @@ const faqItems = useMemo(() => {
 
   const gradientLocations = isDark ? [0, 1] : [0, 0.3, 0.7, 1];
 
-  const openPayments = () => {
-    // otevře paywall uvnitř Info modalu
-    setInfoScreen("paywall");
+  const showAccountDestination = (
+    destination: AccountModalDestination
+  ) => {
+    if (destination === "password") {
+      setPwdOpen(true);
+      return;
+    }
+
+    if (destination === "username") {
+      setNewUsername("");
+      setUsernameOpen(true);
+      return;
+    }
+
+    setInfoScreen(destination === "premium" ? "paywall" : "menu");
     setInfoOpen(true);
+  };
+
+  const openAccountDestination = (
+    destination: AccountModalDestination
+  ) => {
+    if (Platform.OS === "ios" && accountModalVisibleRef.current) {
+      pendingAccountDestinationRef.current = destination;
+      setAccountOpen(false);
+      return;
+    }
+
+    setAccountOpen(false);
+    showAccountDestination(destination);
+  };
+
+  const handleAccountModalDismiss = () => {
+    accountModalVisibleRef.current = false;
+    const destination = pendingAccountDestinationRef.current;
+    pendingAccountDestinationRef.current = null;
+    if (destination) showAccountDestination(destination);
+  };
+
+  const openPayments = () => {
+    openAccountDestination("premium");
   };
 
   // ✅ umožní otevřít paywall přímo z jiné záložky (např. OneMore → Premium)
@@ -1988,12 +2033,7 @@ const buyPremium = async () => {
         openCancelSubscription(premiumSubscription.managementURL)
       );
     } catch {
-      Alert.alert(
-        p.premium,
-        lang === "cs"
-          ? "Nepodařilo se otevřít správu předplatného."
-          : "Could not open subscription management."
-      );
+      Alert.alert(p.premium, p.premiumManagementOpenFailed);
     } finally {
       setPremiumBusy(false);
     }
@@ -2779,6 +2819,10 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         transparent
         animationType="fade"
         onRequestClose={() => setAccountOpen(false)}
+        onShow={() => {
+          accountModalVisibleRef.current = true;
+        }}
+        onDismiss={handleAccountModalDismiss}
       >
         <Pressable
           style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
@@ -2951,7 +2995,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             </View>
 
             <Pressable
-              onPress={() => setPwdOpen(true)}
+              onPress={() => openAccountDestination("password")}
               style={({ pressed }) => [
                 styles.modalLinkRow,
                 { borderColor: UI.stroke, backgroundColor: UI.card },
@@ -2965,10 +3009,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             </Pressable>
 
             <Pressable
-              onPress={() => {
-                setNewUsername("");
-                setUsernameOpen(true);
-              }}
+              onPress={() => openAccountDestination("username")}
               style={({ pressed }) => [
                 styles.modalLinkRow,
                 { borderColor: UI.stroke, backgroundColor: UI.card },
@@ -5430,10 +5471,7 @@ const incomingCount = incoming.length;
         </Pressable>
 
         <Pressable
-          onPress={() => {
-            setInfoScreen("menu");
-            setInfoOpen(true);
-          }}
+          onPress={() => openAccountDestination("info")}
           style={({ pressed }) => [
             styles.bigItem,
             { borderColor: UI.stroke, backgroundColor: UI.card },

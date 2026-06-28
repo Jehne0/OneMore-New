@@ -2092,10 +2092,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
 
     if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
       Alert.alert(TXT.notifications, TXT.expoGoNotifications);
-    } else if (
-      Platform.OS === "ios" &&
-      msg.includes("NOTIFICATIONS_PERMISSION_DENIED")
-    ) {
+    } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
       try {
         await clearDailyRemindersForChallenge(id);
       } catch {}
@@ -4300,10 +4297,7 @@ try {
 } catch (error: any) {
   const message = String(error?.message ?? "");
 
-  if (
-    Platform.OS === "ios" &&
-    message.includes("NOTIFICATIONS_PERMISSION_DENIED")
-  ) {
+  if (message.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
     const disabledSetting = {
       ...sharedNotificationSetting,
       enabled: false,
