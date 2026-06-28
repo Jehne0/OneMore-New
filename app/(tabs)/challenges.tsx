@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Switch,
@@ -819,7 +821,10 @@ export default function ChallengesScreen() {
   async function saveRename(): Promise<void> {
     if (!renameId) return;
     const v = renameText.trim();
-    if (!v) return;
+    if (!v) {
+      Alert.alert("Přejmenovat výzvu", "Zadej název výzvy.");
+      return;
+    }
 
     const next = await renameChallenge(renameId, v);
     const next2 = ensureDaily(next);
@@ -993,8 +998,12 @@ export default function ChallengesScreen() {
 
         {/* RENAME MODAL */}
         <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setRenameOpen(false)}>
-            <Pressable style={styles.modalCard} onPress={() => {}}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <Pressable style={styles.modalBackdrop} onPress={() => setRenameOpen(false)}>
+              <Pressable style={styles.modalCard} onPress={() => {}}>
               <Text style={styles.modalTitle}>Přejmenovat výzvu</Text>
 
               <TextInput
@@ -1017,8 +1026,9 @@ export default function ChallengesScreen() {
                   <Text style={styles.modalBtnText}>Uložit</Text>
                 </Pressable>
               </View>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* REMINDER MODAL */}

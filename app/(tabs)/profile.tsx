@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   Alert as NativeAlert,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -213,6 +215,9 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     premiumManage: "Spravovat předplatné",
     premiumChecking: "Kontroluji Premium…",
     open: "Otevřít",
+    linkTitle: "Odkaz",
+    privacyLinkFailed: "Nepodařilo se otevřít Ochranu soukromí.",
+    termsLinkFailed: "Nepodařilo se otevřít Podmínky používání.",
     subject: "Předmět",
     message: "Zpráva",
     send: "Odeslat",
@@ -223,6 +228,14 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     addByUsername: "Přidat podle username",
     addByUsernameHelp: "Zadej uživatelské jméno člověka, kterého chceš přidat.",
     add: "Přidat",
+    addingFriend: "Přidávám…",
+    addFriendMissingUsername: "Zadej uživatelské jméno.",
+    addFriendSignInRequired: "Pro přidání přítele se nejdřív přihlas.",
+    addFriendFreeLimit: "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium.",
+    addFriendNotFound: "Uživatel s tímto username nebyl nalezen.",
+    addFriendSelf: "Nemůžeš přidat sám sebe 🙂",
+    addFriendSent: "Žádost odeslána.",
+    addFriendFailed: "Nepodařilo se odeslat žádost.",
     myFriends: "Moji přátelé",
     addShort: "+ Přidat",
     invite: "Vyzvat",
@@ -382,6 +395,9 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   premiumManage: "Manage subscription",
   premiumChecking: "Checking Premium…",
   open: "Open",
+  linkTitle: "Link",
+  privacyLinkFailed: "Could not open the privacy policy.",
+  termsLinkFailed: "Could not open the terms of use.",
   subject: "Subject",
   message: "Message",
   send: "Send",
@@ -392,6 +408,14 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   addByUsername: "Add by username",
   addByUsernameHelp: "Enter the username of the person you want to add.",
   add: "Add",
+  addingFriend: "Adding…",
+  addFriendMissingUsername: "Enter a username.",
+  addFriendSignInRequired: "Sign in before adding a friend.",
+  addFriendFreeLimit: "In the Free version you can have only 1 friend. Premium is required for more.",
+  addFriendNotFound: "No user with this username was found.",
+  addFriendSelf: "You can’t add yourself 🙂",
+  addFriendSent: "Request sent.",
+  addFriendFailed: "Could not send the request.",
   myFriends: "My friends",
   addShort: "+ Add",
   invite: "Invite",
@@ -565,6 +589,9 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   premiumManage: "Zarządzaj subskrypcją",
   premiumChecking: "Sprawdzam Premium…",
   open: "Otwórz",
+  linkTitle: "Link",
+  privacyLinkFailed: "Nie udało się otworzyć polityki prywatności.",
+  termsLinkFailed: "Nie udało się otworzyć warunków korzystania.",
   subject: "Temat",
   message: "Wiadomość",
   send: "Wyślij",
@@ -575,6 +602,14 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   addByUsername: "Dodaj po nazwie użytkownika",
   addByUsernameHelp: "Wpisz nazwę użytkownika osoby, którą chcesz dodać.",
   add: "Dodaj",
+  addingFriend: "Dodawanie…",
+  addFriendMissingUsername: "Wpisz nazwę użytkownika.",
+  addFriendSignInRequired: "Zaloguj się przed dodaniem znajomego.",
+  addFriendFreeLimit: "W wersji Free możesz mieć tylko 1 znajomego. Więcej znajomych wymaga Premium.",
+  addFriendNotFound: "Nie znaleziono użytkownika o tej nazwie.",
+  addFriendSelf: "Nie możesz dodać samego siebie 🙂",
+  addFriendSent: "Prośba została wysłana.",
+  addFriendFailed: "Nie udało się wysłać prośby.",
   myFriends: "Moi znajomi",
   addShort: "+ Dodaj",
   invite: "Zaproś",
@@ -742,6 +777,9 @@ history: "Herausforderungsverlauf",
   premiumManage: "Abo verwalten",
   premiumChecking: "Premium wird geprüft…",
   open: "Öffnen",
+  linkTitle: "Link",
+  privacyLinkFailed: "Die Datenschutzerklärung konnte nicht geöffnet werden.",
+  termsLinkFailed: "Die Nutzungsbedingungen konnten nicht geöffnet werden.",
   subject: "Betreff",
   message: "Nachricht",
   send: "Senden",
@@ -752,6 +790,14 @@ history: "Herausforderungsverlauf",
   addByUsername: "Per Benutzername hinzufügen",
   addByUsernameHelp: "Gib den Benutzernamen der Person ein, die du hinzufügen möchtest.",
   add: "Hinzufügen",
+  addingFriend: "Wird hinzugefügt…",
+  addFriendMissingUsername: "Gib einen Benutzernamen ein.",
+  addFriendSignInRequired: "Melde dich an, bevor du einen Freund hinzufügst.",
+  addFriendFreeLimit: "In der Free-Version kannst du nur 1 Freund haben. Für mehr ist Premium erforderlich.",
+  addFriendNotFound: "Kein Benutzer mit diesem Benutzernamen gefunden.",
+  addFriendSelf: "Du kannst dich nicht selbst hinzufügen 🙂",
+  addFriendSent: "Anfrage gesendet.",
+  addFriendFailed: "Die Anfrage konnte nicht gesendet werden.",
   myFriends: "Meine Freunde",
   addShort: "+ Hinzufügen",
   invite: "Einladen",
@@ -1679,7 +1725,10 @@ async function declineSharedInviteFromFriends(challengeId: string) {
   }
 }
 
-  const styles = useMemo(() => makeStyles(UI), [UI]);
+  const styles = useMemo(
+    () => makeStyles(UI, insets.bottom),
+    [UI, insets.bottom]
+  );
 const noScaleText = {
   allowFontScaling: false as const,
   maxFontSizeMultiplier: 1,
@@ -2104,25 +2153,21 @@ const buyPremium = async () => {
   }
 };
 
-  const openPrivacyLink = async () => {
-    const url = PRIVACY_URL;
-    const ok = await Linking.canOpenURL(url);
-    if (!ok) {
-      Alert.alert(lang === "cs" ? "Odkaz" : "Link", lang === "cs" ? "Nepodařilo se otevřít Ochranu soukromí." : "Could not open the privacy policy.");
-      return;
+  const openExternalLink = async (url: string, errorMessage: string) => {
+    try {
+      const ok = await Linking.canOpenURL(url);
+      if (!ok) throw new Error("LINK_NOT_SUPPORTED");
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(p.linkTitle, errorMessage);
     }
-    await Linking.openURL(url);
   };
 
-  const openTermsLink = async () => {
-    const url = TERMS_URL;
-    const ok = await Linking.canOpenURL(url);
-    if (!ok) {
-      Alert.alert(lang === "cs" ? "Odkaz" : "Link", lang === "cs" ? "Nepodařilo se otevřít Podmínky používání." : "Could not open the terms of use.");
-      return;
-    }
-    await Linking.openURL(url);
-  };
+  const openPrivacyLink = () =>
+    openExternalLink(PRIVACY_URL, p.privacyLinkFailed);
+
+  const openTermsLink = () =>
+    openExternalLink(TERMS_URL, p.termsLinkFailed);
 
   const sendSupport = async () => {
     const e = supportEmail.trim();
@@ -2376,6 +2421,65 @@ function openChallengeInvite(friendUid: string) {
     }
   }
 
+  async function submitFriendRequest() {
+    if (friendsBusy) return;
+
+    const friendAlert = Platform.OS === "ios" ? NativeAlert : Alert;
+    const me = auth.currentUser?.uid;
+    const username = addUsername.trim();
+
+    if (!me) {
+      friendAlert.alert(p.addFriend, p.addFriendSignInRequired);
+      return;
+    }
+
+    if (!username) {
+      friendAlert.alert(p.addFriend, p.addFriendMissingUsername);
+      return;
+    }
+
+    const acceptedCount = friendEdges.filter(
+      (edge) => edge.status === "accepted"
+    ).length;
+
+    if (!premium && acceptedCount >= 1) {
+      friendAlert.alert(p.addFriend, p.addFriendFreeLimit);
+      return;
+    }
+
+    setFriendsBusy(true);
+    Keyboard.dismiss();
+
+    try {
+      const otherUid = await resolveUidByUsername(username);
+
+      if (!otherUid) {
+        friendAlert.alert(p.addFriend, p.addFriendNotFound);
+        return;
+      }
+
+      if (otherUid === me) {
+        friendAlert.alert(p.addFriend, p.addFriendSelf);
+        return;
+      }
+
+      await sendFriendRequest(otherUid);
+      setAddUsername("");
+      setAddFriendOpen(false);
+      setFriendsOpen(false);
+      setTimeout(() => {
+        showPwdPopup("success", p.friends, p.addFriendSent);
+      }, 300);
+    } catch (error: any) {
+      friendAlert.alert(
+        p.addFriend,
+        error?.message ?? p.addFriendFailed
+      );
+    } finally {
+      setFriendsBusy(false);
+    }
+  }
+
   const infoTitle = useMemo(() => {
     switch (infoScreen) {
       case "menu":
@@ -2433,7 +2537,10 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
           style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
           onPress={() => !deleteWorking && setDeleteOpen(false)}
         />
-        <View style={styles.popupWrap}>
+        <KeyboardAvoidingView
+          style={styles.popupWrap}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View
             style={[
               styles.popupCard,
@@ -2506,7 +2613,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
               </Text>
             </Pressable>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ✅ MODAL – Změna hesla */}
@@ -2548,6 +2655,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
             contentContainerStyle={{ paddingBottom: 10 }}
           >
             <Text style={[styles.infoText, { color: UI.sub }]}>
@@ -2626,6 +2734,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
             contentContainerStyle={{ paddingBottom: 10 }}
           >
             <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 10 }]}>
@@ -2967,12 +3076,17 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             </Pressable>
           </View>
 
-          <View
-            style={[
-              styles.infoCard,
-              { borderColor: UI.stroke, backgroundColor: UI.card },
-            ]}
+          <ScrollView
+            contentContainerStyle={{
+              paddingBottom: Math.max(12, insets.bottom + 12),
+            }}
           >
+            <View
+              style={[
+                styles.infoCard,
+                { borderColor: UI.stroke, backgroundColor: UI.card },
+              ]}
+            >
             {[
               {
                 key: "challengeReminders" as const,
@@ -3047,7 +3161,8 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                 />
               </View>
             ))}
-          </View>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -3345,6 +3460,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             <ScrollView
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
               showsVerticalScrollIndicator={true}
               persistentScrollbar={
                 Platform.OS === "android" && infoScreen === "streak_medals"
@@ -4295,7 +4411,11 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                 </Text>
               </View>
             ) : (
-              <ScrollView contentContainerStyle={{ paddingBottom: 18 }}>
+              <ScrollView
+                contentContainerStyle={{ paddingBottom: 18 }}
+                keyboardShouldPersistTaps="always"
+                automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              >
                 {(() => {
                   const me = auth.currentUser?.uid ?? "";
 
@@ -4356,7 +4476,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
   >
     <View style={styles.sheetHeader}>
       <Text style={[styles.infoTitle, { color: UI.text, marginBottom: 0 }]}>
-        Přidat přítele
+        {p.addFriend}
       </Text>
       <Pressable
         onPress={() => setAddFriendOpen(false)}
@@ -4371,10 +4491,10 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
     </View>
 
     <Text style={[styles.infoTitle, { color: UI.text, marginTop: 12 }]}>
-      Přidat podle username
+      {p.addByUsername}
     </Text>
     <Text style={[styles.infoText, { color: UI.sub, marginTop: 8 }]}>
-      Zadej uživatelské jméno člověka, kterého chceš přidat.
+      {p.addByUsernameHelp}
     </Text>
 
     <View
@@ -4392,6 +4512,8 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         placeholderTextColor={UI.sub}
         autoCapitalize="none"
         autoCorrect={false}
+        returnKeyType="send"
+        onSubmitEditing={() => void submitFriendRequest()}
         style={[
           styles.input,
           {
@@ -4404,85 +4526,21 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
       />
       <Pressable
         disabled={friendsBusy}
-        onPress={async () => {
-          const friendAlert = Platform.OS === "ios" ? NativeAlert : Alert;
-
-          try {
-            if (!auth.currentUser?.uid) return;
-            const me = auth.currentUser.uid;
-            const username = addUsername.trim();
-            if (!username) {
-              friendAlert.alert(
-                p.friends,
-                lang === "cs" ? "Zadej uživatelské jméno." : "Enter a username."
-              );
-              return;
-            }
-
-            const acceptedCount = friendEdges.filter(
-              (e) => e.status === "accepted"
-            ).length;
-            if (!premium && acceptedCount >= 1) {
-              friendAlert.alert(
-                p.friends,
-                lang === "cs"
-                  ? "Ve Free verzi můžeš mít jen 1 přítele. Pro více je potřeba Premium."
-                  : "In the Free version you can have only 1 friend. Premium is required for more."
-              );
-              return;
-            }
-
-            setFriendsBusy(true);
-            const otherUid = await resolveUidByUsername(username);
-            if (!otherUid) {
-              friendAlert.alert(
-                p.friends,
-                lang === "cs"
-                  ? "Uživatel s tímto username nebyl nalezen."
-                  : "No user with this username was found."
-              );
-              return;
-            }
-            if (otherUid === me) {
-              friendAlert.alert(
-                p.friends,
-                lang === "cs"
-                  ? "Nemůžeš přidat sám sebe 🙂"
-                  : "You can’t add yourself 🙂"
-              );
-              return;
-            }
-
-            await sendFriendRequest(otherUid);
-            setAddUsername("");
-            setAddFriendOpen(false);
-            setFriendsOpen(false);
-            setTimeout(() => {
-              showPwdPopup(
-                "success",
-                p.friends,
-                lang === "cs" ? "Žádost odeslána." : "Request sent."
-              );
-            }, 300);
-          } catch (e: any) {
-            friendAlert.alert(
-              p.friends,
-              e?.message ??
-                (lang === "cs"
-                  ? "Nepodařilo se odeslat žádost."
-                  : "Could not send the request.")
-            );
-          } finally {
-            setFriendsBusy(false);
-          }
-        }}
+        onPress={() => void submitFriendRequest()}
         style={({ pressed }) => [
           styles.smallBtn,
           pressed && { opacity: 0.9 },
           friendsBusy && { opacity: 0.6 },
         ]}
       >
-        <Text style={styles.smallBtnText}>{p.add}</Text>
+        {friendsBusy ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <ActivityIndicator size="small" color="#0B1220" />
+            <Text style={styles.smallBtnText}>{p.addingFriend}</Text>
+          </View>
+        ) : (
+          <Text style={styles.smallBtnText}>{p.add}</Text>
+        )}
       </Pressable>
     </View>
   </View>
@@ -4925,6 +4983,7 @@ const incomingCount = incoming.length;
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
             contentContainerStyle={{ paddingBottom: 18 }}
           >
             <View
@@ -5568,7 +5627,7 @@ const incomingCount = incoming.length;
   );
 }
 
-function makeStyles(UI: any) {
+function makeStyles(UI: any, bottomInset: number) {
   return StyleSheet.create({
     screen: { flex: 1 },
     gradient: { ...StyleSheet.absoluteFillObject },
@@ -5625,7 +5684,7 @@ function makeStyles(UI: any) {
       position: "absolute",
       left: 12,
       right: 12,
-      bottom: 12,
+      bottom: Platform.OS === "ios" ? Math.max(12, bottomInset + 8) : 12,
       height: "82%",
       borderRadius: 22,
       borderWidth: 1,

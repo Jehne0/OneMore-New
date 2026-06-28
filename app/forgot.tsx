@@ -1,7 +1,16 @@
 
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert } from "../lib/appAlert";
 import { useTheme } from "../lib/theme";
 import { auth } from "../lib/firebase";
@@ -9,11 +18,12 @@ import { sendPasswordResetEmail } from "firebase/auth";
 
 export default function ForgotScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   
   const safeBack = () => {
     // může být otevřeno přímo (deep link) – pak není kam se vracet
     const can = typeof (router as any)?.canGoBack === "function" ? (router as any).canGoBack() : false;
-    if (can) safeBack();
+    if (can) router.back();
     else router.replace("/login");
   };
 const { UI } = useTheme();
@@ -44,7 +54,19 @@ const { UI } = useTheme();
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: UI.bg }]}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={[
+        styles.screen,
+        {
+          backgroundColor: UI.bg,
+          paddingTop:
+            Platform.OS === "ios" ? Math.max(54, insets.top + 20) : 54,
+          paddingBottom:
+            Platform.OS === "ios" ? Math.max(22, insets.bottom + 12) : 22,
+        },
+      ]}
+    >
       <Text style={[styles.title, { color: UI.text }]}>Obnova hesla</Text>
       <Text style={[styles.sub, { color: UI.sub }]}>
         Zadej e-mail a pošleme ti odkaz pro nastavení nového hesla.
@@ -82,7 +104,7 @@ const { UI } = useTheme();
           </Text>
         </Pressable>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -238,7 +238,7 @@ function SparkleBurst({ progress }: { progress: Animated.Value }) {
   );
 }
 
-function makeStyles(UI: any) {
+function makeStyles(UI: any, bottomInset: number) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: "transparent" },
     gradient: { ...StyleSheet.absoluteFillObject },
@@ -547,7 +547,7 @@ function makeStyles(UI: any) {
       position: "absolute",
       left: 12,
       right: 12,
-      bottom: 12,
+      bottom: Platform.OS === "ios" ? Math.max(12, bottomInset + 8) : 12,
       borderRadius: 22,
       backgroundColor: UI.sheetBg,
       borderWidth: 1,
@@ -621,7 +621,7 @@ pickerSheet: {
   position: "absolute",
   left: 16,
   right: 16,
-  bottom: 24,
+  bottom: Platform.OS === "ios" ? Math.max(24, bottomInset + 12) : 24,
   borderRadius: 16,
   borderWidth: 1,
   overflow: "hidden",
@@ -1099,6 +1099,7 @@ notificationCount: "Number of notifications",
       notificationFreeLimit: "In the free version, you can only have notifications for one challenge. Turn them off on another challenge first.",
       expoGoNotifications: "Notifications do not work in Expo Go. Since Expo SDK 53, notifications are disabled in Expo Go. A development build (EAS) is required.",
       notificationsFailed: "Could not set notifications.",
+      notificationPermissionDenied: "Notifications are off in system settings. Enable them to turn on reminders.",
       deleteQuestion: "Delete challenge?",
       deleteQuestionText: "This action cannot be undone.",
       delete: "Delete",
@@ -1200,6 +1201,7 @@ notificationCount: "Liczba powiadomień",
       notificationFreeLimit: "W wersji Free możesz mieć powiadomienia tylko dla jednego wyzwania. Najpierw wyłącz je przy innym wyzwaniu.",
       expoGoNotifications: "Powiadomienia nie działają w Expo Go. Od Expo SDK 53 powiadomienia w Expo Go są wyłączone. Wymagany jest development build (EAS).",
       notificationsFailed: "Nie udało się ustawić powiadomień.",
+      notificationPermissionDenied: "Powiadomienia są wyłączone w ustawieniach systemu. Włącz je, aby korzystać z przypomnień.",
       deleteQuestion: "Usunąć wyzwanie?",
       deleteQuestionText: "Tej akcji nie można cofnąć.",
       delete: "Usuń",
@@ -1302,6 +1304,7 @@ notificationCount: "Anzahl der Benachrichtigungen",
       notificationFreeLimit: "In der Free-Version kannst du Benachrichtigungen nur für eine Challenge haben. Schalte sie zuerst bei einer anderen Challenge aus.",
       expoGoNotifications: "Benachrichtigungen funktionieren in Expo Go nicht. Seit Expo SDK 53 sind Benachrichtigungen in Expo Go deaktiviert. Ein Development Build (EAS) ist erforderlich.",
       notificationsFailed: "Benachrichtigungen konnten nicht eingestellt werden.",
+      notificationPermissionDenied: "Mitteilungen sind in den Systemeinstellungen deaktiviert. Aktiviere sie, um Erinnerungen einzuschalten.",
       deleteQuestion: "Challenge löschen?",
       deleteQuestionText: "Diese Aktion kann nicht rückgängig gemacht werden.",
       delete: "Löschen",
@@ -1402,6 +1405,7 @@ notificationCount: "Počet notifikací",
     notificationFreeLimit: "Ve Free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy.",
     expoGoNotifications: "Notifikace v Expo Go nefungují. Od Expo SDK 53 byly notifikace v Expo Go vypnuté. Je potřeba development build (EAS).",
     notificationsFailed: "Nepodařilo se nastavit notifikace.",
+    notificationPermissionDenied: "Oznámení jsou vypnutá v nastavení telefonu. Pro zapnutí připomínek je povol.",
     deleteQuestion: "Smazat výzvu?",
     deleteQuestionText: "Tahle akce nejde vrátit zpět.",
     delete: "Smazat",
@@ -1411,8 +1415,11 @@ notificationCount: "Počet notifikací",
     challengeOff: "Výzva je vypnutá",
   };
 }, [lang]);
-  const styles = useMemo(() => makeStyles(UI), [UI]);
   const insets = useSafeAreaInsets();
+  const styles = useMemo(
+    () => makeStyles(UI, insets.bottom),
+    [UI, insets.bottom]
+  );
 
   const todayISO = useTodayISO();
 
@@ -2085,6 +2092,17 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
 
     if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
       Alert.alert(TXT.notifications, TXT.expoGoNotifications);
+    } else if (
+      Platform.OS === "ios" &&
+      msg.includes("NOTIFICATIONS_PERMISSION_DENIED")
+    ) {
+      try {
+        await clearDailyRemindersForChallenge(id);
+      } catch {}
+      setManageRemEnabled(false);
+      setManageRemTimes([]);
+      setManageRemCount(1);
+      Alert.alert(TXT.notifications, TXT.notificationPermissionDenied);
     } else {
       Alert.alert(TXT.notifications, TXT.notificationsFailed);
     }
@@ -2100,6 +2118,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   TXT.notifications,
   TXT.notificationFreeLimit,
   TXT.expoGoNotifications,
+  TXT.notificationPermissionDenied,
   TXT.notificationsFailed,
 ]);
 
@@ -3435,7 +3454,10 @@ useEffect(() => {
               </Pressable>
             </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            >
               <TextInput
                 value={addModalText}
                 onChangeText={setAddModalText}
@@ -3476,7 +3498,10 @@ useEffect(() => {
               </Pressable>
             </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            >
               <TextInput
                 value={manageRename}
                 onChangeText={setManageRename}
@@ -4127,7 +4152,12 @@ useEffect(() => {
               </Pressable>
             </View>
 
-            <View style={styles.modalRow}>
+            <ScrollView
+              contentContainerStyle={{
+                paddingBottom: Math.max(18, insets.bottom + 18),
+              }}
+            >
+              <View style={styles.modalRow}>
               <Text style={[styles.modalLabel, { color: UI.text }]}>
                 {TXT.notifications}
               </Text>
@@ -4267,11 +4297,30 @@ try {
     selectedSharedMenu.id,
     sharedNotificationSetting
   );
-} catch {
-  Alert.alert(
-    TXT.notifications,
-    TXT.notificationsFailed
-  );
+} catch (error: any) {
+  const message = String(error?.message ?? "");
+
+  if (
+    Platform.OS === "ios" &&
+    message.includes("NOTIFICATIONS_PERMISSION_DENIED")
+  ) {
+    const disabledSetting = {
+      ...sharedNotificationSetting,
+      enabled: false,
+      count: 1,
+      times: [],
+    };
+    setSharedNotificationSetting(disabledSetting);
+    try {
+      await saveSharedNotificationSetting(
+        selectedSharedMenu.id,
+        disabledSetting
+      );
+    } catch {}
+    Alert.alert(TXT.notifications, TXT.notificationPermissionDenied);
+  } else {
+    Alert.alert(TXT.notifications, TXT.notificationsFailed);
+  }
   return;
 }
 
@@ -4292,7 +4341,8 @@ try {
               <Text style={styles.primaryBtnText}>
                 {TXT.saveNotifications}
               </Text>
-            </Pressable>
+              </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>

@@ -4,6 +4,7 @@ import React, { useCallback, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
 import { challengeDisplayText, isChallengeEasyMode, loadChallengesFast, loadChallengeStatsFast } from "../lib/storage";
 import { useTheme } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type StatRow = {
   id: string;
@@ -255,6 +257,7 @@ const HistoryCard = React.memo(function HistoryCard({
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { UI, isDark } = useTheme();
   const { lang } = useI18n();
 const historyLang =
@@ -386,7 +389,16 @@ const p = HISTORY_STRINGS[historyLang];
         style={styles.gradient}
       />
 
-      <View style={[styles.header, { borderBottomColor: UI.stroke }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            borderBottomColor: UI.stroke,
+            paddingTop:
+              Platform.OS === "ios" ? Math.max(12, insets.top + 8) : 52,
+          },
+        ]}
+      >
         <Pressable
           onPress={() => router.back()}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.85 }]}
@@ -402,7 +414,15 @@ const p = HISTORY_STRINGS[historyLang];
       <FlatList
         data={rows}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingBottom:
+              Platform.OS === "ios"
+                ? Math.max(20, insets.bottom + 20)
+                : 20,
+          },
+        ]}
         renderItem={({ item }) => <HistoryCard r={item} UI={UI} p={p} />}
         initialNumToRender={14}
         maxToRenderPerBatch={14}
