@@ -95,6 +95,26 @@ async function clearOneMoreStorage() {
   }
 }
 
+const PREMIUM_REQUEST_TIMEOUT_MS = 15_000;
+
+async function withPremiumRequestTimeout<T>(request: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      request,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error("PREMIUM_REQUEST_TIMEOUT")),
+          PREMIUM_REQUEST_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 type InfoScreen =
   | "menu"
   | "support"
@@ -1104,7 +1124,7 @@ useEffect(() => {
 
   (async () => {
     try {
-      await syncPremiumFromRevenueCat();
+      await withPremiumRequestTimeout(syncPremiumFromRevenueCat());
     } catch (e: any) {
       if (__DEV__) {
         console.log("[RevenueCat] sync error from profile screen", String(e?.code ?? ""));
@@ -1848,11 +1868,11 @@ const faqItems = useMemo(() => {
   }, [infoScreen]);
 
 const buyPremium = async () => {
-  if (!premiumSubscription.loaded || premium || premiumBusy) return;
+  if (premium || premiumBusy) return;
   setPremiumBusy(true);
 
   try {
-    const pkgs = await getOfferingPackages();
+    const pkgs = await withPremiumRequestTimeout(getOfferingPackages());
 
     if (!pkgs.length) {
       Alert.alert(
@@ -1892,10 +1912,12 @@ const buyPremium = async () => {
 };
 
   const openPremiumManagement = async () => {
-    if (!premiumSubscription.loaded || premiumBusy) return;
+    if (premiumBusy) return;
     setPremiumBusy(true);
     try {
-      await openCancelSubscription(premiumSubscription.managementURL);
+      await withPremiumRequestTimeout(
+        openCancelSubscription(premiumSubscription.managementURL)
+      );
     } catch {
       Alert.alert(
         p.premium,
@@ -1909,7 +1931,7 @@ const buyPremium = async () => {
   };
 
   const managePremiumNow = async () => {
-    if (!premiumSubscription.loaded || premiumBusy) return;
+    if (premiumBusy) return;
 
     if (premiumSubscription.willRenew !== true) {
       await openPremiumManagement();
@@ -3876,44 +3898,36 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
 
                   {!premium ? (
                     <Pressable
-                      disabled={!premiumSubscription.loaded || premiumBusy}
+                      disabled={premiumBusy}
                       onPress={buyPremium}
                       style={({ pressed }) => [
                         styles.primaryBtn,
                         {
                           marginTop: 14,
-                          opacity:
-                            !premiumSubscription.loaded || premiumBusy ? 0.6 : 1,
+                          opacity: premiumBusy ? 0.6 : 1,
                         },
-                        pressed &&
-                          premiumSubscription.loaded &&
-                          !premiumBusy && { opacity: 0.9 },
+                        pressed && !premiumBusy && { opacity: 0.9 },
                       ]}
                     >
                       <Text style={styles.primaryBtnText}>
-                        {!premiumSubscription.loaded || premiumBusy
-                          ? p.premiumChecking
-                          : p.upgrade}
+                        {premiumBusy ? p.premiumChecking : p.upgrade}
                       </Text>
                     </Pressable>
                   ) : (
                     <Pressable
-                      disabled={!premiumSubscription.loaded || premiumBusy}
+                      disabled={premiumBusy}
                       onPress={managePremiumNow}
                       style={({ pressed }) => [
                         styles.dangerBtn,
                         {
                           marginTop: 14,
-                          opacity:
-                            !premiumSubscription.loaded || premiumBusy ? 0.6 : 1,
+                          opacity: premiumBusy ? 0.6 : 1,
                         },
-                        pressed &&
-                          premiumSubscription.loaded &&
-                          !premiumBusy && { opacity: 0.9 },
+                        pressed && !premiumBusy && { opacity: 0.9 },
                       ]}
                     >
                       <Text style={styles.dangerText}>
-                        {!premiumSubscription.loaded || premiumBusy
+                        {premiumBusy
                           ? p.premiumChecking
                           : premiumSubscription.willRenew === true
                           ? p.premiumCancel
