@@ -3345,10 +3345,14 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             <ScrollView
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              persistentScrollbar={
+                Platform.OS === "android" && infoScreen === "streak_medals"
+              }
               contentContainerStyle={{
                 paddingBottom:
                   infoScreen === "streak_medals"
-                    ? Math.max(insets.bottom + 32, 48)
+                    ? Math.max(64, insets.bottom + 64)
                     : 12,
               }}
             >
