@@ -152,14 +152,12 @@ export async function changeUsername(uid: string, newUsername: string) {
     const profile = userSnap.data()?.profile;
     const oldLower = profile?.usernameLower;
 
-    if (oldLower === newLower) return;
-
     const newSnap = await tx.get(newUnameRef);
     if (newSnap.exists() && newSnap.data()?.uid !== uid) {
       throw new Error("Tohle uživatelské jméno je už obsazené.");
     }
 
-    if (oldLower) {
+    if (oldLower && oldLower !== newLower) {
       const oldUnameRef = doc(db, "usernames", oldLower);
       tx.delete(oldUnameRef);
     }

@@ -460,22 +460,17 @@ exports.inviteSharedChallengeMember = (0, https_1.onCall)({ region: "europe-west
         if (pendingInviteUids.includes(friendUid)) {
             throw new https_1.HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
         }
-        const friendAlreadyAccepted = acceptedBy.includes(friendUid) && !leftBy.includes(friendUid);
-        if (friendAlreadyAccepted) {
+        if (memberUids.includes(friendUid)) {
             throw new https_1.HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
         }
-        const nextMemberUids = uniqueUids([...memberUids, friendUid]);
-        if (nextMemberUids.length > MAX_SHARED_MEMBERS) {
-            throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
-        }
-        if (uniqueUids([...nextMemberUids, ...pendingInviteUids]).length > MAX_SHARED_MEMBERS) {
+        if (uniqueUids([...memberUids, ...pendingInviteUids, friendUid]).length > MAX_SHARED_MEMBERS) {
             throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
         }
         challengeTitle = safeStr(data?.title, 120) || challengeTitle;
         tx.set(challengeRef, {
-            memberUids: nextMemberUids,
             acceptedBy: acceptedBy.filter((memberUid) => memberUid !== friendUid),
             pendingInviteUids: uniqueUids([...pendingInviteUids, friendUid]),
+            leftBy: leftBy.filter((memberUid) => memberUid !== friendUid),
             updatedAt: firestore_2.FieldValue.serverTimestamp(),
         }, { merge: true });
     });
