@@ -96,6 +96,8 @@ async function clearOneMoreStorage() {
 }
 
 const PREMIUM_REQUEST_TIMEOUT_MS = 15_000;
+const USERNAME_SAVE_TIMEOUT_MS = 15_000;
+const USERNAME_SAVE_TIMEOUT_ERROR = "USERNAME_SAVE_TIMEOUT";
 
 async function withPremiumRequestTimeout<T>(request: Promise<T>): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -107,6 +109,24 @@ async function withPremiumRequestTimeout<T>(request: Promise<T>): Promise<T> {
         timeoutId = setTimeout(
           () => reject(new Error("PREMIUM_REQUEST_TIMEOUT")),
           PREMIUM_REQUEST_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function withUsernameSaveTimeout<T>(request: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      request,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(USERNAME_SAVE_TIMEOUT_ERROR)),
+          USERNAME_SAVE_TIMEOUT_MS
         );
       }),
     ]);
@@ -2186,6 +2206,73 @@ const buyPremium = async () => {
     }
   };
 
+  const saveUsername = async () => {
+    if (usernameBusy) return;
+
+    const username = newUsername.trim();
+    if (!username) {
+      showPwdPopup(
+        "error",
+        lang === "cs" ? "Změna username" : "Change username",
+        lang === "cs"
+          ? "Zadej prosím nové uživatelské jméno."
+          : "Please enter a new username."
+      );
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      showPwdPopup(
+        "error",
+        lang === "cs" ? "Změna username" : "Change username",
+        lang === "cs" ? "Nejsi přihlášený." : "You are not signed in."
+      );
+      return;
+    }
+
+    setUsernameBusy(true);
+    try {
+      await withUsernameSaveTimeout(changeUsername(user.uid, username));
+
+      setMyUsername(username);
+      setUsernameOpen(false);
+      setNewUsername("");
+
+      void withUsernameSaveTimeout(
+        updateProfile(user, { displayName: username })
+      ).catch((error) => {
+        if (__DEV__) {
+          console.log("[Username] Firebase Auth profile update failed", error);
+        }
+      });
+
+      showPwdPopup(
+        "success",
+        lang === "cs" ? "Hotovo" : "Done",
+        lang === "cs"
+          ? "Uživatelské jméno bylo změněno."
+          : "Username has been changed."
+      );
+    } catch (error: any) {
+      const message =
+        error?.message === USERNAME_SAVE_TIMEOUT_ERROR
+          ? lang === "cs"
+            ? "Uložení trvá příliš dlouho. Zkontroluj připojení a zkus to znovu."
+            : "Saving is taking too long. Check your connection and try again."
+          : error?.message ??
+            (lang === "cs" ? "Změna se nepovedla." : "Change failed.");
+
+      showPwdPopup(
+        "error",
+        lang === "cs" ? "Změna username" : "Change username",
+        message
+      );
+    } finally {
+      setUsernameBusy(false);
+    }
+  };
+
   const closeInfo = () => {
     setInfoOpen(false);
     setInfoScreen("menu");
@@ -2562,48 +2649,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
 
             <Pressable
               disabled={usernameBusy}
-              onPress={async () => {
-                try {
-                  if (!auth.currentUser?.uid) return;
-
-                  const v = newUsername.trim();
-                  if (!v) {
-                    showPwdPopup(
-                      "error",
-                      lang === "cs" ? "Změna username" : "Change username",
-                      lang === "cs" ? "Zadej prosím nové uživatelské jméno." : "Please enter a new username."
-                    );
-                    return;
-                  }
-
-                  setUsernameBusy(true);
-                  await changeUsername(auth.currentUser.uid, v);
-
-                  try {
-                    await updateProfile(auth.currentUser, { displayName: v });
-                  } catch {}
-
-                  try {
-                    const p = await getProfile(auth.currentUser.uid);
-                    setMyUsername((p?.username ?? v).trim());
-                  } catch {
-                    setMyUsername(v);
-                  }
-
-                  setUsernameOpen(false);
-                  setNewUsername("");
-
-                  showPwdPopup("success", lang === "cs" ? "Hotovo" : "Done", lang === "cs" ? "Uživatelské jméno bylo změněno." : "Username has been changed.");
-                } catch (e: any) {
-                  showPwdPopup(
-                    "error",
-                    lang === "cs" ? "Změna username" : "Change username",
-                    e?.message ?? (lang === "cs" ? "Změna se nepovedla." : "Change failed.")
-                  );
-                } finally {
-                  setUsernameBusy(false);
-                }
-              }}
+              onPress={saveUsername}
               style={({ pressed }) => [
                 styles.primaryBtn,
                 (pressed || usernameBusy) && { opacity: 0.9 },
