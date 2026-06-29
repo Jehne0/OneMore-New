@@ -1,18 +1,29 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ensureDaily } from "./logic";
 import { getTodayISO } from "./clock";
+import { auth } from "./firebase";
 
-const STORAGE_KEY = "onemore_state";
-const BACKUP_KEY = "onemore_state_backup";
-const CHALLENGES_KEY = "onemore_challenges_v1";
-const STATS_KEY = "onemore_challengeStats_v1";
-const LOCAL_UPDATED_AT_KEY = "onemore_local_updatedAtISO";
+const LEGACY_STORAGE_KEY = "onemore_state";
+const LEGACY_BACKUP_KEY = "onemore_state_backup";
+const LEGACY_CHALLENGES_KEY = "onemore_challenges_v1";
+const LEGACY_STATS_KEY = "onemore_challengeStats_v1";
+const LEGACY_LOCAL_UPDATED_AT_KEY = "onemore_local_updatedAtISO";
+const UID_MIGRATION_MARKER_KEY = "onemore_state_migrated_to_uid";
+
+const storageKeyForUid = (uid: string) => `${LEGACY_STORAGE_KEY}_${uid}`;
+const backupKeyForUid = (uid: string) => `${LEGACY_BACKUP_KEY}_${uid}`;
+const challengesKeyForUid = (uid: string) => `${LEGACY_CHALLENGES_KEY}_${uid}`;
+const statsKeyForUid = (uid: string) => `${LEGACY_STATS_KEY}_${uid}`;
+export const localUpdatedAtKeyForUid = (uid: string) =>
+  `${LEGACY_LOCAL_UPDATED_AT_KEY}_${uid}`;
 
 // ---- FAST-KEYS in-memory cache (pro ultra rychlé přepínání obrazovek) ----
 // Pozn.: AsyncStorage.getItem + JSON.parse dokáže na některých zařízeních trvat překvapivě dlouho
 // i pro relativně malé payloady. Proto cacheujeme výsledky a aktualizujeme je při saveState().
 let _fastChallengesCache: Challenge[] | null = null;
 let _fastStatsCache: Record<string, ChallengeStats> | null = null;
+let _fastChallengesCacheUid: string | null = null;
+let _fastStatsCacheUid: string | null = null;
 
 // ✅ fallback klíče (když se někdy omylem změnil STORAGE_KEY a data jsou uložená jinde)
 const LEGACY_KEYS = ["onemore_state_v2", "onemoreState", "oneMore_state"];
@@ -145,10 +156,13 @@ export function updateStatsOnSkipped(
 
 // ---- in-memory cache + listeners (rychlejší UI, okamžité přepočty) ----
 let _cache: AppState | null = null;
+let _cacheUid: string | null = null;
+const STATE_UID = Symbol("onemoreStateUid");
 const _listeners = new Set<(s: AppState) => void>();
 
 export function getCachedState(): AppState | null {
-  return _cache;
+  const uid = auth.currentUser?.uid ?? null;
+  return uid && _cacheUid === uid ? _cache : null;
 }
 
 export function subscribeState(fn: (s: AppState) => void): () => void {
@@ -296,6 +310,51 @@ export const defaultState: AppState = {
   // ✅ free reminder storage
   reminderNotifIds: {},
 };
+
+function stateUid(state: AppState): string | null {
+  return String((state as any)?.[STATE_UID] ?? "") || null;
+}
+
+function tagStateForUid(state: AppState, uid?: string | null): AppState {
+  if (!uid) return state;
+  Object.defineProperty(state, STATE_UID, {
+    value: uid,
+    enumerable: true,
+    configurable: true,
+  });
+  return state;
+}
+
+function createDefaultState(uid?: string | null): AppState {
+  return tagStateForUid(
+    {
+      ...defaultState,
+      challenges: [],
+      oddEvenIds: { ...defaultState.oddEvenIds! },
+      history: [],
+      archivedChallenges: [],
+      easyModeChallengeIds: [],
+      everCompletedKeys: [],
+      reminderNotifIds: {},
+      challengeStats: {},
+    },
+    uid
+  );
+}
+
+function clearStateCaches() {
+  _cache = null;
+  _cacheUid = null;
+  _fastChallengesCache = null;
+  _fastStatsCache = null;
+  _fastChallengesCacheUid = null;
+  _fastStatsCacheUid = null;
+}
+
+export function clearInMemoryState(): void {
+  clearStateCaches();
+  _notify(createDefaultState());
+}
 
 export function easyModeChallengeIdSet(
   state?: Pick<AppState, "challenges" | "archivedChallenges" | "easyModeChallengeIds"> | null
@@ -623,8 +682,6 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
       ...Array.from(easyModeChallengeIdSet(merged)),
     ])
   );
-    // keep fast keys updated
-    void persistFastKeys(merged as AppState);
     return merged;
 }
 
@@ -892,9 +949,11 @@ return { next, changed: true };
  * Používá se hlavně pro History screen, aby se otevíral okamžitě i při tisících záznamů.
  */
 export async function loadChallengesFast(): Promise<Challenge[]> {
-  if (_fastChallengesCache) return _fastChallengesCache;
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+  if (_fastChallengesCacheUid === uid && _fastChallengesCache) return _fastChallengesCache;
   try {
-    const raw = await AsyncStorage.getItem(CHALLENGES_KEY);
+    const raw = await AsyncStorage.getItem(challengesKeyForUid(uid));
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
@@ -929,7 +988,10 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
           easyMode: c.easyMode === true,
         })) as Challenge[];
 
-        _fastChallengesCache = parsed;
+        if (auth.currentUser?.uid === uid) {
+          _fastChallengesCacheUid = uid;
+          _fastChallengesCache = parsed;
+        }
         return parsed;
       }
     }
@@ -940,14 +1002,20 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
 }
 
 export async function loadChallengeStatsFast(): Promise<Record<string, ChallengeStats>> {
-  if (_fastStatsCache) return _fastStatsCache;
+  const uid = auth.currentUser?.uid;
+  if (!uid) return {};
+  if (_fastStatsCacheUid === uid && _fastStatsCache) return _fastStatsCache;
   try {
-    const raw = await AsyncStorage.getItem(STATS_KEY);
+    const raw = await AsyncStorage.getItem(statsKeyForUid(uid));
     if (raw) {
       const obj = JSON.parse(raw);
       if (obj && typeof obj === "object") {
-        _fastStatsCache = obj as Record<string, ChallengeStats>;
-        return _fastStatsCache;
+        const parsed = obj as Record<string, ChallengeStats>;
+        if (auth.currentUser?.uid === uid) {
+          _fastStatsCacheUid = uid;
+          _fastStatsCache = parsed;
+        }
+        return parsed;
       }
     }
   } catch {}
@@ -955,73 +1023,155 @@ export async function loadChallengeStatsFast(): Promise<Record<string, Challenge
   return {} as Record<string, ChallengeStats>;
 }
 
-async function persistFastKeys(state: AppState) {
+async function persistFastKeys(state: AppState, uid: string) {
   try {
-    await AsyncStorage.setItem(CHALLENGES_KEY, JSON.stringify(state.challenges ?? []));
-    await AsyncStorage.setItem(STATS_KEY, JSON.stringify((state as any).challengeStats ?? {}));
+    await AsyncStorage.setItem(challengesKeyForUid(uid), JSON.stringify(state.challenges ?? []));
+    await AsyncStorage.setItem(statsKeyForUid(uid), JSON.stringify((state as any).challengeStats ?? {}));
 
-    // keep in-memory cache hot
-    _fastChallengesCache = (state.challenges ?? []) as any;
-    _fastStatsCache = ((state as any).challengeStats ?? {}) as any;
+    if (auth.currentUser?.uid === uid) {
+      // keep in-memory cache hot
+      _fastChallengesCacheUid = uid;
+      _fastStatsCacheUid = uid;
+      _fastChallengesCache = (state.challenges ?? []) as any;
+      _fastStatsCache = ((state as any).challengeStats ?? {}) as any;
+    }
   } catch {
     // ignore
   }
 }
 
+let _legacyMigrationPromise: Promise<void> | null = null;
+
+async function readLegacyState(): Promise<AppState | null> {
+  for (const key of [LEGACY_STORAGE_KEY, LEGACY_BACKUP_KEY, ...LEGACY_KEYS]) {
+    const raw = await readStateFromKey(key);
+    if (!raw) continue;
+
+    try {
+      return parseAndMerge(raw);
+    } catch {
+      // Try the next legacy/backup key.
+    }
+  }
+
+  return null;
+}
+
+async function ensureUidStorageReady(uid: string): Promise<void> {
+  if (!_legacyMigrationPromise) {
+    _legacyMigrationPromise = (async () => {
+      const [scopedState, scopedBackup, marker] = await Promise.all([
+        readStateFromKey(storageKeyForUid(uid)),
+        readStateFromKey(backupKeyForUid(uid)),
+        AsyncStorage.getItem(UID_MIGRATION_MARKER_KEY),
+      ]);
+
+      if (scopedState || scopedBackup) {
+        if (!marker && (await readLegacyState())) {
+          await AsyncStorage.setItem(UID_MIGRATION_MARKER_KEY, uid);
+        }
+        return;
+      }
+
+      if (marker) return;
+
+      const legacy = await readLegacyState();
+      if (!legacy) return;
+
+      const { next: normalized } = migrateBestStreakFromCurrent(legacy);
+      const payload = JSON.stringify(normalized);
+      const legacyUpdatedAt = await AsyncStorage.getItem(LEGACY_LOCAL_UPDATED_AT_KEY);
+
+      await AsyncStorage.multiSet([
+        [storageKeyForUid(uid), payload],
+        [backupKeyForUid(uid), payload],
+        [challengesKeyForUid(uid), JSON.stringify(normalized.challenges ?? [])],
+        [statsKeyForUid(uid), JSON.stringify(normalized.challengeStats ?? {})],
+        [localUpdatedAtKeyForUid(uid), legacyUpdatedAt ?? new Date().toISOString()],
+      ]);
+      await AsyncStorage.setItem(UID_MIGRATION_MARKER_KEY, uid);
+    })().finally(() => {
+      _legacyMigrationPromise = null;
+    });
+  }
+
+  await _legacyMigrationPromise;
+}
+
+async function writeStateSnapshotForUid(
+  uid: string,
+  state: AppState,
+  updatedAtISO = new Date().toISOString()
+): Promise<void> {
+  const payload = JSON.stringify(state);
+  await AsyncStorage.multiSet([
+    [storageKeyForUid(uid), payload],
+    [backupKeyForUid(uid), payload],
+    [localUpdatedAtKeyForUid(uid), updatedAtISO],
+  ]);
+  await persistFastKeys(state, uid);
+}
 
 export async function ensureFastKeys(): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+
   try {
     const [cRaw, sRaw] = await Promise.all([
-      AsyncStorage.getItem(CHALLENGES_KEY),
-      AsyncStorage.getItem(STATS_KEY),
+      AsyncStorage.getItem(challengesKeyForUid(uid)),
+      AsyncStorage.getItem(statsKeyForUid(uid)),
     ]);
     if (cRaw && sRaw) return;
 
     // Jednorázově načti velký state (může trvat), ale NIKDY to nespouštěj při otevření Historie.
-    const state = await loadState();
-    await persistFastKeys(state);
+    const state = await loadStateForUid(uid);
+    await persistFastKeys(state, uid);
   } catch {
     // ignore
   }
 }
-export async function loadState(): Promise<AppState> {
-  if (_cache) return _cache;
+export async function loadStateForUid(uid: string): Promise<AppState> {
+  if (!uid) return createDefaultState();
+  if (_cacheUid === uid && _cache) return _cache;
+
+  await ensureUidStorageReady(uid);
+
+  const storageKey = storageKeyForUid(uid);
+  const backupKey = backupKeyForUid(uid);
+
   try {
-    let raw = await readStateFromKey(STORAGE_KEY);
-    let usedKey: string | null = raw ? STORAGE_KEY : null;
+    let raw = await readStateFromKey(storageKey);
+    let usedKey: string | null = raw ? storageKey : null;
 
     if (!raw) {
-      const backupRaw = await readStateFromKey(BACKUP_KEY);
+      const backupRaw = await readStateFromKey(backupKey);
       if (backupRaw) {
         raw = backupRaw;
-        usedKey = BACKUP_KEY;
+        usedKey = backupKey;
       }
     }
 
     if (!raw) {
-      for (const k of LEGACY_KEYS) {
-        const legacyRaw = await readStateFromKey(k);
-        if (legacyRaw) {
-          raw = legacyRaw;
-          usedKey = k;
-          break;
-        }
+      const clean = createDefaultState(uid);
+      if (auth.currentUser?.uid === uid) {
+        _cache = clean;
+        _cacheUid = uid;
       }
-    }
-
-    if (!raw) {
-      _cache = defaultState;
-      return defaultState;
+      return clean;
     }
 
     const merged = parseAndMerge(raw);
-    const { next: normalized, changed: bestStreakMigrated } =
+    const { next: migrated, changed: bestStreakMigrated } =
       migrateBestStreakFromCurrent(merged);
-    _cache = normalized;
+    const normalized = tagStateForUid(migrated, uid);
+    if (auth.currentUser?.uid === uid) {
+      _cache = normalized;
+      _cacheUid = uid;
+    }
 
-    if ((usedKey && usedKey !== STORAGE_KEY) || bestStreakMigrated) {
+    if ((usedKey && usedKey !== storageKey) || bestStreakMigrated) {
       try {
-        await saveState(normalized);
+        await writeStateSnapshotForUid(uid, normalized);
       } catch (error) {
         if (__DEV__) {
           console.log("[STATE MIGRATION SAVE ERROR]", error);
@@ -1032,13 +1182,17 @@ export async function loadState(): Promise<AppState> {
     return normalized;
   } catch {
     try {
-      const backupRaw = await readStateFromKey(BACKUP_KEY);
+      const backupRaw = await readStateFromKey(backupKey);
       if (backupRaw) {
         const merged = parseAndMerge(backupRaw);
-        const { next: normalized } = migrateBestStreakFromCurrent(merged);
-        _cache = normalized;
+        const { next: migrated } = migrateBestStreakFromCurrent(merged);
+        const normalized = tagStateForUid(migrated, uid);
+        if (auth.currentUser?.uid === uid) {
+          _cache = normalized;
+          _cacheUid = uid;
+        }
         try {
-          await saveState(normalized);
+          await writeStateSnapshotForUid(uid, normalized);
         } catch (error) {
           if (__DEV__) {
             console.log("[STATE BACKUP MIGRATION SAVE ERROR]", error);
@@ -1047,17 +1201,42 @@ export async function loadState(): Promise<AppState> {
         return normalized;
       }
     } catch {}
-    _cache = defaultState;
-    return defaultState;
+    const clean = createDefaultState(uid);
+    if (auth.currentUser?.uid === uid) {
+      _cache = clean;
+      _cacheUid = uid;
+    }
+    return clean;
   }
+}
+
+export async function loadState(): Promise<AppState> {
+  const uid = auth.currentUser?.uid;
+  return uid ? loadStateForUid(uid) : createDefaultState();
+}
+
+export async function activateUserState(uid: string): Promise<AppState> {
+  clearStateCaches();
+  _notify(createDefaultState());
+
+  const state = await loadStateForUid(uid);
+  if (auth.currentUser?.uid === uid) {
+    _cache = state;
+    _cacheUid = uid;
+    _notify(state);
+  }
+  return state;
 }
 
 /**
  * ✅ SAFE SAVE
  */
-export async function saveState(state: AppState): Promise<void> {
-  const existing = await loadState();
-  const safe = mergeWithExisting(existing, state as any);
+export async function saveStateForUid(state: AppState, uid: string): Promise<void> {
+  if (!uid) return;
+
+  const existing = await loadStateForUid(uid);
+  const safe = tagStateForUid(mergeWithExisting(existing, state as any), uid);
+  const backupKey = backupKeyForUid(uid);
 
   const existingCount = Array.isArray(existing?.challenges) ? existing.challenges.length : 0;
   const nextCount = Array.isArray(safe?.challenges) ? safe.challenges.length : 0;
@@ -1067,18 +1246,23 @@ export async function saveState(state: AppState): Promise<void> {
     const explicitlyEmpty = Array.isArray((state as any)?.challenges) && (state as any).challenges.length === 0;
     if (!explicitlyEmpty) {
       console.warn("Blocked saveState(): would overwrite existing challenges with empty list.");
-      await AsyncStorage.setItem(BACKUP_KEY, JSON.stringify(existing));
+      await AsyncStorage.setItem(backupKey, JSON.stringify(existing));
       return;
     }
   }
 
-  const payload = JSON.stringify(safe);
-  await AsyncStorage.setItem(STORAGE_KEY, payload);
-  await AsyncStorage.setItem(BACKUP_KEY, payload);
-  await AsyncStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
-  await persistFastKeys(safe);
-  _cache = safe;
-  _notify(safe);
+  await writeStateSnapshotForUid(uid, safe);
+  if (auth.currentUser?.uid === uid) {
+    _cache = safe;
+    _cacheUid = uid;
+    _notify(safe);
+  }
+}
+
+export async function saveState(state: AppState): Promise<void> {
+  const uid = stateUid(state) ?? auth.currentUser?.uid;
+  if (!uid) return;
+  await saveStateForUid(state, uid);
 }
 
 /**
@@ -1086,8 +1270,9 @@ export async function saveState(state: AppState): Promise<void> {
  */
 export async function updateState(updater: (s: AppState) => AppState): Promise<AppState> {
   const s = await ensureDailyPick();
-  const next = updater(s);
-  await saveState(next);
+  const uid = stateUid(s) ?? auth.currentUser?.uid;
+  const next = tagStateForUid(updater(s), uid);
+  if (uid) await saveStateForUid(next, uid);
   return next;
 }
 

@@ -465,6 +465,25 @@ export async function cancelScheduledChallengeReminderNotifications(): Promise<v
   await cancelAllReminderNotifications(Notifications);
 }
 
+export async function cancelScheduledPersonalReminderNotifications(): Promise<void> {
+  if (isExpoGo()) return;
+
+  const Notifications = await N();
+
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const item of scheduled) {
+      const id = String((item as any)?.identifier ?? "");
+      const data = ((item as any)?.content?.data ?? {}) as Record<string, unknown>;
+      if (!id || String(data[REMINDER_DATA_KIND] ?? "") !== "challenge") continue;
+
+      try {
+        await Notifications.cancelScheduledNotificationAsync(id);
+      } catch {}
+    }
+  } catch {}
+}
+
 export const setDailyReminderForChallenge = async (
   challengeId: string,
   challengeText: string,
