@@ -228,6 +228,12 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     premiumCancel: "Zrušit předplatné",
     premiumManage: "Spravovat předplatné",
     premiumChecking: "Kontroluji Premium…",
+    premiumOfferLoading: "Načítám nabídku Premium…",
+    premiumOpeningAppStore: "Otevírám nákup v App Store…",
+    premiumOpeningGooglePlay: "Otevírám nákup v Google Play…",
+    premiumProcessingPurchase: "Zpracovávám nákup…",
+    premiumPurchaseCancelled: "Nákup byl zrušen.",
+    premiumPurchaseActivated: "Premium bylo aktivováno.",
     open: "Otevřít",
     linkTitle: "Odkaz",
     privacyLinkFailed: "Nepodařilo se otevřít Ochranu soukromí.",
@@ -415,6 +421,12 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   premiumCancel: "Cancel subscription",
   premiumManage: "Manage subscription",
   premiumChecking: "Checking Premium…",
+  premiumOfferLoading: "Loading Premium offer…",
+  premiumOpeningAppStore: "Opening App Store purchase…",
+  premiumOpeningGooglePlay: "Opening Google Play purchase…",
+  premiumProcessingPurchase: "Processing purchase…",
+  premiumPurchaseCancelled: "The purchase was cancelled.",
+  premiumPurchaseActivated: "Premium has been activated.",
   open: "Open",
   linkTitle: "Link",
   privacyLinkFailed: "Could not open the privacy policy.",
@@ -616,6 +628,12 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   premiumCancel: "Anuluj subskrypcję",
   premiumManage: "Zarządzaj subskrypcją",
   premiumChecking: "Sprawdzam Premium…",
+  premiumOfferLoading: "Wczytuję ofertę Premium…",
+  premiumOpeningAppStore: "Otwieram zakup w App Store…",
+  premiumOpeningGooglePlay: "Otwieram zakup w Google Play…",
+  premiumProcessingPurchase: "Przetwarzam zakup…",
+  premiumPurchaseCancelled: "Zakup został anulowany.",
+  premiumPurchaseActivated: "Premium zostało aktywowane.",
   open: "Otwórz",
   linkTitle: "Link",
   privacyLinkFailed: "Nie udało się otworzyć polityki prywatności.",
@@ -811,6 +829,12 @@ history: "Herausforderungsverlauf",
   premiumCancel: "Abo kündigen",
   premiumManage: "Abo verwalten",
   premiumChecking: "Premium wird geprüft…",
+  premiumOfferLoading: "Premium-Angebot wird geladen…",
+  premiumOpeningAppStore: "App-Store-Kauf wird geöffnet…",
+  premiumOpeningGooglePlay: "Google-Play-Kauf wird geöffnet…",
+  premiumProcessingPurchase: "Kauf wird verarbeitet…",
+  premiumPurchaseCancelled: "Der Kauf wurde abgebrochen.",
+  premiumPurchaseActivated: "Premium wurde aktiviert.",
   open: "Öffnen",
   linkTitle: "Link",
   privacyLinkFailed: "Die Datenschutzerklärung konnte nicht geöffnet werden.",
@@ -1067,6 +1091,13 @@ const unknownUserText =
   const [premiumSubscription, setPremiumSubscription] =
     useState<PremiumSubscriptionState>(() => getPremiumSubscriptionState());
   const [premiumBusy, setPremiumBusy] = useState(false);
+  const [premiumOfferLoading, setPremiumOfferLoading] = useState(false);
+  const [premiumPackages, setPremiumPackages] =
+    useState<Awaited<ReturnType<typeof getOfferingPackages>>>([]);
+  const [premiumPurchaseStatus, setPremiumPurchaseStatus] =
+    useState<"opening" | "processing" | null>(null);
+  const premiumOfferRequestRef = useRef(false);
+  const premiumPurchaseGuardRef = useRef(false);
 
   // ✅ Modaly – všechno schované
   const [accountOpen, setAccountOpen] = useState(false);
@@ -2018,16 +2049,34 @@ const faqItems = useMemo(() => {
     }
   }, [infoScreen]);
 
-const buyPremium = async () => {
-  if (premium || premiumBusy) return;
-  setPremiumBusy(true);
+  const loadPremiumPackages = async () => {
+    if (premiumOfferRequestRef.current) return null;
 
-  try {
-    let pkgs: Awaited<ReturnType<typeof getOfferingPackages>>;
+    premiumOfferRequestRef.current = true;
+    setPremiumOfferLoading(true);
 
     try {
-      pkgs = await withPremiumRequestTimeout(getOfferingPackages());
+      const packages = await withPremiumRequestTimeout(getOfferingPackages());
+
+      if (!packages.length) {
+        setPremiumPackages([]);
+        Alert.alert(
+          p.premium,
+          lang === "cs"
+            ? "V nabídce Premium se nepodařilo načíst žádný produkt. Zkus to prosím znovu."
+            : lang === "pl"
+            ? "Nie udało się wczytać żadnego produktu z oferty Premium. Spróbuj ponownie."
+            : lang === "de"
+            ? "Aus dem Premium-Angebot konnte kein Produkt geladen werden. Bitte versuche es erneut."
+            : "No product could be loaded from the Premium offer. Please try again."
+        );
+        return null;
+      }
+
+      setPremiumPackages(packages);
+      return packages;
     } catch {
+      setPremiumPackages([]);
       Alert.alert(
         p.premium,
         lang === "cs"
@@ -2038,34 +2087,71 @@ const buyPremium = async () => {
           ? "Das Premium-Angebot konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut."
           : "The Premium offer could not be loaded. Check your connection and try again."
       );
-      return;
+      return null;
+    } finally {
+      premiumOfferRequestRef.current = false;
+      setPremiumOfferLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!infoOpen || infoScreen !== "paywall" || premium) return;
+
+    setPremiumPurchaseStatus(null);
+    void loadPremiumPackages();
+    // Loading is intentionally tied only to entering/leaving the paywall.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [infoOpen, infoScreen, premium]);
+
+const buyPremium = async () => {
+  if (
+    premium ||
+    premiumBusy ||
+    premiumOfferLoading ||
+    premiumPurchaseGuardRef.current
+  ) {
+    return;
+  }
+
+  premiumPurchaseGuardRef.current = true;
+  setPremiumBusy(true);
+
+  try {
+    let packages = premiumPackages;
+    if (!packages.length) {
+      packages = (await loadPremiumPackages()) ?? [];
+      if (!packages.length) return;
     }
 
-    if (!pkgs.length) {
-      Alert.alert(
-        p.premium,
-        lang === "cs"
-          ? "V nabídce Premium se nepodařilo načíst žádný produkt. Zkus to prosím znovu."
-          : lang === "pl"
-          ? "Nie udało się wczytać żadnego produktu z oferty Premium. Spróbuj ponownie."
-          : lang === "de"
-          ? "Aus dem Premium-Angebot konnte kein Produkt geladen werden. Bitte versuche es erneut."
-          : "No product could be loaded from the Premium offer. Please try again."
-      );
-      return;
-    }
+    setPremiumPurchaseStatus("opening");
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
+    await purchasePackage(packages[0], {
+      onStorePurchaseCompleted: () =>
+        setPremiumPurchaseStatus("processing"),
+    });
 
-    await purchasePackage(pkgs[0]);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    Alert.alert(p.premium, p.premiumPurchaseActivated);
+   } catch (error: any) {
+    const originalError = error?.originalError ?? error;
+    const errorCode = String(originalError?.code ?? "");
+    const readableErrorCode = String(
+      originalError?.readableErrorCode ??
+      originalError?.userInfo?.readableErrorCode ??
+      ""
+    ).toLowerCase();
+    const wasCancelled =
+      originalError?.userCancelled === true ||
+      errorCode === "1" ||
+      readableErrorCode.includes("purchase_cancelled");
 
     Alert.alert(
       p.premium,
-      lang === "cs" ? "Premium aktivováno." : "Premium activated."
-    );
-   } catch {
-    Alert.alert(
-      p.premium,
-      lang === "cs"
+      wasCancelled
+        ? p.premiumPurchaseCancelled
+        : lang === "cs"
         ? "Nákup se nepodařilo dokončit. Zkus to prosím znovu."
         : lang === "pl"
         ? "Nie udało się dokończyć zakupu. Spróbuj ponownie."
@@ -2074,6 +2160,8 @@ const buyPremium = async () => {
         : "The purchase could not be completed. Please try again."
     );
   } finally {
+    premiumPurchaseGuardRef.current = false;
+    setPremiumPurchaseStatus(null);
     setPremiumBusy(false);
   }
 };
@@ -4165,22 +4253,50 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                   </View>
 
                   {!premium ? (
-                    <Pressable
-                      disabled={premiumBusy}
-                      onPress={buyPremium}
-                      style={({ pressed }) => [
-                        styles.primaryBtn,
-                        {
-                          marginTop: 14,
-                          opacity: premiumBusy ? 0.6 : 1,
-                        },
-                        pressed && !premiumBusy && { opacity: 0.9 },
-                      ]}
-                    >
-                      <Text style={styles.primaryBtnText}>
-                        {premiumBusy ? p.premiumChecking : p.upgrade}
-                      </Text>
-                    </Pressable>
+                    <>
+                      {(premiumOfferLoading || premiumPurchaseStatus) && (
+                        <View style={styles.premiumPurchaseStatus}>
+                          <ActivityIndicator size="small" color={UI.accent} />
+                          <Text style={[styles.premiumPurchaseStatusText, { color: UI.text }]}>
+                            {premiumOfferLoading
+                              ? p.premiumOfferLoading
+                              : premiumPurchaseStatus === "opening"
+                              ? Platform.OS === "ios"
+                                ? p.premiumOpeningAppStore
+                                : p.premiumOpeningGooglePlay
+                              : p.premiumProcessingPurchase}
+                          </Text>
+                        </View>
+                      )}
+
+                      <Pressable
+                        disabled={premiumBusy || premiumOfferLoading}
+                        onPress={buyPremium}
+                        style={({ pressed }) => [
+                          styles.primaryBtn,
+                          {
+                            marginTop: 14,
+                            opacity:
+                              premiumBusy || premiumOfferLoading ? 0.6 : 1,
+                          },
+                          pressed &&
+                            !premiumBusy &&
+                            !premiumOfferLoading && { opacity: 0.9 },
+                        ]}
+                      >
+                        <Text style={styles.primaryBtnText}>
+                          {premiumOfferLoading
+                            ? p.premiumOfferLoading
+                            : premiumPurchaseStatus === "opening"
+                            ? Platform.OS === "ios"
+                              ? p.premiumOpeningAppStore
+                              : p.premiumOpeningGooglePlay
+                            : premiumPurchaseStatus === "processing"
+                            ? p.premiumProcessingPurchase
+                            : p.upgrade}
+                        </Text>
+                      </Pressable>
+                    </>
                   ) : (
                     <Pressable
                       disabled={premiumBusy}
@@ -6112,6 +6228,18 @@ pmBottomText: {
       backgroundColor: UI.accent,
     },
     primaryBtnText: { color: "#0B1220", fontWeight: "900", fontSize: 16 },
+    premiumPurchaseStatus: {
+      marginTop: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    premiumPurchaseStatusText: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: "800",
+      lineHeight: 19,
+    },
 
     smallBtn: {
       borderRadius: 14,

@@ -430,7 +430,10 @@ export async function getOfferingPackages() {
   return current?.availablePackages ?? [];
 }
 
-export async function purchasePackage(pkg: any) {
+export async function purchasePackage(
+  pkg: any,
+  options?: { onStorePurchaseCompleted?: () => void }
+) {
   if (!REVENUECAT_ENABLED) return;
 
   const uid = requireFirebaseUid();
@@ -439,6 +442,7 @@ export async function purchasePackage(pkg: any) {
 
   try {
     const result = await Purchases.purchasePackage(pkg);
+    options?.onStorePurchaseCompleted?.();
     await applyCustomerInfoForUid(result.customerInfo, uid, generation);
     await refreshAfterConfirmedCustomerInfo(result.customerInfo, "purchase");
     return result;
