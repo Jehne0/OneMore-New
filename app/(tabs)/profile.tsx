@@ -156,6 +156,10 @@ type AccountModalDestination =
 
 type FriendsTab = "friends" | "requests" | "invites";
 
+type PendingFriendsAction =
+  | { type: "invite"; friendUid: string }
+  | { type: "remove"; friendUid: string };
+
 type FriendPreviewStats = {
   bestStreak: number;
   totalMedals: number;
@@ -348,6 +352,9 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     declineFriendFailed: "Nepodařilo se odmítnout.",
     acceptFriendFailed: "Nepodařilo se přijmout.",
     removeFriendFailed: "Nepodařilo se odebrat.",
+    removeFriendConfirm: "Opravdu chceš odebrat přítele {name}?",
+    friendActionUnavailable: "Akci se nepodařilo otevřít. Zkus to prosím znovu.",
+    freeSharedChallengeLimit: "Ve Free verzi můžeš mít jen 1 společnou výzvu. Pro více je potřeba Premium.",
     medalPotatoDesc: "První série je na světě. Jen tak dál.",
 medalSteelDesc: "Držíš tempo a buduješ pevný základ.",
 medalBronzeDesc: "Z návyku se začíná stávat rutina.",
@@ -538,6 +545,9 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   medalGold: "Gold",
   medalDiamond: "Diamond",
   removeFriendFailed: "Could not remove friend.",
+  removeFriendConfirm: "Are you sure you want to remove {name} from your friends?",
+  friendActionUnavailable: "The action could not be opened. Please try again.",
+  freeSharedChallengeLimit: "In the Free version you can have only 1 shared challenge. Upgrade to Premium for more.",
   acceptFriendFailed: "Could not accept request.",
   declineFriendFailed: "Could not decline request.",
   cancelRequestFailed: "Could not cancel request.",
@@ -742,6 +752,9 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   declineFriendFailed: "Nie udało się odrzucić.",
   acceptFriendFailed: "Nie udało się zaakceptować.",
   removeFriendFailed: "Nie udało się usunąć.",
+  removeFriendConfirm: "Czy na pewno chcesz usunąć znajomego {name}?",
+  friendActionUnavailable: "Nie udało się otworzyć tej akcji. Spróbuj ponownie.",
+  freeSharedChallengeLimit: "W wersji Free możesz mieć tylko 1 wspólne wyzwanie. Więcej wymaga Premium.",
   medalPotatoDesc: "Pierwsza seria ruszyła. Idź dalej.",
 medalSteelDesc: "Budujesz solidną podstawę.",
 medalBronzeDesc: "Nawyk zaczyna się utrwalać.",
@@ -943,6 +956,9 @@ history: "Herausforderungsverlauf",
   declineFriendFailed: "Ablehnen fehlgeschlagen.",
   acceptFriendFailed: "Annehmen fehlgeschlagen.",
   removeFriendFailed: "Entfernen fehlgeschlagen.",
+  removeFriendConfirm: "Möchtest du {name} wirklich als Freund entfernen?",
+  friendActionUnavailable: "Die Aktion konnte nicht geöffnet werden. Bitte versuche es erneut.",
+  freeSharedChallengeLimit: "In der Free-Version kannst du nur 1 gemeinsame Herausforderung haben. Für mehr brauchst du Premium.",
 }
 
 } as const;
@@ -1114,6 +1130,10 @@ const unknownUserText =
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [addUsername, setAddUsername] = useState("");
   const [friendsBusy, setFriendsBusy] = useState(false);
+  const friendsModalVisibleRef = useRef(false);
+  const pendingFriendsActionRef = useRef<PendingFriendsAction | null>(null);
+  const removeFriendBusyRef = useRef(false);
+  const declineFriendBusyRef = useRef(false);
 
 // ✅ Přátelé modal – Přátelé / Výzvy
 const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
@@ -2522,16 +2542,155 @@ const buyPremium = async () => {
     setChallengeInviteBusy(false);
   }
 
+  async function removeFriendWithFeedback(friendUid: string) {
+    if (removeFriendBusyRef.current) return;
+
+    removeFriendBusyRef.current = true;
+    setFriendsBusy(true);
+
+    try {
+      await removeFriend(friendUid);
+      if (__DEV__) {
+        console.log("[DEV][friends] remove friend success", { friendUid });
+      }
+    } catch (error: any) {
+      if (__DEV__) {
+        console.log("[DEV][friends] remove friend error", {
+          friendUid,
+          code: String(error?.code ?? "unknown"),
+        });
+      }
+      NativeAlert.alert(p.friends, p.removeFriendFailed);
+    } finally {
+      removeFriendBusyRef.current = false;
+      setFriendsBusy(false);
+    }
+  }
+
+  function openRemoveFriendConfirm(friendUid: string) {
+    if (__DEV__) {
+      console.log("[DEV][friends] opening remove friend confirm", {
+        friendUid,
+      });
+    }
+
+    NativeAlert.alert(
+      p.remove,
+      p.removeFriendConfirm.replace("{name}", getShownFriendName(friendUid)),
+      [
+        { text: p.cancel, style: "cancel" },
+        {
+          text: p.remove,
+          style: "destructive",
+          onPress: () => void removeFriendWithFeedback(friendUid),
+        },
+      ]
+    );
+  }
+
+  function runPendingFriendsAction(action: PendingFriendsAction) {
+    if (action.type === "invite") {
+      if (__DEV__) {
+        console.log("[DEV][friends] opening shared challenge flow", {
+          friendUid: action.friendUid,
+        });
+      }
+      openChallengeInvite(action.friendUid);
+      return;
+    }
+
+    openRemoveFriendConfirm(action.friendUid);
+  }
+
+  function queueFriendsAction(action: PendingFriendsAction) {
+    if (
+      Platform.OS === "ios" &&
+      (friendsModalVisibleRef.current || friendsOpen)
+    ) {
+      pendingFriendsActionRef.current = action;
+      setAddFriendOpen(false);
+      setFriendsOpen(false);
+      return;
+    }
+
+    runPendingFriendsAction(action);
+  }
+
+  function requestChallengeInvite(friendUidValue: unknown) {
+    const friendUid = String(friendUidValue ?? "").trim();
+
+    if (__DEV__) {
+      console.log("[DEV][friends] friend invite button pressed", { friendUid });
+    }
+
+    if (!friendUid) {
+      NativeAlert.alert(p.friends, p.friendActionUnavailable);
+      return;
+    }
+
+    if (freeSharedLimitReached) {
+      NativeAlert.alert(p.premium, p.freeSharedChallengeLimit);
+      return;
+    }
+
+    queueFriendsAction({ type: "invite", friendUid });
+  }
+
+  function requestRemoveFriend(friendUidValue: unknown) {
+    const friendUid = String(friendUidValue ?? "").trim();
+
+    if (__DEV__) {
+      console.log("[DEV][friends] friend remove button pressed", { friendUid });
+    }
+
+    if (!friendUid) {
+      NativeAlert.alert(p.friends, p.friendActionUnavailable);
+      return;
+    }
+
+    queueFriendsAction({ type: "remove", friendUid });
+  }
+
+  function handleFriendsModalDismiss() {
+    friendsModalVisibleRef.current = false;
+    const action = pendingFriendsActionRef.current;
+    pendingFriendsActionRef.current = null;
+    if (action) runPendingFriendsAction(action);
+  }
+
+  async function declineFriendWithFeedback(
+    friendUid: string,
+    errorMessage: string
+  ) {
+    if (declineFriendBusyRef.current) return;
+
+    declineFriendBusyRef.current = true;
+    setFriendsBusy(true);
+
+    try {
+      await declineFriend(friendUid);
+      if (__DEV__) {
+        console.log("[DEV][friends] decline friend success", { friendUid });
+      }
+    } catch (error: any) {
+      if (__DEV__) {
+        console.log("[DEV][friends] decline friend error", {
+          friendUid,
+          code: String(error?.code ?? "unknown"),
+        });
+      }
+      NativeAlert.alert(p.friends, errorMessage);
+    } finally {
+      declineFriendBusyRef.current = false;
+      setFriendsBusy(false);
+    }
+  }
+
 function openChallengeInvite(friendUid: string) {
     if (freeSharedLimitReached) {
-    Alert.alert(
-      p.premium,
-      lang === "cs"
-        ? "Ve Free verzi můžeš mít jen 1 společnou výzvu. Pro více je potřeba Premium."
-        : "In the Free version you can have only 1 shared challenge. Upgrade to Premium for more."
-    );
-    return;
-  }
+      NativeAlert.alert(p.premium, p.freeSharedChallengeLimit);
+      return;
+    }
 
     setChallengeInviteFriendUids([String(friendUid)]);
     setChallengeInviteTitle("");
@@ -2611,19 +2770,36 @@ function openChallengeInvite(friendUid: string) {
     }
   }
 
+  function logFriendRequestBlocked(
+    reason: string,
+    friendUid?: string | null
+  ) {
+    if (__DEV__) {
+      console.log("[DEV][friends] request friend blocked", {
+        reason,
+        ...(friendUid ? { friendUid } : {}),
+      });
+    }
+  }
+
   async function submitFriendRequest() {
-    if (friendsBusy) return;
+    if (friendsBusy) {
+      logFriendRequestBlocked("friends-busy");
+      return;
+    }
 
     const friendAlert = Platform.OS === "ios" ? NativeAlert : Alert;
     const me = auth.currentUser?.uid;
     const username = addUsername.trim();
 
     if (!me) {
+      logFriendRequestBlocked("not-signed-in");
       friendAlert.alert(p.addFriend, p.addFriendSignInRequired);
       return;
     }
 
     if (!username) {
+      logFriendRequestBlocked("missing-username");
       friendAlert.alert(p.addFriend, p.addFriendMissingUsername);
       return;
     }
@@ -2633,22 +2809,27 @@ function openChallengeInvite(friendUid: string) {
     ).length;
 
     if (!premium && acceptedCount >= 1) {
+      logFriendRequestBlocked("free-friends-limit");
       friendAlert.alert(p.addFriend, p.addFriendFreeLimit);
       return;
     }
 
     setFriendsBusy(true);
     Keyboard.dismiss();
+    let resolvedFriendUid: string | null = null;
 
     try {
       const otherUid = await resolveUidByUsername(username);
+      resolvedFriendUid = otherUid;
 
       if (!otherUid) {
+        logFriendRequestBlocked("username-not-found");
         friendAlert.alert(p.addFriend, p.addFriendNotFound);
         return;
       }
 
       if (otherUid === me) {
+        logFriendRequestBlocked("self-request", otherUid);
         friendAlert.alert(p.addFriend, p.addFriendSelf);
         return;
       }
@@ -2661,6 +2842,10 @@ function openChallengeInvite(friendUid: string) {
         showPwdPopup("success", p.friends, p.addFriendSent);
       }, 300);
     } catch (error: any) {
+      logFriendRequestBlocked(
+        String(error?.code ?? "request-failed"),
+        resolvedFriendUid
+      );
       friendAlert.alert(
         p.addFriend,
         error?.message ?? p.addFriendFailed
@@ -4463,6 +4648,10 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         transparent
         animationType="fade"
         onRequestClose={() => setFriendsOpen(false)}
+        onShow={() => {
+          friendsModalVisibleRef.current = true;
+        }}
+        onDismiss={handleFriendsModalDismiss}
       >
         <Pressable
           style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
@@ -4833,16 +5022,11 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         <Pressable
           onPress={() => {
             if (lockedByFree) {
-              Alert.alert(
-                p.premium,
-                lang === "cs"
-                  ? "Tohoto přítele můžeš znovu používat po obnovení Premium."
-                  : "You can use this friend again after restoring Premium."
-              );
+              NativeAlert.alert(p.premium, p.freeFriendsLimit);
               return;
             }
 
-            openChallengeInvite(e.otherUid);
+            requestChallengeInvite(e.otherUid);
           }}
           style={({ pressed }) => [
             styles.smallBtn,
@@ -4856,22 +5040,12 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         </Pressable>
 
         <Pressable
-          onPress={async () => {
-            try {
-              setFriendsBusy(true);
-              await removeFriend(e.otherUid);
-            } catch (err: any) {
-              Alert.alert(
-                p.friends,
-                err?.message ?? p.removeFriendFailed
-              );
-            } finally {
-              setFriendsBusy(false);
-            }
-          }}
+          disabled={friendsBusy}
+          onPress={() => requestRemoveFriend(e.otherUid)}
           style={({ pressed }) => [
             styles.smallBtnGhost,
-            pressed && { opacity: 0.9 },
+            friendsBusy && { opacity: 0.6 },
+            pressed && !friendsBusy && { opacity: 0.9 },
           ]}
         >
           <Text style={styles.smallBtnGhostText}>{p.remove}</Text>
@@ -4974,17 +5148,18 @@ const incomingCount = incoming.length;
                     </Pressable>
 
                     <Pressable
-                      onPress={async () => {
-                        try {
-                          setFriendsBusy(true);
-                          await declineFriend(e.otherUid);
-                        } catch (err: any) {
-                          Alert.alert(p.friends, err?.message ?? p.declineFriendFailed);
-                        } finally {
-                          setFriendsBusy(false);
-                        }
-                      }}
-                      style={({ pressed }) => [styles.smallBtnGhost, pressed && { opacity: 0.9 }]}
+                      disabled={friendsBusy}
+                      onPress={() =>
+                        void declineFriendWithFeedback(
+                          e.otherUid,
+                          p.declineFriendFailed
+                        )
+                      }
+                      style={({ pressed }) => [
+                        styles.smallBtnGhost,
+                        friendsBusy && { opacity: 0.6 },
+                        pressed && { opacity: 0.9 },
+                      ]}
                     >
                       <Text style={styles.smallBtnGhostText}>{p.decline}</Text>
                     </Pressable>
@@ -5005,17 +5180,18 @@ const incomingCount = incoming.length;
                   </Text>
 
                   <Pressable
-                    onPress={async () => {
-                      try {
-                        setFriendsBusy(true);
-                        await declineFriend(e.otherUid);
-                      } catch (err: any) {
-                        Alert.alert(p.friends, err?.message ?? p.cancelRequestFailed);
-                      } finally {
-                        setFriendsBusy(false);
-                      }
-                    }}
-                    style={({ pressed }) => [styles.smallBtnGhost, pressed && { opacity: 0.9 }]}
+                    disabled={friendsBusy}
+                    onPress={() =>
+                      void declineFriendWithFeedback(
+                        e.otherUid,
+                        p.cancelRequestFailed
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.smallBtnGhost,
+                      friendsBusy && { opacity: 0.6 },
+                      pressed && { opacity: 0.9 },
+                    ]}
                   >
                     <Text style={styles.smallBtnGhostText}>{p.cancel}</Text>
                   </Pressable>
