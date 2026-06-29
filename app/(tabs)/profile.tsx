@@ -1986,18 +1986,34 @@ const buyPremium = async () => {
   setPremiumBusy(true);
 
   try {
-    const pkgs = await withPremiumRequestTimeout(getOfferingPackages());
+    let pkgs: Awaited<ReturnType<typeof getOfferingPackages>>;
+
+    try {
+      pkgs = await withPremiumRequestTimeout(getOfferingPackages());
+    } catch {
+      Alert.alert(
+        p.premium,
+        lang === "cs"
+          ? "Nabídku Premium se nepodařilo načíst. Zkontroluj připojení a zkus to prosím znovu."
+          : lang === "pl"
+          ? "Nie udało się wczytać oferty Premium. Sprawdź połączenie i spróbuj ponownie."
+          : lang === "de"
+          ? "Das Premium-Angebot konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut."
+          : "The Premium offer could not be loaded. Check your connection and try again."
+      );
+      return;
+    }
 
     if (!pkgs.length) {
       Alert.alert(
         p.premium,
         lang === "cs"
-          ? "Premium teď není dostupné. Zkus to prosím později."
+          ? "V nabídce Premium se nepodařilo načíst žádný produkt. Zkus to prosím znovu."
           : lang === "pl"
-          ? "Premium nie jest teraz dostępne. Spróbuj ponownie później."
+          ? "Nie udało się wczytać żadnego produktu z oferty Premium. Spróbuj ponownie."
           : lang === "de"
-          ? "Premium ist gerade nicht verfügbar. Bitte versuche es später erneut."
-          : "Premium is not available right now. Please try again later."
+          ? "Aus dem Premium-Angebot konnte kein Produkt geladen werden. Bitte versuche es erneut."
+          : "No product could be loaded from the Premium offer. Please try again."
       );
       return;
     }
@@ -3022,37 +3038,19 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
               <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
             </Pressable>
 
-            {!premium && (
-              <Pressable
-                onPress={openPayments}
-                style={({ pressed }) => [
-                  styles.modalLinkRow,
-                  { borderColor: UI.stroke, backgroundColor: UI.card },
-                  pressed && { opacity: 0.88 },
-                ]}
-              >
-                <Text style={[styles.modalLinkText, { color: UI.text }]}>
-                  Premium
-                </Text>
-                <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
-              </Pressable>
-            )}
-
-            {premium && (
-              <Pressable
-                onPress={openPayments}
-                style={({ pressed }) => [
-                  styles.modalLinkRow,
-                  { borderColor: UI.stroke, backgroundColor: UI.card },
-                  pressed && { opacity: 0.88 },
-                ]}
-              >
-          <Text style={[styles.modalLinkText, { color: UI.text }]}>
-  {p.managePremium}
-</Text>
-                <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
-              </Pressable>
-            )}
+            <Pressable
+              onPress={premium ? openPremiumManagement : openPayments}
+              style={({ pressed }) => [
+                styles.modalLinkRow,
+                { borderColor: UI.stroke, backgroundColor: UI.card },
+                pressed && { opacity: 0.88 },
+              ]}
+            >
+              <Text style={[styles.modalLinkText, { color: UI.text }]}>
+                {premium ? p.managePremium : p.getPremium}
+              </Text>
+              <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
+            </Pressable>
 
             <Pressable
               onPress={async () => {

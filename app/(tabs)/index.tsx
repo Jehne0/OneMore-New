@@ -36,6 +36,7 @@ import {
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1416,6 +1417,7 @@ notificationCount: "Počet notifikací",
   };
 }, [lang]);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const styles = useMemo(
     () => makeStyles(UI, insets.bottom),
     [UI, insets.bottom]
@@ -3371,7 +3373,19 @@ useEffect(() => {
         onRequestClose={() => setMedalsOverviewOpen(false)}
       >
         <Pressable style={styles.backdrop} onPress={() => setMedalsOverviewOpen(false)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+          <Pressable
+            style={[
+              styles.sheet,
+              {
+                bottom: Math.max(12, insets.bottom + 12),
+                maxHeight: Math.min(
+                  windowHeight * 0.8,
+                  windowHeight - insets.top - insets.bottom - 24
+                ),
+              },
+            ]}
+            onPress={() => {}}
+          >
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>
                 {TXT.medalOverviewTitle}
@@ -3385,8 +3399,12 @@ useEffect(() => {
             </View>
 
             <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 32) }}
+              style={{ flexShrink: 1 }}
+              showsVerticalScrollIndicator={true}
+              persistentScrollbar={Platform.OS === "android"}
+              contentContainerStyle={{
+                paddingBottom: Math.max(24, insets.bottom + 24),
+              }}
             >
               {MEDAL_OVERVIEW_TIERS.map((medal) => {
                 const challenges = medalOverview.get(medal.tier) ?? [];
