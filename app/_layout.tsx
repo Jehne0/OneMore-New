@@ -11,6 +11,7 @@ import { ThemeProvider, useTheme } from "../lib/theme";
 import { LanguageProvider } from "../lib/i18n";
 import { initClock } from "../lib/clock";
 import { initCloudSync } from "../lib/cloudSync";
+import { initRevenueCatAuth } from "../lib/revenuecat";
 import { AppAlertHost } from "../lib/appAlert";
 import { UpdateGate } from "../lib/UpdateGate";
 import * as Notifications from "expo-notifications";
@@ -60,6 +61,10 @@ export default function RootLayout() {
     // ✅ Cloud sync (Firestore)
     try {
       initCloudSync();
+    } catch {}
+
+    try {
+      initRevenueCatAuth();
     } catch {}
 
     (async () => {

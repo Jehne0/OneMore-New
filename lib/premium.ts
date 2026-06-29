@@ -4,6 +4,7 @@ import { auth } from "./firebase";
 export const PREMIUM_KEY = "onemore_premium_active";
 
 export type PremiumCache = {
+  uid: string;
   isPremium: boolean;
   entitlementId: string | null;
   expiresDate: string | null;
@@ -15,6 +16,7 @@ const listeners = new Set<PremiumListener>();
 
 let expirationTimer: ReturnType<typeof setTimeout> | null = null;
 let currentVerifiedPremium: boolean | null = null;
+let currentVerifiedUid: string | null = null;
 
 // Intentional owner/developer Premium override, independent of RevenueCat.
 const OWNER_DEVELOPER_UID = "1MPxefEFRqhFoqaNnt6nuQjsJCC3";
@@ -32,8 +34,12 @@ function emit(v: boolean) {
   }
 }
 
-function isOwner(): boolean {
-  return auth.currentUser?.uid === OWNER_DEVELOPER_UID;
+function isOwner(uid = auth.currentUser?.uid ?? null): boolean {
+  return uid === OWNER_DEVELOPER_UID;
+}
+
+function premiumKeyForUid(uid: string): string {
+  return `${PREMIUM_KEY}:${uid}`;
 }
 
 function parseFutureExpiration(expiresDate: string | null): number | null {
@@ -45,21 +51,30 @@ function parseFutureExpiration(expiresDate: string | null): number | null {
   return expiresAt;
 }
 
-function isCacheActive(cache: PremiumCache): boolean {
-  return cache.isPremium === true && parseFutureExpiration(cache.expiresDate) !== null;
+function isCacheActive(cache: PremiumCache, uid: string): boolean {
+  return (
+    cache.uid === uid &&
+    cache.isPremium === true &&
+    parseFutureExpiration(cache.expiresDate) !== null
+  );
 }
 
-async function readPremiumCache(): Promise<PremiumCache | null> {
+async function readPremiumCache(uid: string): Promise<PremiumCache | null> {
   try {
-    const raw = await AsyncStorage.getItem(PREMIUM_KEY);
+    const raw = await AsyncStorage.getItem(premiumKeyForUid(uid));
     if (!raw || raw === "1") return null;
 
     const parsed = JSON.parse(raw) as Partial<PremiumCache>;
-    if (typeof parsed.isPremium !== "boolean" || typeof parsed.lastVerifiedAt !== "string") {
+    if (
+      parsed.uid !== uid ||
+      typeof parsed.isPremium !== "boolean" ||
+      typeof parsed.lastVerifiedAt !== "string"
+    ) {
       return null;
     }
 
     return {
+      uid,
       isPremium: parsed.isPremium,
       entitlementId:
         typeof parsed.entitlementId === "string" ? parsed.entitlementId : null,
@@ -78,7 +93,7 @@ function clearExpirationTimer() {
   }
 }
 
-function scheduleExpiration(expiresDate: string | null) {
+function scheduleExpiration(expiresDate: string | null, uid: string) {
   clearExpirationTimer();
 
   const expiresAt = parseFutureExpiration(expiresDate);
@@ -90,50 +105,72 @@ function scheduleExpiration(expiresDate: string | null) {
   expirationTimer = setTimeout(() => {
     expirationTimer = null;
     void (async () => {
-      const cache = await readPremiumCache();
-      if (!cache || cache.expiresDate !== expiresDate) return;
+      const cache = await readPremiumCache(uid);
+      if (
+        auth.currentUser?.uid !== uid ||
+        !cache ||
+        cache.expiresDate !== expiresDate
+      ) {
+        return;
+      }
 
-      if (isCacheActive(cache)) {
-        scheduleExpiration(cache.expiresDate);
+      if (isCacheActive(cache, uid)) {
+        scheduleExpiration(cache.expiresDate, uid);
         return;
       }
 
       await AsyncStorage.setItem(
-        PREMIUM_KEY,
+        premiumKeyForUid(uid),
         JSON.stringify({ ...cache, isPremium: false })
       ).catch(() => {});
+      if (auth.currentUser?.uid !== uid) return;
       currentVerifiedPremium = false;
+      currentVerifiedUid = uid;
       emit(false);
     })();
   }, Math.max(delay, 0));
 }
 
 export async function isPremiumActive(): Promise<boolean> {
-  if (isOwner()) return true;
-  if (currentVerifiedPremium !== null) return currentVerifiedPremium;
+  const uid = auth.currentUser?.uid ?? null;
+  if (!uid) return false;
+  if (isOwner(uid)) return true;
+  if (currentVerifiedUid === uid && currentVerifiedPremium !== null) {
+    return currentVerifiedPremium;
+  }
 
-  const cache = await readPremiumCache();
+  const cache = await readPremiumCache(uid);
   if (!cache) return false;
 
-  const active = isCacheActive(cache);
+  const active = isCacheActive(cache, uid);
+  if (auth.currentUser?.uid !== uid) return false;
+
   currentVerifiedPremium = active;
-  if (active) scheduleExpiration(cache.expiresDate);
+  currentVerifiedUid = uid;
+  if (active) scheduleExpiration(cache.expiresDate, uid);
 
   return active;
 }
 
 export async function applyPremiumEntitlement(params: {
+  uid: string;
   isPremium: boolean;
   entitlementId: string | null;
   expiresDate: string | null;
   lastVerifiedAt?: string;
 }): Promise<void> {
-  if (isOwner()) {
+  const uid = params.uid;
+  if (!uid || auth.currentUser?.uid !== uid) return;
+
+  if (isOwner(uid)) {
+    currentVerifiedPremium = true;
+    currentVerifiedUid = uid;
     emit(true);
     return;
   }
 
   const cache: PremiumCache = {
+    uid,
     isPremium: params.isPremium,
     entitlementId: params.entitlementId,
     expiresDate: params.expiresDate,
@@ -141,29 +178,45 @@ export async function applyPremiumEntitlement(params: {
   };
 
   try {
-    await AsyncStorage.setItem(PREMIUM_KEY, JSON.stringify(cache));
+    await AsyncStorage.setItem(premiumKeyForUid(uid), JSON.stringify(cache));
   } catch {}
 
+  if (auth.currentUser?.uid !== uid) return;
+
   currentVerifiedPremium = params.isPremium;
-  if (params.isPremium) scheduleExpiration(params.expiresDate);
+  currentVerifiedUid = uid;
+  if (params.isPremium) scheduleExpiration(params.expiresDate, uid);
   else clearExpirationTimer();
 
   emit(params.isPremium);
 }
 
 export async function clearPremiumState(): Promise<void> {
-  if (isOwner()) {
+  const uid = auth.currentUser?.uid ?? null;
+  if (isOwner(uid)) {
     emit(true);
     return;
   }
 
   clearExpirationTimer();
   currentVerifiedPremium = false;
+  currentVerifiedUid = uid;
 
   try {
-    await AsyncStorage.removeItem(PREMIUM_KEY);
+    await AsyncStorage.multiRemove([
+      PREMIUM_KEY,
+      ...(uid ? [premiumKeyForUid(uid)] : []),
+    ]);
   } catch {}
 
+  emit(false);
+}
+
+export function resetPremiumStateForAuthChange(): void {
+  clearExpirationTimer();
+  currentVerifiedPremium = false;
+  currentVerifiedUid = null;
+  void AsyncStorage.removeItem(PREMIUM_KEY).catch(() => {});
   emit(false);
 }
 

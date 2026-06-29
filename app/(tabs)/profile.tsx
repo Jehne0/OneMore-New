@@ -147,7 +147,12 @@ type InfoScreen =
   | "terms"
   | "paywall";
 
-type AccountModalDestination = "password" | "username" | "premium" | "info";
+type AccountModalDestination =
+  | "password"
+  | "username"
+  | "premium"
+  | "delete"
+  | "info";
 
 type FriendsTab = "friends" | "requests" | "invites";
 
@@ -181,6 +186,12 @@ medalsIntro: "Každá výzva si počítá medaile podle tvé nejdelší série:"
     cancel: "Zrušit",
     deleteAccountAction: "Chci odstranit účet",
     deletingAccount: "Mažu účet…",
+    deleteMissingPassword: "Pro odstranění účtu zadej heslo.",
+    deleteWrongPassword: "Zadané heslo není správné. Zkus to znovu.",
+    deleteNotSignedIn: "Nejsi přihlášený. Přihlas se a zkus to znovu.",
+    deleteUnsupportedProvider: "Tento účet nelze ověřit heslem. Přihlas se znovu podporovaným způsobem a potom odstranění zopakuj.",
+    deleteNetworkError: "Účet se nepodařilo odstranit kvůli síťové chybě. Zkontroluj připojení a zkus to znovu.",
+    deleteGenericError: "Účet se nepodařilo odstranit. Zkus to prosím znovu.",
     changePassword: "Změna hesla",
     close: "Zavřít",
     passwordResetInfo: "Pošleme ti e-mail s odkazem na změnu hesla.",
@@ -362,6 +373,12 @@ medalsIntro: "Each challenge awards medals based on your longest streak:",
   cancel: "Cancel",
   deleteAccountAction: "Delete my account",
   deletingAccount: "Deleting account…",
+  deleteMissingPassword: "Enter your password to delete the account.",
+  deleteWrongPassword: "The password is incorrect. Please try again.",
+  deleteNotSignedIn: "You are not signed in. Sign in and try again.",
+  deleteUnsupportedProvider: "This account cannot be verified with a password. Sign in again using a supported method, then retry deletion.",
+  deleteNetworkError: "The account could not be deleted because of a network error. Check your connection and try again.",
+  deleteGenericError: "The account could not be deleted. Please try again.",
   changePassword: "Change password",
   close: "Close",
   passwordResetInfo: "We will send you an email with a password reset link.",
@@ -557,6 +574,12 @@ medalsIntro: "Każde wyzwanie przyznaje medale według Twojej najdłuższej seri
   cancel: "Anuluj",
   deleteAccountAction: "Chcę usunąć konto",
   deletingAccount: "Usuwam konto…",
+  deleteMissingPassword: "Wpisz hasło, aby usunąć konto.",
+  deleteWrongPassword: "Podane hasło jest nieprawidłowe. Spróbuj ponownie.",
+  deleteNotSignedIn: "Nie jesteś zalogowany. Zaloguj się i spróbuj ponownie.",
+  deleteUnsupportedProvider: "Tego konta nie można zweryfikować hasłem. Zaloguj się ponownie obsługiwaną metodą, a następnie ponów usuwanie.",
+  deleteNetworkError: "Nie udało się usunąć konta z powodu błędu sieci. Sprawdź połączenie i spróbuj ponownie.",
+  deleteGenericError: "Nie udało się usunąć konta. Spróbuj ponownie.",
   changePassword: "Zmiana hasła",
   close: "Zamknij",
   passwordResetInfo: "Wyślemy Ci e-mail z linkiem do zmiany hasła.",
@@ -746,6 +769,12 @@ medalDiamondDesc: "Ein halbes Jahr Ausdauer. Top-Leistung.",
   cancel: "Abbrechen",
   deleteAccountAction: "Konto löschen",
   deletingAccount: "Konto wird gelöscht…",
+  deleteMissingPassword: "Gib dein Passwort ein, um das Konto zu löschen.",
+  deleteWrongPassword: "Das eingegebene Passwort ist falsch. Bitte versuche es erneut.",
+  deleteNotSignedIn: "Du bist nicht angemeldet. Melde dich an und versuche es erneut.",
+  deleteUnsupportedProvider: "Dieses Konto kann nicht mit einem Passwort bestätigt werden. Melde dich erneut mit einer unterstützten Methode an und wiederhole das Löschen.",
+  deleteNetworkError: "Das Konto konnte wegen eines Netzwerkfehlers nicht gelöscht werden. Prüfe deine Verbindung und versuche es erneut.",
+  deleteGenericError: "Das Konto konnte nicht gelöscht werden. Bitte versuche es erneut.",
   changePassword: "Passwort ändern",
   close: "Zu",
   passwordResetInfo: "Wir senden dir eine E-Mail mit einem Link zum Ändern des Passworts.",
@@ -1078,6 +1107,7 @@ const [notificationSettings, setNotificationSettings] =
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteWorking, setDeleteWorking] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // ✅ Info vnitřní navigace (menu jen ikonky)
   const [infoScreen, setInfoScreen] = useState<InfoScreen>("menu");
@@ -1935,6 +1965,13 @@ const faqItems = useMemo(() => {
       return;
     }
 
+    if (destination === "delete") {
+      setDeletePassword("");
+      setDeleteError(null);
+      setDeleteOpen(true);
+      return;
+    }
+
     setInfoScreen(destination === "premium" ? "paywall" : "menu");
     setInfoOpen(true);
   };
@@ -2092,9 +2129,16 @@ const buyPremium = async () => {
     }
   };
 
-  const requestDeleteAccount = () => {
+  const closeDeleteAccountModal = () => {
+    if (deleteWorking) return;
+    Keyboard.dismiss();
     setDeletePassword("");
-    setDeleteOpen(true);
+    setDeleteError(null);
+    setDeleteOpen(false);
+  };
+
+  const requestDeleteAccount = () => {
+    openAccountDestination("delete");
   };
 
   // ✅ REÁLNÉ smazání účtu (Firestore + usernames + Firebase Auth)
@@ -2102,112 +2146,114 @@ const buyPremium = async () => {
     if (deleteWorking) return;
 
     const user = auth.currentUser;
-    if (!user || !user.email) {
-      showPwdPopup("error", lang === "cs" ? "Nelze smazat účet" : "Cannot delete account", lang === "cs" ? "Nejsi přihlášený." : "You are not signed in.");
-      setDeleteOpen(false);
+    if (!user) {
+      setDeleteError(p.deleteNotSignedIn);
       return;
     }
 
-    const pwd = deletePassword.trim();
+    const canReauthenticateWithPassword =
+      !!user.email &&
+      user.providerData.some((provider) => provider.providerId === "password");
+
+    if (!canReauthenticateWithPassword || !user.email) {
+      setDeleteError(p.deleteUnsupportedProvider);
+      return;
+    }
+
+    const pwd = deletePassword;
     if (!pwd) {
-      showPwdPopup(
-        "error",
-        lang === "cs" ? "Chybí heslo" : "Missing password",
-        lang === "cs" ? "Pro smazání účtu zadej heslo (kvůli bezpečnosti Firebase)." : "Enter your password to delete the account (required by Firebase security)."
-      );
+      setDeleteError(p.deleteMissingPassword);
       return;
     }
 
-  setDeleteWorking(true);
-  try {
-    // 1) reauth — uživatel zadá heslo, aby bylo smazání bezpečné
-    const cred = EmailAuthProvider.credential(user.email, pwd);
-    await reauthenticateWithCredential(user, cred);
-
-    // 2) kompletní smazání účtu přes Cloud Function
-    // Backend smaže:
-    // - Firebase Auth účet
-    // - users/{uid}
-    // - usernames/{usernameLower}
-    // - publicProfiles/{uid}
-    // - friends vazby
-    // - pushTokens
-    await user.getIdToken(true);
-
-    const fn = httpsCallable(functions, "deleteMyAccount");
-    await fn();
-
-    // 3) úklid lokálních dat
-    try {
-      await revenueCatLogout();
-    } catch {
-      // ignore
-    }
+    Keyboard.dismiss();
+    setDeleteError(null);
+    setDeleteWorking(true);
 
     try {
-      await signOut(auth);
-    } catch {
-      // ignore
-    }
+      const credential = EmailAuthProvider.credential(user.email, pwd);
+      await reauthenticateWithCredential(user, credential);
+      await user.getIdToken(true);
 
-    await clearOneMoreStorage();
+      // Existing trusted backend cleanup removes the Auth user together with
+      // users/{uid}, usernames/{usernameLower}, publicProfiles/{uid},
+      // friend edges and push tokens.
+      const deleteAccount = httpsCallable(functions, "deleteMyAccount");
+      await deleteAccount();
 
-    // zavřeme modaly + přesměrujeme
-    setDeleteOpen(false);
-    setAccountOpen(false);
-    router.replace("/login");
-  } catch (err: any) {
-    const code = String(err?.code ?? "");
-    if (__DEV__) {
-      console.log("performDeleteAccount error", code);
-    }
-
-    if (code.includes("auth/wrong-password")) {
-      showPwdPopup(
-        "error",
-        lang === "cs" ? "Špatné heslo" : "Wrong password",
-        lang === "cs"
-          ? "Zadal jsi špatné heslo. Zkus to znovu."
-          : "You entered the wrong password. Try again."
-      );
-      return;
-    }
-
-    if (
-      code.includes("auth/requires-recent-login") ||
-      code.includes("functions/failed-precondition") ||
-      code.includes("failed-precondition")
-    ) {
-      setDeleteOpen(false);
-      showPwdPopup(
-        "error",
-        lang === "cs" ? "Vyžadováno znovu přihlášení" : "Re-login required",
-        lang === "cs"
-          ? "Z bezpečnostních důvodů se musíš znovu přihlásit a pak smazání zopakovat. Odhlásím tě teď."
-          : "For security reasons, you need to sign in again and then repeat the deletion. I will sign you out now."
-      );
       try {
         await revenueCatLogout();
-        await signOut(auth);
-      } finally {
-        await clearOneMoreStorage();
-        router.replace("/login");
+      } catch {
+        // Account deletion must not fail because optional local cleanup failed.
       }
-      return;
-    }
 
-    setDeleteOpen(false);
-    showPwdPopup(
-      "error",
-      lang === "cs" ? "Smazání se nepovedlo" : "Deletion failed",
-      lang === "cs"
-        ? "Nepodařilo se smazat účet. Zkus to prosím znovu."
-        : "Could not delete the account. Please try again."
-    );
-  } finally {
-    setDeleteWorking(false);
-  }
-};
+      try {
+        await signOut(auth);
+      } catch {
+        // The backend already removed the Firebase Auth user.
+      }
+
+      await clearOneMoreStorage();
+      setDeletePassword("");
+      setDeleteError(null);
+      setDeleteOpen(false);
+      setAccountOpen(false);
+      router.replace("/login");
+    } catch (err: any) {
+      const code = String(err?.code ?? "").toLowerCase();
+      if (__DEV__) {
+        console.log("performDeleteAccount error", code);
+      }
+
+      if (
+        code.includes("auth/wrong-password") ||
+        code.includes("auth/invalid-credential") ||
+        code.includes("auth/invalid-login-credentials")
+      ) {
+        setDeleteError(p.deleteWrongPassword);
+        return;
+      }
+
+      if (
+        code.includes("auth/network-request-failed") ||
+        code.includes("functions/unavailable") ||
+        code.includes("functions/deadline-exceeded")
+      ) {
+        setDeleteError(p.deleteNetworkError);
+        return;
+      }
+
+      if (
+        code.includes("auth/requires-recent-login") ||
+        code.includes("functions/failed-precondition") ||
+        code.includes("failed-precondition")
+      ) {
+        setDeleteError(p.deleteUnsupportedProvider);
+        return;
+      }
+
+      if (
+        code.includes("auth/user-mismatch") ||
+        code.includes("auth/operation-not-allowed")
+      ) {
+        setDeleteError(p.deleteUnsupportedProvider);
+        return;
+      }
+
+      if (
+        code.includes("auth/user-not-found") ||
+        code.includes("functions/unauthenticated") ||
+        code.includes("unauthenticated")
+      ) {
+        setDeleteError(p.deleteNotSignedIn);
+        return;
+      }
+
+      setDeleteError(p.deleteGenericError);
+    } finally {
+      setDeleteWorking(false);
+    }
+  };
 
   const openExternalLink = async (url: string, errorMessage: string) => {
     try {
@@ -2587,16 +2633,21 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         visible={deleteOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => !deleteWorking && setDeleteOpen(false)}
+        onRequestClose={closeDeleteAccountModal}
       >
         <Pressable
           style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
-          onPress={() => !deleteWorking && setDeleteOpen(false)}
+          onPress={closeDeleteAccountModal}
         />
         <KeyboardAvoidingView
-          style={styles.popupWrap}
+          style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
         >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.deleteModalContent}
+          >
           <View
             style={[
               styles.popupCard,
@@ -2610,7 +2661,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
               <Text style={styles.popupTitle}>{p.deleteAccountTitle}</Text>
 
               <Pressable
-                onPress={() => !deleteWorking && setDeleteOpen(false)}
+                onPress={closeDeleteAccountModal}
                 hitSlop={10}
                 style={({ pressed }) => [styles.popupX, pressed && { opacity: 0.85 }]}
               >
@@ -2627,11 +2678,18 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             </Text>
             <TextInput
               value={deletePassword}
-              onChangeText={setDeletePassword}
+              onChangeText={(value) => {
+                setDeletePassword(value);
+                if (deleteError) setDeleteError(null);
+              }}
               placeholder={p.passwordPlaceholder}
               placeholderTextColor={"rgba(11,18,32,0.55)"}
               secureTextEntry
               autoCapitalize="none"
+              autoCorrect={false}
+              editable={!deleteWorking}
+              returnKeyType="done"
+              onSubmitEditing={() => void performDeleteAccount()}
               style={[
                 styles.input,
                 {
@@ -2642,9 +2700,13 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
               ]}
             />
 
+            {!!deleteError && (
+              <Text style={styles.deleteAccountError}>{deleteError}</Text>
+            )}
+
             <Pressable
               disabled={deleteWorking}
-              onPress={() => setDeleteOpen(false)}
+              onPress={closeDeleteAccountModal}
               style={({ pressed }) => [
                 styles.popupBtn,
                 (pressed || deleteWorking) && { opacity: 0.9 },
@@ -2669,6 +2731,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
               </Text>
             </Pressable>
           </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -6189,6 +6252,13 @@ pmBottomText: {
       justifyContent: "center",
       paddingHorizontal: 18,
     },
+    deleteModalContent: {
+      flexGrow: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 18,
+      paddingVertical: 24,
+    },
     popupCard: {
       width: "100%",
       borderRadius: 22,
@@ -6222,6 +6292,13 @@ pmBottomText: {
       lineHeight: 19,
       color: "#0B1220",
       marginTop: 4,
+    },
+    deleteAccountError: {
+      marginTop: 10,
+      color: "#B42318",
+      fontSize: 13,
+      fontWeight: "800",
+      lineHeight: 18,
     },
     popupBtn: {
       marginTop: 12,
