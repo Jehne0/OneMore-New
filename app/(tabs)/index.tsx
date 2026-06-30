@@ -80,8 +80,6 @@ import {
 } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 import {
-  medalChallengesFromStats,
-  medalCountsFromChallengeStats,
   tierForBestStreak,
   type EarnedMedalTier,
   type MedalTier,
@@ -185,8 +183,61 @@ type MedalState = {
   };
 };
 
+const MEDAL_CYCLE_DAYS = 180;
+
+function safeBestStreak(value: unknown): number {
+  const streak = Number(value);
+  return Math.max(0, Math.floor(Number.isFinite(streak) ? streak : 0));
+}
+
+function earnedMedalCount(bestStreak: number, threshold: number): number {
+  const completedCycles = Math.floor(bestStreak / MEDAL_CYCLE_DAYS);
+  const daysInCurrentCycle = bestStreak % MEDAL_CYCLE_DAYS;
+  return completedCycles + (daysInCurrentCycle >= threshold ? 1 : 0);
+}
+
+function earnedMedalChallengesFromStats(stats?: any) {
+  const entries: {
+    challengeId: string;
+    tier: EarnedMedalTier;
+    bestStreak: number;
+  }[] = [];
+
+  for (const [challengeId, challengeStats] of Object.entries(stats ?? {})) {
+    const bestStreak = safeBestStreak((challengeStats as any)?.bestStreak);
+
+    for (const medal of MEDAL_OVERVIEW_TIERS) {
+      if (earnedMedalCount(bestStreak, medal.days) > 0) {
+        entries.push({ challengeId: String(challengeId), tier: medal.tier, bestStreak });
+      }
+    }
+  }
+
+  return entries;
+}
+
 function medalsFromChallengeStats(stats?: any, activeChallengeIds?: Iterable<string>): MedalState {
-  const counts = medalCountsFromChallengeStats(stats ?? {}, activeChallengeIds);
+  const counts: MedalState["counts"] = {
+    brambora: 0,
+    steel: 0,
+    bronze: 0,
+    silver: 0,
+    gold: 0,
+    diamond: 0,
+  };
+  const allowedIds = activeChallengeIds
+    ? new Set(Array.from(activeChallengeIds).map(String))
+    : null;
+
+  for (const [challengeId, challengeStats] of Object.entries(stats ?? {})) {
+    if (allowedIds && !allowedIds.has(String(challengeId))) continue;
+
+    const bestStreak = safeBestStreak((challengeStats as any)?.bestStreak);
+    for (const medal of MEDAL_OVERVIEW_TIERS) {
+      counts[medal.tier] += earnedMedalCount(bestStreak, medal.days);
+    }
+  }
+
   const active = {
     brambora: counts.brambora > 0,
     steel: counts.steel > 0,
@@ -2827,7 +2878,7 @@ const bestStreak = useMemo(() => {
       bestStreak: number;
     }[]>();
 
-    for (const entry of medalChallengesFromStats(appState?.challengeStats)) {
+    for (const entry of earnedMedalChallengesFromStats(appState?.challengeStats)) {
       const list = grouped.get(entry.tier) ?? [];
       list.push({
         challengeId: entry.challengeId,
