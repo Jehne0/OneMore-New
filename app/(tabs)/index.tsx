@@ -80,7 +80,6 @@ import {
 } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
 import {
-  tierForBestStreak,
   type EarnedMedalTier,
   type MedalTier,
 } from "../../lib/medals";
@@ -106,8 +105,8 @@ const MEDAL_OVERVIEW_TIERS: {
   { tier: "steel", days: 10, image: MEDAL_STEEL },
   { tier: "bronze", days: 20, image: MEDAL_BRONZE },
   { tier: "silver", days: 30, image: MEDAL_SILVER },
-  { tier: "gold", days: 90, image: MEDAL_GOLD },
-  { tier: "diamond", days: 180, image: MEDAL_DIAMOND },
+  { tier: "gold", days: 60, image: MEDAL_GOLD },
+  { tier: "diamond", days: 90, image: MEDAL_DIAMOND },
 ];
 
 const FREE_MAX = FREE_MAX_CHALLENGES;
@@ -183,7 +182,7 @@ type MedalState = {
   };
 };
 
-const MEDAL_CYCLE_DAYS = 180;
+const MEDAL_CYCLE_DAYS = 90;
 
 function safeBestStreak(value: unknown): number {
   const streak = Number(value);
@@ -191,33 +190,23 @@ function safeBestStreak(value: unknown): number {
 }
 
 function earnedMedalCount(bestStreak: number, threshold: number): number {
-  const completedCycles = Math.floor(bestStreak / MEDAL_CYCLE_DAYS);
-  const daysInCurrentCycle = bestStreak % MEDAL_CYCLE_DAYS;
-  return completedCycles + (daysInCurrentCycle >= threshold ? 1 : 0);
+  if (bestStreak < threshold) return 0;
+  return 1 + Math.floor((bestStreak - threshold) / MEDAL_CYCLE_DAYS);
 }
 
-function earnedMedalChallengesFromStats(stats?: any) {
-  const entries: {
-    challengeId: string;
-    tier: EarnedMedalTier;
-    bestStreak: number;
-  }[] = [];
+function highestEarnedMedalForBestStreak(value: unknown): MedalTier {
+  const bestStreak = safeBestStreak(value);
 
-  for (const [challengeId, challengeStats] of Object.entries(stats ?? {})) {
-    const bestStreak = safeBestStreak((challengeStats as any)?.bestStreak);
-
-    for (const medal of MEDAL_OVERVIEW_TIERS) {
-      if (earnedMedalCount(bestStreak, medal.days) > 0) {
-        entries.push({ challengeId: String(challengeId), tier: medal.tier, bestStreak });
-      }
-    }
+  for (let index = MEDAL_OVERVIEW_TIERS.length - 1; index >= 0; index -= 1) {
+    const medal = MEDAL_OVERVIEW_TIERS[index];
+    if (bestStreak >= medal.days) return medal.tier;
   }
 
-  return entries;
+  return "none";
 }
 
-function medalsFromChallengeStats(stats?: any, activeChallengeIds?: Iterable<string>): MedalState {
-  const counts: MedalState["counts"] = {
+function emptyMedalCounts(): MedalState["counts"] {
+  return {
     brambora: 0,
     steel: 0,
     bronze: 0,
@@ -225,17 +214,134 @@ function medalsFromChallengeStats(stats?: any, activeChallengeIds?: Iterable<str
     gold: 0,
     diamond: 0,
   };
-  const allowedIds = activeChallengeIds
-    ? new Set(Array.from(activeChallengeIds).map(String))
-    : null;
+}
 
-  for (const [challengeId, challengeStats] of Object.entries(stats ?? {})) {
-    if (allowedIds && !allowedIds.has(String(challengeId))) continue;
+function addRunMedals(counts: MedalState["counts"], runLength: number) {
+  for (const medal of MEDAL_OVERVIEW_TIERS) {
+    counts[medal.tier] += earnedMedalCount(runLength, medal.days);
+  }
+}
 
-    const bestStreak = safeBestStreak((challengeStats as any)?.bestStreak);
-    for (const medal of MEDAL_OVERVIEW_TIERS) {
-      counts[medal.tier] += earnedMedalCount(bestStreak, medal.days);
+function medalCollectionFromHistory(
+  state: AppState | null | undefined,
+  isActiveOnDate: (challenge: any, dateISO: string) => boolean,
+  todayISO: string
+) {
+  const stats = state?.challengeStats ?? {};
+  const history = state?.history ?? [];
+  const challengeIds = new Set<string>(Object.keys(stats).map(String));
+  const easyModeChallengeIds = new Set(
+    (state?.easyModeChallengeIds ?? []).map(String)
+  );
+  const definitions = new Map<string, any>();
+  const eventsByChallenge = new Map<
+    string,
+    Map<string, { completed: boolean; skipped: boolean; protectedByFreeze: boolean }>
+  >();
+
+  for (const challenge of [
+    ...(state?.archivedChallenges ?? []),
+    ...(state?.challenges ?? []),
+  ]) {
+    const id = String((challenge as any)?.id ?? "");
+    if (id) definitions.set(id, challenge);
+  }
+
+  for (const entry of history as any[]) {
+    const challengeId = String(entry?.challengeId ?? "");
+    const date = String(entry?.date ?? "");
+    if (!challengeId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+    challengeIds.add(challengeId);
+    let eventsByDate = eventsByChallenge.get(challengeId);
+    if (!eventsByDate) {
+      eventsByDate = new Map();
+      eventsByChallenge.set(challengeId, eventsByDate);
     }
+
+    const event = eventsByDate.get(date) ?? {
+      completed: false,
+      skipped: false,
+      protectedByFreeze: false,
+    };
+    if (entry?.status === "completed" && entry?.partial !== true) {
+      event.completed = true;
+    }
+    if (entry?.status === "skipped") {
+      event.skipped = true;
+      event.protectedByFreeze ||= entry?.protectedByFreeze === true;
+    }
+    eventsByDate.set(date, event);
+  }
+
+  const counts = emptyMedalCounts();
+  const earnedByChallenge = new Map<string, MedalState["counts"]>();
+
+  for (const challengeId of challengeIds) {
+    const earned = emptyMedalCounts();
+    const definition = definitions.get(challengeId);
+    const schedule = definition
+      ? { ...definition, enabled: true, deletedAt: undefined }
+      : null;
+    const easyMode =
+      easyModeChallengeIds.has(challengeId) ||
+      isChallengeEasyMode(definition);
+    const events = Array.from(eventsByChallenge.get(challengeId)?.entries() ?? [])
+      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
+    let runLength = 0;
+    let previousDate: string | null = null;
+    let hasUsableHistoryRun = false;
+
+    const commitRun = () => {
+      if (runLength < 1) return;
+      hasUsableHistoryRun = true;
+      addRunMedals(earned, runLength);
+      runLength = 0;
+    };
+
+    if (!easyMode) {
+      for (const [date, event] of events) {
+        if (previousDate) {
+          for (
+            let missingDate = addDaysISO(previousDate, 1);
+            missingDate < date && missingDate < todayISO;
+            missingDate = addDaysISO(missingDate, 1)
+          ) {
+            if (!schedule || isActiveOnDate(schedule, missingDate)) {
+              commitRun();
+              break;
+            }
+          }
+        }
+
+        const activeOnEventDate =
+          !schedule || isActiveOnDate(schedule, date);
+        if (event.completed) {
+          runLength += 1;
+        } else if (event.skipped) {
+          if (!event.protectedByFreeze && activeOnEventDate) {
+            commitRun();
+          }
+        } else if (activeOnEventDate && date < todayISO) {
+          commitRun();
+        }
+
+        previousDate = date;
+      }
+      commitRun();
+    }
+
+    if (!hasUsableHistoryRun) {
+      const bestStreak = safeBestStreak((stats as any)?.[challengeId]?.bestStreak);
+      for (const medal of MEDAL_OVERVIEW_TIERS) {
+        earned[medal.tier] = earnedMedalCount(bestStreak, medal.days);
+      }
+    }
+
+    for (const medal of MEDAL_OVERVIEW_TIERS) {
+      counts[medal.tier] += earned[medal.tier];
+    }
+    earnedByChallenge.set(challengeId, earned);
   }
 
   const active = {
@@ -246,7 +352,11 @@ function medalsFromChallengeStats(stats?: any, activeChallengeIds?: Iterable<str
     gold: counts.gold > 0,
     diamond: counts.diamond > 0,
   };
-  return { active, counts };
+
+  return {
+    state: { active, counts } satisfies MedalState,
+    earnedByChallenge,
+  };
 }
 
 function SparkleBurst({ progress }: { progress: Animated.Value }) {
@@ -480,10 +590,40 @@ function makeStyles(UI: any, bottomInset: number) {
       alignItems: "center",
       gap: 10,
     },
+    medalOverviewIconWrap: {
+      position: "relative",
+    },
     medalOverviewIcon: {
       width: 38,
       height: 38,
       resizeMode: "contain",
+    },
+    medalOverviewBadge: {
+      position: "absolute",
+      right: -8,
+      bottom: -4,
+      minWidth: 24,
+      height: 18,
+      paddingHorizontal: 5,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: UI.accent,
+      borderWidth: 1,
+      borderColor: UI.card,
+    },
+    medalOverviewBadgeText: {
+      color: "#0B1220",
+      fontSize: 10,
+      lineHeight: 12,
+      fontWeight: "900",
+    },
+    medalOverviewHint: {
+      marginBottom: 10,
+      color: UI.sub,
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: "700",
     },
     medalOverviewTitle: {
       flex: 1,
@@ -1045,15 +1185,6 @@ sharedMemberCount: {
   });
 }
 
-const MEDAL_OFFSETS = {
-  brambora: -5,
-  steel: -5,
-  bronze: -5,
-  silver: 0,
-  gold: 0,
-  diamond: 0,
-};
-
 export default function Index() {
   const router = useRouter();
 
@@ -1108,6 +1239,7 @@ notificationCount: "Number of notifications",
       currentMedal: "Current medal",
       bestStreakOfChallenge: "Best streak of this challenge",
       medalOverviewTitle: "Medal overview",
+      medalOverviewHint: "The ×N count shows how many times the medal was earned.",
       medalBestStreak: "best streak",
       medalNoChallenges: "No challenge yet",
       medalChallengeFallback: "Challenge",
@@ -1210,6 +1342,7 @@ notificationCount: "Liczba powiadomień",
       currentMedal: "Aktualny medal",
       bestStreakOfChallenge: "Najlepsza seria tego wyzwania",
       medalOverviewTitle: "Przegląd medali",
+      medalOverviewHint: "Liczba ×N pokazuje, ile razy medal został zdobyty.",
       medalBestStreak: "najlepsza seria",
       medalNoChallenges: "Na razie brak wyzwań",
       medalChallengeFallback: "Wyzwanie",
@@ -1313,6 +1446,7 @@ notificationCount: "Anzahl der Benachrichtigungen",
       currentMedal: "Aktuelle Medaille",
       bestStreakOfChallenge: "Beste Serie dieser Challenge",
       medalOverviewTitle: "Medaillenübersicht",
+      medalOverviewHint: "Die Zahl ×N zeigt, wie oft die Medaille gesammelt wurde.",
       medalBestStreak: "beste Serie",
       medalNoChallenges: "Noch keine Challenge",
       medalChallengeFallback: "Challenge",
@@ -1414,6 +1548,7 @@ notificationCount: "Počet notifikací",
     currentMedal: "Aktuální medaile",
     bestStreakOfChallenge: "Nejlepší streak této výzvy",
     medalOverviewTitle: "Přehled medailí",
+    medalOverviewHint: "Počet ×N ukazuje, kolikrát byla medaile získána.",
     medalBestStreak: "nejlepší série",
     medalNoChallenges: "Zatím žádná výzva",
     medalChallengeFallback: "Výzva",
@@ -2849,10 +2984,11 @@ const bestStreak = useMemo(() => {
   return max;
 }, [appState?.challenges, appState?.challengeStats, dayIndex, tdy]);
 
-  const medalState = useMemo(
-    () => medalsFromChallengeStats(appState?.challengeStats),
-    [appState?.challengeStats]
+  const medalCollection = useMemo(
+    () => medalCollectionFromHistory(appState, isChallengeActiveOnDate, tdy),
+    [appState, isChallengeActiveOnDate, tdy]
   );
+  const medalState = medalCollection.state;
 
   const medalOverview = useMemo(() => {
     const names = new Map<string, string>();
@@ -2876,16 +3012,27 @@ const bestStreak = useMemo(() => {
       challengeId: string;
       name: string;
       bestStreak: number;
+      earnedCount: number;
     }[]>();
 
-    for (const entry of earnedMedalChallengesFromStats(appState?.challengeStats)) {
-      const list = grouped.get(entry.tier) ?? [];
-      list.push({
-        challengeId: entry.challengeId,
-        name: names.get(entry.challengeId) || TXT.medalChallengeFallback,
-        bestStreak: entry.bestStreak,
-      });
-      grouped.set(entry.tier, list);
+    for (const [challengeId, earned] of medalCollection.earnedByChallenge) {
+      const bestStreak = safeBestStreak(
+        appState?.challengeStats?.[challengeId]?.bestStreak
+      );
+
+      for (const medal of MEDAL_OVERVIEW_TIERS) {
+        const earnedCount = earned[medal.tier];
+        if (earnedCount < 1) continue;
+
+        const list = grouped.get(medal.tier) ?? [];
+        list.push({
+          challengeId,
+          name: names.get(challengeId) || TXT.medalChallengeFallback,
+          bestStreak,
+          earnedCount,
+        });
+        grouped.set(medal.tier, list);
+      }
     }
 
     for (const list of grouped.values()) {
@@ -2898,6 +3045,7 @@ const bestStreak = useMemo(() => {
     appState?.challengeStats,
     appState?.challenges,
     appState?.history,
+    medalCollection.earnedByChallenge,
     TXT.medalChallengeFallback,
   ]);
 
@@ -2912,15 +3060,16 @@ const highestMedalForFriends = useMemo(() => {
 }, [medalState]);
 
 const totalMedalsForFriends = useMemo(() => {
-  return (
-    medalState.counts.brambora +
-    medalState.counts.steel +
-    medalState.counts.bronze +
-    medalState.counts.silver +
-    medalState.counts.gold +
-    medalState.counts.diamond
-  );
-}, [medalState]);
+  let total = 0;
+
+  for (const stats of Object.values(appState?.challengeStats ?? {})) {
+    if (safeBestStreak(stats?.bestStreak) >= MEDAL_OVERVIEW_TIERS[0].days) {
+      total += 1;
+    }
+  }
+
+  return total;
+}, [appState?.challengeStats]);
 
 const bestStreakForFriends = useMemo(() => {
   const stats = appState?.challengeStats ?? {};
@@ -3008,7 +3157,7 @@ useEffect(() => {
   }
 
   const selectedChallengeMedal: MedalTier = selectedId
-    ? tierForBestStreak(
+    ? highestEarnedMedalForBestStreak(
         Number(appState?.challengeStats?.[String(selectedId)]?.bestStreak ?? 0)
       )
     : "none";
@@ -3289,7 +3438,7 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.brambora && styles.medalCountDim]}>
-                {medalState.counts.brambora}
+                {medalState.counts.brambora > 1 ? `×${medalState.counts.brambora}` : ""}
               </Text>
             </View>
 
@@ -3306,7 +3455,7 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.steel && styles.medalCountDim]}>
-                {medalState.counts.steel}
+                {medalState.counts.steel > 1 ? `×${medalState.counts.steel}` : ""}
               </Text>
             </View>
 
@@ -3323,7 +3472,7 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.bronze && styles.medalCountDim]}>
-                {medalState.counts.bronze}
+                {medalState.counts.bronze > 1 ? `×${medalState.counts.bronze}` : ""}
               </Text>
             </View>
 
@@ -3340,7 +3489,7 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.silver && styles.medalCountDim]}>
-                {medalState.counts.silver}
+                {medalState.counts.silver > 1 ? `×${medalState.counts.silver}` : ""}
               </Text>
             </View>
 
@@ -3357,7 +3506,7 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.gold && styles.medalCountDim]}>
-                {medalState.counts.gold}
+                {medalState.counts.gold > 1 ? `×${medalState.counts.gold}` : ""}
               </Text>
             </View>
 
@@ -3374,7 +3523,7 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.diamond && styles.medalCountDim]}>
-                {medalState.counts.diamond}
+                {medalState.counts.diamond > 1 ? `×${medalState.counts.diamond}` : ""}
               </Text>
             </View>
           </Pressable>
@@ -3452,6 +3601,10 @@ useEffect(() => {
               </Pressable>
             </View>
 
+            <Text style={styles.medalOverviewHint}>
+              {TXT.medalOverviewHint}
+            </Text>
+
             <ScrollView
               style={{ flexShrink: 1, minHeight: 0 }}
               nestedScrollEnabled={true}
@@ -3469,7 +3622,16 @@ useEffect(() => {
                 return (
                   <View key={medal.tier} style={styles.medalOverviewTier}>
                     <View style={styles.medalOverviewHeader}>
-                      <Image source={medal.image} style={styles.medalOverviewIcon} />
+                      <View style={styles.medalOverviewIconWrap}>
+                        <Image source={medal.image} style={styles.medalOverviewIcon} />
+                        {medalState.counts[medal.tier] > 1 && (
+                          <View style={styles.medalOverviewBadge}>
+                            <Text style={styles.medalOverviewBadgeText}>
+                              {`×${medalState.counts[medal.tier]}`}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.medalOverviewTitle}>
                         {`${medal.days} ${TXT.medalDays} — ${medalLabel(medal.tier)}`}
                       </Text>
@@ -3481,7 +3643,7 @@ useEffect(() => {
                           key={challenge.challengeId}
                           style={styles.medalOverviewChallenge}
                         >
-                          {`${challenge.name} — ${TXT.medalBestStreak} ${challenge.bestStreak} ${TXT.medalDays}`}
+                          {`${challenge.name}${challenge.earnedCount > 1 ? ` ×${challenge.earnedCount}` : ""} — ${TXT.medalBestStreak} ${challenge.bestStreak} ${TXT.medalDays}`}
                         </Text>
                       ))
                     ) : (
