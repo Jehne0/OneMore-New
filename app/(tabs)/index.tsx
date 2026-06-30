@@ -183,6 +183,7 @@ type MedalState = {
 };
 
 const MEDAL_CYCLE_DAYS = 90;
+const MAX_MEDAL_COUNT_PER_CHALLENGE = 10;
 
 function safeBestStreak(value: unknown): number {
   const streak = Number(value);
@@ -218,8 +219,18 @@ function emptyMedalCounts(): MedalState["counts"] {
 
 function addRunMedals(counts: MedalState["counts"], runLength: number) {
   for (const medal of MEDAL_OVERVIEW_TIERS) {
-    counts[medal.tier] += earnedMedalCount(runLength, medal.days);
+    counts[medal.tier] = Math.min(
+      counts[medal.tier] + earnedMedalCount(runLength, medal.days),
+      MAX_MEDAL_COUNT_PER_CHALLENGE
+    );
   }
+}
+
+function medalBadgeCount(count: number): number {
+  return Math.min(
+    Math.max(0, count),
+    MAX_MEDAL_COUNT_PER_CHALLENGE
+  );
 }
 
 function medalCollectionFromHistory(
@@ -334,7 +345,10 @@ function medalCollectionFromHistory(
     if (!hasUsableHistoryRun) {
       const bestStreak = safeBestStreak((stats as any)?.[challengeId]?.bestStreak);
       for (const medal of MEDAL_OVERVIEW_TIERS) {
-        earned[medal.tier] = earnedMedalCount(bestStreak, medal.days);
+        earned[medal.tier] = Math.min(
+          earnedMedalCount(bestStreak, medal.days),
+          MAX_MEDAL_COUNT_PER_CHALLENGE
+        );
       }
     }
 
@@ -1239,7 +1253,7 @@ notificationCount: "Number of notifications",
       currentMedal: "Current medal",
       bestStreakOfChallenge: "Best streak of this challenge",
       medalOverviewTitle: "Medal overview",
-      medalOverviewHint: "The ×N count shows how many times the medal was earned.",
+      medalOverviewHint: "The ×N count shows how many times the medal was earned, up to 10 times per challenge.",
       medalBestStreak: "best streak",
       medalNoChallenges: "No challenge yet",
       medalChallengeFallback: "Challenge",
@@ -1342,7 +1356,7 @@ notificationCount: "Liczba powiadomień",
       currentMedal: "Aktualny medal",
       bestStreakOfChallenge: "Najlepsza seria tego wyzwania",
       medalOverviewTitle: "Przegląd medali",
-      medalOverviewHint: "Liczba ×N pokazuje, ile razy medal został zdobyty.",
+      medalOverviewHint: "Liczba ×N pokazuje, ile razy medal został zdobyty, maksymalnie 10 razy w jednym wyzwaniu.",
       medalBestStreak: "najlepsza seria",
       medalNoChallenges: "Na razie brak wyzwań",
       medalChallengeFallback: "Wyzwanie",
@@ -1446,7 +1460,7 @@ notificationCount: "Anzahl der Benachrichtigungen",
       currentMedal: "Aktuelle Medaille",
       bestStreakOfChallenge: "Beste Serie dieser Challenge",
       medalOverviewTitle: "Medaillenübersicht",
-      medalOverviewHint: "Die Zahl ×N zeigt, wie oft die Medaille gesammelt wurde.",
+      medalOverviewHint: "Die Zahl ×N zeigt, wie oft die Medaille gesammelt wurde, höchstens 10-mal pro Challenge.",
       medalBestStreak: "beste Serie",
       medalNoChallenges: "Noch keine Challenge",
       medalChallengeFallback: "Challenge",
@@ -1548,7 +1562,7 @@ notificationCount: "Počet notifikací",
     currentMedal: "Aktuální medaile",
     bestStreakOfChallenge: "Nejlepší streak této výzvy",
     medalOverviewTitle: "Přehled medailí",
-    medalOverviewHint: "Počet ×N ukazuje, kolikrát byla medaile získána.",
+    medalOverviewHint: "Počet ×N ukazuje, kolikrát byla medaile získána, maximálně 10× za jednu výzvu.",
     medalBestStreak: "nejlepší série",
     medalNoChallenges: "Zatím žádná výzva",
     medalChallengeFallback: "Výzva",
@@ -3438,7 +3452,9 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.brambora && styles.medalCountDim]}>
-                {medalState.counts.brambora > 1 ? `×${medalState.counts.brambora}` : ""}
+                {medalBadgeCount(medalState.counts.brambora) > 1
+                  ? `×${medalBadgeCount(medalState.counts.brambora)}`
+                  : ""}
               </Text>
             </View>
 
@@ -3455,7 +3471,9 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.steel && styles.medalCountDim]}>
-                {medalState.counts.steel > 1 ? `×${medalState.counts.steel}` : ""}
+                {medalBadgeCount(medalState.counts.steel) > 1
+                  ? `×${medalBadgeCount(medalState.counts.steel)}`
+                  : ""}
               </Text>
             </View>
 
@@ -3472,7 +3490,9 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.bronze && styles.medalCountDim]}>
-                {medalState.counts.bronze > 1 ? `×${medalState.counts.bronze}` : ""}
+                {medalBadgeCount(medalState.counts.bronze) > 1
+                  ? `×${medalBadgeCount(medalState.counts.bronze)}`
+                  : ""}
               </Text>
             </View>
 
@@ -3489,7 +3509,9 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.silver && styles.medalCountDim]}>
-                {medalState.counts.silver > 1 ? `×${medalState.counts.silver}` : ""}
+                {medalBadgeCount(medalState.counts.silver) > 1
+                  ? `×${medalBadgeCount(medalState.counts.silver)}`
+                  : ""}
               </Text>
             </View>
 
@@ -3506,7 +3528,9 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.gold && styles.medalCountDim]}>
-                {medalState.counts.gold > 1 ? `×${medalState.counts.gold}` : ""}
+                {medalBadgeCount(medalState.counts.gold) > 1
+                  ? `×${medalBadgeCount(medalState.counts.gold)}`
+                  : ""}
               </Text>
             </View>
 
@@ -3523,7 +3547,9 @@ useEffect(() => {
                 />
               </View>
               <Text style={[styles.medalCount, !medalState.active.diamond && styles.medalCountDim]}>
-                {medalState.counts.diamond > 1 ? `×${medalState.counts.diamond}` : ""}
+                {medalBadgeCount(medalState.counts.diamond) > 1
+                  ? `×${medalBadgeCount(medalState.counts.diamond)}`
+                  : ""}
               </Text>
             </View>
           </Pressable>
@@ -3624,10 +3650,10 @@ useEffect(() => {
                     <View style={styles.medalOverviewHeader}>
                       <View style={styles.medalOverviewIconWrap}>
                         <Image source={medal.image} style={styles.medalOverviewIcon} />
-                        {medalState.counts[medal.tier] > 1 && (
+                        {medalBadgeCount(medalState.counts[medal.tier]) > 1 && (
                           <View style={styles.medalOverviewBadge}>
                             <Text style={styles.medalOverviewBadgeText}>
-                              {`×${medalState.counts[medal.tier]}`}
+                              {`×${medalBadgeCount(medalState.counts[medal.tier])}`}
                             </Text>
                           </View>
                         )}
@@ -3643,7 +3669,7 @@ useEffect(() => {
                           key={challenge.challengeId}
                           style={styles.medalOverviewChallenge}
                         >
-                          {`${challenge.name}${challenge.earnedCount > 1 ? ` ×${challenge.earnedCount}` : ""} — ${TXT.medalBestStreak} ${challenge.bestStreak} ${TXT.medalDays}`}
+                          {`${challenge.name}${medalBadgeCount(challenge.earnedCount) > 1 ? ` ×${medalBadgeCount(challenge.earnedCount)}` : ""} — ${TXT.medalBestStreak} ${challenge.bestStreak} ${TXT.medalDays}`}
                         </Text>
                       ))
                     ) : (
