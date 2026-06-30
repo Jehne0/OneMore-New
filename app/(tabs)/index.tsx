@@ -3372,8 +3372,12 @@ useEffect(() => {
         animationType="fade"
         onRequestClose={() => setMedalsOverviewOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setMedalsOverviewOpen(false)}>
+        <View style={styles.backdrop}>
           <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setMedalsOverviewOpen(false)}
+          />
+          <View
             style={[
               styles.sheet,
               {
@@ -3384,7 +3388,6 @@ useEffect(() => {
                 ),
               },
             ]}
-            onPress={() => {}}
           >
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>
@@ -3399,11 +3402,14 @@ useEffect(() => {
             </View>
 
             <ScrollView
-              style={{ flexShrink: 1 }}
+              style={{ flexShrink: 1, minHeight: 0 }}
+              nestedScrollEnabled={true}
+              scrollEnabled={true}
               showsVerticalScrollIndicator={true}
-              persistentScrollbar={Platform.OS === "android"}
+              persistentScrollbar={true}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={{
-                paddingBottom: Math.max(24, insets.bottom + 24),
+                paddingBottom: Math.max(96, insets.bottom + 96),
               }}
             >
               {MEDAL_OVERVIEW_TIERS.map((medal) => {
@@ -3436,8 +3442,8 @@ useEffect(() => {
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
    <Modal
