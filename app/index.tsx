@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { revenueCatLogin } from "../lib/revenuecat";
 import { registerPushTokenForCurrentUser } from "../lib/pushTokens";
 import { loadState } from "../lib/storage";
+import { waitForCloudSyncReady } from "../lib/cloudSync";
 
 const SAVED_LOGIN_KEY = "onemore_saved_login";
 
@@ -18,7 +19,6 @@ export default function Index() {
 
   useEffect(() => {
     let cancelled = false;
-    let authResolved = false;
 
     const withTimeout = <T,>(p: Promise<T>, ms: number) =>
       Promise.race([
@@ -36,18 +36,10 @@ export default function Index() {
 
         if (cancelled) return;
         hasLocalStateRef.current = hasLocal;
-
-        setTimeout(() => {
-          if (!cancelled && !authResolved && hasLocal) {
-            setLogged(true);
-            setReady(true);
-          }
-        }, 1200);
       } catch {}
     })();
 
     const unsub = onAuthStateChanged(auth, async (user) => {
-      authResolved = true;
       if (user?.uid) {
         try {
           await revenueCatLogin(user.uid);
@@ -65,6 +57,12 @@ export default function Index() {
       if (cancelled) return;
 
       if (user) {
+        try {
+          await waitForCloudSyncReady(user.uid);
+        } catch {}
+
+        if (cancelled || auth.currentUser?.uid !== user.uid) return;
+
         setLogged(true);
         setReady(true);
         return;
@@ -80,8 +78,10 @@ export default function Index() {
             const email = String(parsed?.email ?? "");
             const password = String(parsed?.password ?? "");
             if (email && password) {
-              await withTimeout(signInWithEmailAndPassword(auth, email, password), 9000);
-              if (!cancelled) {
+              const credential = await withTimeout(signInWithEmailAndPassword(auth, email, password), 9000);
+              const signedInUid = credential.user.uid;
+              await waitForCloudSyncReady(signedInUid);
+              if (!cancelled && auth.currentUser?.uid === signedInUid) {
                 setLogged(true);
                 setReady(true);
                 return;

@@ -1,6 +1,7 @@
 // lib/cloudState.ts
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { APP_STATE_DOC_ID } from "./cloud";
 import type { AppState } from "./storage";
 
 const USER_STATE_VERSION = 1;
@@ -8,7 +9,7 @@ const USER_STATE_VERSION = 1;
 type CloudStateDoc = {
   version: number;
   state: AppState;
-  updatedAt: any; // Firestore Timestamp
+  updatedAt: unknown;
 };
 
 function uidOrThrow(): string {
@@ -19,7 +20,7 @@ function uidOrThrow(): string {
 
 export function userStateDocRef() {
   const uid = uidOrThrow();
-  return doc(db, "users", uid, "private", "state");
+  return doc(db, "users", uid, "appState", APP_STATE_DOC_ID);
 }
 
 /**
@@ -48,7 +49,7 @@ export async function saveCloudState(state: AppState): Promise<void> {
   const ref = userStateDocRef();
   const payload: CloudStateDoc = {
     version: USER_STATE_VERSION,
-    state,
+    state: JSON.parse(JSON.stringify(state)) as AppState,
     updatedAt: serverTimestamp(),
   };
   await setDoc(ref, payload, { merge: true });

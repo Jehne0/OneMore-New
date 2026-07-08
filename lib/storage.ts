@@ -762,6 +762,15 @@ easyMode: c.easyMode === true || parsedEasyIds.has(String(c.id)),
   return merged;
 }
 
+export function normalizeAppStateSnapshot(
+  raw: Partial<AppState> | AppState | unknown,
+  uid?: string | null
+): AppState {
+  const parsed = parseAndMerge(JSON.stringify(raw && typeof raw === "object" ? raw : {}));
+  const { next: migrated } = migrateBestStreakFromCurrent(parsed);
+  return tagStateForUid(migrated, uid);
+}
+
 /**
  * ✅ Z historie doplní everCompletedKeys (kvůli starým datům),
  * aby "výzvy, které jsem kdy splnil" neukazovaly 0 po upgradu.
@@ -1057,6 +1066,28 @@ async function readLegacyState(): Promise<AppState | null> {
   return null;
 }
 
+function hasMeaningfulLocalState(state?: AppState | null): boolean {
+  if (!state) return false;
+
+  return (
+    (state.challenges ?? []).length > 0 ||
+    (state.history ?? []).length > 0 ||
+    Object.keys(state.challengeStats ?? {}).length > 0 ||
+    (state.archivedChallenges ?? []).length > 0 ||
+    Number(state.streak ?? 0) > 0 ||
+    (state.everCompletedKeys ?? []).length > 0
+  );
+}
+
+async function readScopedStateFromRaw(raw: string | null): Promise<AppState | null> {
+  if (!raw) return null;
+  try {
+    return parseAndMerge(raw);
+  } catch {
+    return null;
+  }
+}
+
 async function ensureUidStorageReady(uid: string): Promise<void> {
   if (!_legacyMigrationPromise) {
     _legacyMigrationPromise = (async () => {
@@ -1066,14 +1097,15 @@ async function ensureUidStorageReady(uid: string): Promise<void> {
         AsyncStorage.getItem(UID_MIGRATION_MARKER_KEY),
       ]);
 
-      if (scopedState || scopedBackup) {
-        if (!marker && (await readLegacyState())) {
+      const existingScoped = await readScopedStateFromRaw(scopedState ?? scopedBackup);
+      if (hasMeaningfulLocalState(existingScoped)) {
+        if (!marker) {
           await AsyncStorage.setItem(UID_MIGRATION_MARKER_KEY, uid);
         }
         return;
       }
 
-      if (marker) return;
+      if (marker && marker !== uid) return;
 
       const legacy = await readLegacyState();
       if (!legacy) return;
@@ -1110,6 +1142,23 @@ async function writeStateSnapshotForUid(
     [localUpdatedAtKeyForUid(uid), updatedAtISO],
   ]);
   await persistFastKeys(state, uid);
+}
+
+export async function replaceStateForUid(
+  state: Partial<AppState> | AppState,
+  uid: string,
+  updatedAtISO = new Date().toISOString()
+): Promise<AppState> {
+  const safe = normalizeAppStateSnapshot(state, uid);
+  await writeStateSnapshotForUid(uid, safe, updatedAtISO);
+
+  if (auth.currentUser?.uid === uid) {
+    _cache = safe;
+    _cacheUid = uid;
+    _notify(safe);
+  }
+
+  return safe;
 }
 
 export async function ensureFastKeys(): Promise<void> {

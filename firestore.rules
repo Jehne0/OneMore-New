@@ -7,8 +7,12 @@ service cloud.firestore {
 
     // User data
     match /users/{uid} {
-      allow read: if signedIn();
+      allow read: if isMe(uid);
       allow write: if isMe(uid);
+
+      match /appState/{stateId} {
+        allow read, write: if isMe(uid) && stateId == "main";
+      }
 
       match /pushTokens/{token} {
         allow read, write: if isMe(uid);

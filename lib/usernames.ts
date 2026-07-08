@@ -106,6 +106,8 @@ export async function getProfile(uid: string): Promise<UserProfile | null> {
     };
   }
 
+  if (auth.currentUser?.uid !== uid) return null;
+
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return null;
 
