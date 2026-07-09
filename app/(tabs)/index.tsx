@@ -124,32 +124,72 @@ function nowHM() {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseLocalDateKey(dateISO: string): Date | null {
+  if (!DATE_KEY_RE.test(dateISO)) return null;
+  const [yearRaw, monthRaw, dayRaw] = dateISO.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function dateKeyOrdinal(dateISO: string): number | null {
+  if (!DATE_KEY_RE.test(dateISO)) return null;
+  const [yearRaw, monthRaw, dayRaw] = dateISO.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+}
+
 // 0=Po ... 6=Ne
 function dowMon0(todayISO: string): number {
-  const d = new Date(`${todayISO}T00:00:00`);
+  const d = parseLocalDateKey(todayISO);
+  if (!d) return 0;
   const js = d.getDay(); // 0=Ne..6=So
   return (js + 6) % 7;
 }
 
 function diffDaysISO(aISO: string, bISO: string): number {
-  const a = new Date(`${aISO}T00:00:00`).getTime();
-  const b = new Date(`${bISO}T00:00:00`).getTime();
-  return Math.floor((a - b) / 86400000);
+  const a = dateKeyOrdinal(aISO);
+  const b = dateKeyOrdinal(bISO);
+  if (a == null || b == null) return 0;
+  return a - b;
 }
 
 function addDaysISO(iso: string, days: number) {
-  const d = new Date(iso + "T00:00:00");
+  const d = parseLocalDateKey(iso);
+  if (!d) return iso;
   d.setDate(d.getDate() + days);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return localDateKey(d);
 }
 
 function daysBetween(aISO: string, bISO: string) {
-  const a = new Date(aISO + "T00:00:00").getTime();
-  const b = new Date(bISO + "T00:00:00").getTime();
-  return Math.round((b - a) / (1000 * 60 * 60 * 24));
+  const a = dateKeyOrdinal(aISO);
+  const b = dateKeyOrdinal(bISO);
+  if (a == null || b == null) return 0;
+  return b - a;
 }
 
 function getUserChallengesForPlan(state?: AppState | null): any[] {

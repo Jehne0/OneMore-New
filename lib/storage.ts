@@ -45,6 +45,45 @@ function safeNonNegativeStreak(value: unknown): number {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 }
 
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseLocalDateKey(dateISO: string): Date | null {
+  if (!DATE_KEY_RE.test(dateISO)) return null;
+  const [yearRaw, monthRaw, dayRaw] = dateISO.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function dateKeyOrdinal(dateISO: string): number | null {
+  if (!DATE_KEY_RE.test(dateISO)) return null;
+  const [yearRaw, monthRaw, dayRaw] = dateISO.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+}
+
 function mergeChallengeStatsMonotonic(
   existing?: Record<string, ChallengeStats>,
   incoming?: Record<string, ChallengeStats>
@@ -60,8 +99,7 @@ function mergeChallengeStatsMonotonic(
 
     nextStats.bestStreak = Math.max(
       safeNonNegativeStreak(existingStats?.bestStreak),
-      safeNonNegativeStreak(incomingStats?.bestStreak),
-      safeNonNegativeStreak(incomingStats?.currentStreak)
+      safeNonNegativeStreak(incomingStats?.bestStreak)
     );
 
     merged[id] = nextStats;
@@ -389,12 +427,10 @@ function timeHM(d: Date): string {
 }
 
 function addDaysISO(iso: string, days: number): string {
-  const d = new Date(iso + "T00:00:00");
+  const d = parseLocalDateKey(iso);
+  if (!d) return iso;
   d.setDate(d.getDate() + days);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return localDateKey(d);
 }
 
 function yesterdayISO(): string {
@@ -404,15 +440,17 @@ function yesterdayISO(): string {
 
 // 0=Po ... 6=Ne
 function dowMon0(dateISO: string): number {
-  const d = new Date(`${dateISO}T00:00:00`);
+  const d = parseLocalDateKey(dateISO);
+  if (!d) return 0;
   const js = d.getDay(); // 0=Ne..6=So
   return (js + 6) % 7;
 }
 
 function diffDaysISO(aISO: string, bISO: string): number {
-  const a = new Date(`${aISO}T00:00:00`).getTime();
-  const b = new Date(`${bISO}T00:00:00`).getTime();
-  return Math.floor((a - b) / 86400000);
+  const a = dateKeyOrdinal(aISO);
+  const b = dateKeyOrdinal(bISO);
+  if (a == null || b == null) return 0;
+  return a - b;
 }
 
 export function isChallengeActiveOnDate(c: Challenge | undefined | null, dateISO: string): boolean {
@@ -798,18 +836,126 @@ for (const h of state.history ?? []) {
  * One-time normalization for older stats where currentStreak could be higher
  * than the stored historical maximum. Only raises bestStreak; never lowers it.
  */
+function calculateStreaksFromHistoryForChallenge(
+  history: HistoryEntry[],
+  challengeId: string
+): { currentStreak: number; bestStreak: number; latestCompletedDay?: string; sortedDateKeys: string[] } {
+  const eventsByDate = new Map<string, { completed: boolean; skipped: boolean }>();
+
+  for (const entry of history ?? []) {
+    if (String(entry?.challengeId ?? "") !== challengeId) continue;
+    const date = String(entry?.date ?? "");
+    if (!parseLocalDateKey(date)) continue;
+
+    const event = eventsByDate.get(date) ?? { completed: false, skipped: false };
+    if (entry.status === "completed" && entry.partial !== true) event.completed = true;
+    if (entry.status === "skipped") event.skipped = true;
+    eventsByDate.set(date, event);
+  }
+
+  const sortedDateKeys = Array.from(eventsByDate.keys()).sort((a, b) => a.localeCompare(b));
+  let bestStreak = 0;
+  let runLength = 0;
+  let previousCompletedDay: string | undefined;
+  let latestCompletedDay: string | undefined;
+
+  for (const date of sortedDateKeys) {
+    const event = eventsByDate.get(date);
+    if (!event?.completed) {
+      runLength = 0;
+      previousCompletedDay = undefined;
+      continue;
+    }
+
+    runLength =
+      previousCompletedDay && addDaysISO(previousCompletedDay, 1) === date
+        ? runLength + 1
+        : 1;
+    bestStreak = Math.max(bestStreak, runLength);
+    previousCompletedDay = date;
+    latestCompletedDay = date;
+  }
+
+  let currentStreak = 0;
+  if (latestCompletedDay) {
+    const latestEventDay = sortedDateKeys[sortedDateKeys.length - 1];
+    if (latestEventDay === latestCompletedDay) {
+      currentStreak = 1;
+      for (
+        let cursor = addDaysISO(latestCompletedDay, -1);
+        eventsByDate.get(cursor)?.completed === true;
+        cursor = addDaysISO(cursor, -1)
+      ) {
+        currentStreak += 1;
+      }
+    }
+  }
+
+  return { currentStreak, bestStreak, latestCompletedDay, sortedDateKeys };
+}
+
 function migrateBestStreakFromCurrent(state: AppState): { next: AppState; changed: boolean } {
   const stats = state.challengeStats ?? {};
   let changed = false;
   const nextStats: Record<string, ChallengeStats> = { ...stats };
+  const challengeIds = new Set<string>(Object.keys(stats).map(String));
 
-  for (const [id, value] of Object.entries(stats)) {
+  for (const entry of state.history ?? []) {
+    const id = String(entry?.challengeId ?? "");
+    if (id) challengeIds.add(id);
+  }
+
+  for (const id of challengeIds) {
+    const value = stats[id];
     const currentStreak = safeNonNegativeStreak(value?.currentStreak);
     const bestStreak = safeNonNegativeStreak(value?.bestStreak);
+    const calculated = calculateStreaksFromHistoryForChallenge(state.history ?? [], id);
+    const hasHistory = calculated.sortedDateKeys.length > 0;
+    const repairedCurrent = hasHistory ? calculated.currentStreak : currentStreak;
+    const repairedBest = Math.max(bestStreak, calculated.bestStreak);
 
-    if (currentStreak > bestStreak) {
-      nextStats[id] = { ...value, bestStreak: currentStreak };
+    if (repairedCurrent !== currentStreak || repairedBest > bestStreak) {
+      const nextValue = normalizeStats(value);
+      nextStats[id] = {
+        ...nextValue,
+        currentStreak: repairedCurrent,
+        bestStreak: repairedBest,
+        lastCompletedDay:
+          calculated.latestCompletedDay && calculated.latestCompletedDay > String(nextValue.lastCompletedDay ?? "")
+            ? calculated.latestCompletedDay
+            : nextValue.lastCompletedDay,
+        lastStreakDay:
+          calculated.latestCompletedDay && calculated.latestCompletedDay > String(nextValue.lastStreakDay ?? "")
+            ? calculated.latestCompletedDay
+            : nextValue.lastStreakDay,
+      };
       changed = true;
+
+      if (__DEV__) {
+        const rawHistoryEntries = (state.history ?? [])
+          .filter((entry) => String(entry?.challengeId ?? "") === id)
+          .map((entry) => {
+            const parsedDate = parseLocalDateKey(String(entry.date));
+            return {
+              date: entry.date,
+              status: entry.status,
+              partial: entry.partial === true,
+              parsedDate: parsedDate ? localDateKey(parsedDate) : null,
+            };
+          });
+
+        console.log("[STREAK REPAIR]", {
+          challengeId: id,
+          rawHistoryEntries,
+          sortedDateKeys: calculated.sortedDateKeys,
+          calculatedCurrentStreak: calculated.currentStreak,
+          calculatedBestStreak: calculated.bestStreak,
+          storedCurrentStreak: currentStreak,
+          storedBestStreak: bestStreak,
+          displayedCurrentStreak: repairedCurrent,
+          repairedBestStreak: repairedBest,
+        });
+      }
     }
   }
 
@@ -1284,7 +1430,9 @@ export async function saveStateForUid(state: AppState, uid: string): Promise<voi
   if (!uid) return;
 
   const existing = await loadStateForUid(uid);
-  const safe = tagStateForUid(mergeWithExisting(existing, state as any), uid);
+  const merged = tagStateForUid(mergeWithExisting(existing, state as any), uid);
+  const { next: repaired } = migrateBestStreakFromCurrent(merged);
+  const safe = tagStateForUid(repaired, uid);
   const backupKey = backupKeyForUid(uid);
 
   const existingCount = Array.isArray(existing?.challenges) ? existing.challenges.length : 0;
