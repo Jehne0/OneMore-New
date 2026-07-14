@@ -171,7 +171,8 @@ type FriendPreviewStats = {
 const TEMP_SHARED_INVITE_DIAGNOSTICS = false;
 
 const PRIVACY_URL = "https://desigame.eu/privacy.html";
-const TERMS_URL = "https://desigame.eu/terms.html";
+const TERMS_URL =
+  "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
 
 const PROFILE_STRINGS = {
   cs: {
@@ -330,6 +331,11 @@ medalsIntro: "Sbírej medaile za své ohýnky. Jednou získaná medaile zůstane
     activePremiumInfo: "Premium je aktivní. Můžeš ho kdykoliv zrušit nebo zkusit obnovit stav.",
     unlockPremiumInfo: "Odemkni Premium a získej neomezené výzvy, připomínky a přátele.",
     priceInfo: "Cena: zobrazí se po napojení nabídky (Offering) v RevenueCat.",
+    premiumProductName: "OneMore Premium",
+    monthlySubscription: "Měsíční předplatné",
+    perMonth: "za měsíc",
+    privacyPolicyLink: "Zásady ochrany osobních údajů",
+    termsEulaLink: "Podmínky použití (EULA)",
     unlimitedRemindersNotif: "Neomezené připomínky (notifikace)",
     unlimitedFriendsLink: "Neomezené propojení s přáteli",
     moreRewards: "Další odměny a drobné vychytávky (postupně)",
@@ -526,6 +532,11 @@ medalsIntro: "Earn medals for your streaks. Once earned, a medal stays unlocked,
   activePremiumInfo: "Premium is active. You can cancel it anytime or try restoring the status.",
   unlockPremiumInfo: "Unlock Premium and get unlimited challenges, reminders, and friends.",
   priceInfo: "Price will appear after the RevenueCat offering is connected.",
+  premiumProductName: "OneMore Premium",
+  monthlySubscription: "Monthly subscription",
+  perMonth: "per month",
+  privacyPolicyLink: "Privacy Policy",
+  termsEulaLink: "Terms of Use (EULA)",
   unlimitedRemindersNotif: "Unlimited reminders (notifications)",
   unlimitedFriendsLink: "Unlimited friend connections",
   moreRewards: "More rewards and small extras (coming gradually)",
@@ -730,6 +741,11 @@ medalsIntro: "Zdobywaj medale za swoje serie. Raz zdobyty medal pozostaje odblok
   activePremiumInfo: "Premium jest aktywne. Możesz je anulować w dowolnym momencie albo spróbować przywrócić status.",
   unlockPremiumInfo: "Odblokuj Premium i zyskaj nieograniczone wyzwania, przypomnienia i znajomych.",
   priceInfo: "Cena pojawi się po podłączeniu oferty w RevenueCat.",
+  premiumProductName: "OneMore Premium",
+  monthlySubscription: "Subskrypcja miesięczna",
+  perMonth: "miesięcznie",
+  privacyPolicyLink: "Polityka prywatności",
+  termsEulaLink: "Warunki użytkowania (EULA)",
   unlimitedRemindersNotif: "Nieograniczone przypomnienia / powiadomienia",
   unlimitedFriendsLink: "Nieograniczone połączenia ze znajomymi",
   moreRewards: "Więcej nagród i drobnych ulepszeń stopniowo",
@@ -934,6 +950,11 @@ history: "Herausforderungsverlauf",
   activePremiumInfo: "Premium ist aktiv. Du kannst es jederzeit kündigen oder den Status wiederherstellen.",
   unlockPremiumInfo: "Schalte Premium frei und erhalte unbegrenzte Herausforderungen, Erinnerungen und Freunde.",
   priceInfo: "Der Preis erscheint nach dem Verbinden des Offerings in RevenueCat.",
+  premiumProductName: "OneMore Premium",
+  monthlySubscription: "Monatliches Abonnement",
+  perMonth: "pro Monat",
+  privacyPolicyLink: "Datenschutzerklärung",
+  termsEulaLink: "Nutzungsbedingungen (EULA)",
   unlimitedRemindersNotif: "Unbegrenzte Erinnerungen / Benachrichtigungen",
   unlimitedFriendsLink: "Unbegrenzte Verbindungen mit Freunden",
   moreRewards: "Weitere Belohnungen und kleine Extras schrittweise",
@@ -1114,6 +1135,12 @@ const unknownUserText =
     useState<"opening" | "processing" | null>(null);
   const premiumOfferRequestRef = useRef(false);
   const premiumPurchaseGuardRef = useRef(false);
+  const selectedPremiumPackage = premiumPackages[0] ?? null;
+  const premiumSubscriptionPeriodText =
+    selectedPremiumPackage?.product.subscriptionPeriod === "P1M" ||
+    selectedPremiumPackage?.packageType === "MONTHLY"
+      ? p.monthlySubscription
+      : null;
 
   // ✅ Modaly – všechno schované
   const [accountOpen, setAccountOpen] = useState(false);
@@ -4454,19 +4481,47 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                         </View>
                       )}
 
+                      <View
+                        style={[
+                          styles.premiumPlanDetails,
+                          { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                        ]}
+                      >
+                        <Text style={[styles.premiumPlanName, { color: UI.text }]}>
+                          {p.premiumProductName}
+                        </Text>
+                        <Text style={[styles.premiumPlanPeriod, { color: UI.sub }]}>
+                          {premiumSubscriptionPeriodText ?? p.monthlySubscription}
+                        </Text>
+                        {selectedPremiumPackage?.product.priceString ? (
+                          <Text style={[styles.premiumPlanPrice, { color: UI.text }]}>
+                            {selectedPremiumPackage.product.priceString} {p.perMonth}
+                          </Text>
+                        ) : null}
+                      </View>
+
                       <Pressable
-                        disabled={premiumBusy || premiumOfferLoading}
+                        disabled={
+                          premiumBusy ||
+                          premiumOfferLoading ||
+                          !selectedPremiumPackage
+                        }
                         onPress={buyPremium}
                         style={({ pressed }) => [
                           styles.primaryBtn,
                           {
                             marginTop: 14,
                             opacity:
-                              premiumBusy || premiumOfferLoading ? 0.6 : 1,
+                              premiumBusy ||
+                              premiumOfferLoading ||
+                              !selectedPremiumPackage
+                                ? 0.6
+                                : 1,
                           },
                           pressed &&
                             !premiumBusy &&
-                            !premiumOfferLoading && { opacity: 0.9 },
+                            !premiumOfferLoading &&
+                            selectedPremiumPackage && { opacity: 0.9 },
                         ]}
                       >
                         <Text style={styles.primaryBtnText}>
@@ -4504,6 +4559,27 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                       </Text>
                     </Pressable>
                   )}
+
+                  <View style={styles.premiumLegalLinks}>
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={openPrivacyLink}
+                      style={({ pressed }) => pressed && { opacity: 0.7 }}
+                    >
+                      <Text style={[styles.premiumLegalLink, { color: UI.accent }]}>
+                        {p.privacyPolicyLink}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={openTermsLink}
+                      style={({ pressed }) => pressed && { opacity: 0.7 }}
+                    >
+                      <Text style={[styles.premiumLegalLink, { color: UI.accent }]}>
+                        {p.termsEulaLink}
+                      </Text>
+                    </Pressable>
+                  </View>
 
                 </View>
               )}
@@ -6415,6 +6491,47 @@ pmBottomText: {
       fontSize: 14,
       fontWeight: "800",
       lineHeight: 19,
+    },
+    premiumPlanDetails: {
+      marginTop: 14,
+      borderWidth: 1,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    premiumPlanName: {
+      fontSize: 18,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    premiumPlanPeriod: {
+      marginTop: 4,
+      fontSize: 14,
+      fontWeight: "700",
+      lineHeight: 20,
+      textAlign: "center",
+    },
+    premiumPlanPrice: {
+      marginTop: 6,
+      fontSize: 17,
+      fontWeight: "900",
+      lineHeight: 23,
+      textAlign: "center",
+    },
+    premiumLegalLinks: {
+      marginTop: 14,
+      alignItems: "center",
+      gap: 10,
+    },
+    premiumLegalLink: {
+      paddingVertical: 2,
+      paddingHorizontal: 4,
+      fontSize: 14,
+      fontWeight: "800",
+      lineHeight: 20,
+      textAlign: "center",
+      textDecorationLine: "underline",
     },
 
     smallBtn: {

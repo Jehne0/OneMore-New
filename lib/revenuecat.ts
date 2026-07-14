@@ -1,4 +1,7 @@
-import Purchases, { type CustomerInfo } from "react-native-purchases";
+import Purchases, {
+  type CustomerInfo,
+  type PurchasesPackage,
+} from "react-native-purchases";
 import { Linking, Platform } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -419,7 +422,7 @@ export async function syncPremiumFromRevenueCat() {
   await revenueCatLogin(requireFirebaseUid());
 }
 
-export async function getOfferingPackages() {
+export async function getOfferingPackages(): Promise<PurchasesPackage[]> {
   if (!REVENUECAT_ENABLED) return [];
 
   await revenueCatLogin(requireFirebaseUid());
@@ -431,7 +434,7 @@ export async function getOfferingPackages() {
 }
 
 export async function purchasePackage(
-  pkg: any,
+  pkg: PurchasesPackage,
   options?: { onStorePurchaseCompleted?: () => void }
 ) {
   if (!REVENUECAT_ENABLED) return;
