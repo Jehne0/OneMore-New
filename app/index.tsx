@@ -8,6 +8,8 @@ import { revenueCatLogin } from "../lib/revenuecat";
 import { registerPushTokenForCurrentUser } from "../lib/pushTokens";
 import { loadState } from "../lib/storage";
 import { waitForCloudSyncReady } from "../lib/cloudSync";
+import { setWidgetActiveUid } from "../lib/widgetSession";
+import { drainPendingWidgetCompletions } from "../lib/widgetCompletionAction";
 
 const SAVED_LOGIN_KEY = "onemore_saved_login";
 
@@ -61,6 +63,10 @@ export default function Index() {
           await waitForCloudSyncReady(user.uid);
         } catch {}
 
+        // Repair the native widget session after the complete startup/auth bootstrap too.
+        await setWidgetActiveUid(user.uid);
+        await drainPendingWidgetCompletions(user.uid);
+
         if (cancelled || auth.currentUser?.uid !== user.uid) return;
 
         setLogged(true);
@@ -81,6 +87,8 @@ export default function Index() {
               const credential = await withTimeout(signInWithEmailAndPassword(auth, email, password), 9000);
               const signedInUid = credential.user.uid;
               await waitForCloudSyncReady(signedInUid);
+              await setWidgetActiveUid(signedInUid);
+              await drainPendingWidgetCompletions(signedInUid);
               if (!cancelled && auth.currentUser?.uid === signedInUid) {
                 setLogged(true);
                 setReady(true);

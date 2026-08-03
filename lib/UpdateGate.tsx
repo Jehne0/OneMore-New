@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useI18n } from "./i18n";
 import { useTheme } from "./theme";
 import { checkRemoteAppVersion, type VersionCheckResult } from "./versionCheck";
+import { getSafeModalMetrics } from "./safeModalLayout";
+import { getResponsiveLayout } from "./responsiveLayout";
 
 function getUpdateOpenError(lang: string): string {
   switch (lang) {
@@ -21,6 +24,15 @@ function getUpdateOpenError(lang: string): string {
 export function UpdateGate() {
   const { lang, t } = useI18n();
   const { UI, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const responsive = getResponsiveLayout(windowWidth);
+  const safeModal = getSafeModalMetrics({
+    windowHeight,
+    topInset: insets.top,
+    bottomInset: insets.bottom,
+    heightRatio: 0.86,
+  });
   const [update, setUpdate] = useState<VersionCheckResult | null>(null);
 
   useEffect(() => {
@@ -49,7 +61,9 @@ export function UpdateGate() {
         flex: 1,
         backgroundColor: UI.backdrop,
         justifyContent: "center",
-        padding: 18,
+        paddingHorizontal: 18,
+        paddingTop: safeModal.paddingTop,
+        paddingBottom: safeModal.paddingBottom,
       },
       card: {
         backgroundColor: sheetBg,
@@ -57,6 +71,7 @@ export function UpdateGate() {
         borderWidth: 1,
         borderColor: sheetBorder,
         padding: 14,
+        maxHeight: safeModal.maxHeight,
       },
       title: {
         color: UI.text,
@@ -96,7 +111,7 @@ export function UpdateGate() {
         fontWeight: "900",
       },
     });
-  }, [UI, isDark]);
+  }, [UI, isDark, safeModal.maxHeight, safeModal.paddingBottom, safeModal.paddingTop]);
 
   if (!update) return null;
 
@@ -161,7 +176,7 @@ export function UpdateGate() {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={close}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <ScrollView style={[styles.card, { width: responsive.modalWidth }]} contentContainerStyle={{ flexGrow: 0 }}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.msg}>{message}</Text>
 
@@ -189,7 +204,7 @@ export function UpdateGate() {
               <Text style={styles.btnText}>{t.update.updateButton}</Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );

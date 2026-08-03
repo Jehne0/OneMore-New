@@ -1,14 +1,20 @@
 {
   "name": "onemore",
-  "main": "expo-router/entry",
-  "version": "1.0.0",
+  "main": "index.ts",
+  "version": "1.0.1",
   "scripts": {
+    "test": "tsx --test tests/android-compatibility.test.ts tests/completion-outbox.test.ts tests/ios-widget-plugin.test.ts tests/ios-widget.test.ts tests/localization.test.ts tests/premium-cold-start.test.ts tests/premium-offering-flow.test.ts tests/premium-offering-selection.test.ts tests/profile-routes.test.ts tests/safe-modal-layout.test.ts tests/shared-challenge-permissions.test.ts tests/shared-widget-regression.test.ts tests/whats-new.test.ts tests/widget.test.ts tests/widget-configuration.test.ts tests/widget-entry.test.ts tests/widget-premium.test.ts tests/widget-production.test.ts tests/widget-provider-metadata.test.ts tests/widget-row-layout.test.ts tests/widget-selection-regression.test.ts",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:widget": "tsx --test tests/widget.test.ts tests/completion-outbox.test.ts tests/widget-premium.test.ts tests/widget-entry.test.ts tests/widget-production.test.ts tests/widget-configuration.test.ts tests/widget-selection-regression.test.ts tests/shared-widget-regression.test.ts tests/widget-row-layout.test.ts tests/widget-provider-metadata.test.ts tests/ios-widget-plugin.test.ts tests/ios-widget.test.ts",
+    "test:localization": "tsx --test tests/localization.test.ts",
+    "test:premium": "tsx --test tests/premium-offering-flow.test.ts tests/premium-offering-selection.test.ts tests/widget-premium.test.ts",
+    "test:routing": "tsx --test tests/profile-routes.test.ts",
+    "test:whats-new": "tsx --test tests/whats-new.test.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -17,7 +23,7 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
-    "expo": "~54.0.35",
+    "expo": "~54.0.36",
     "expo-av": "~16.0.8",
     "expo-constants": "~18.0.12",
     "expo-dev-client": "~6.0.21",
@@ -38,6 +44,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-android-widget": "0.20.1",
     "react-native-draggable-flatlist": "^4.0.1",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-purchases": "^9.10.0",
@@ -54,6 +61,7 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "tsx": "4.20.6",
     "typescript": "~5.9.2"
   },
   "private": true

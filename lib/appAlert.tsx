@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "./theme";
+import { getSafeModalMetrics } from "./safeModalLayout";
+import { getResponsiveLayout } from "./responsiveLayout";
 
 export type AlertButton = {
   text?: string;
@@ -48,6 +51,15 @@ function normalizeButtons(btns?: AlertButton[]): Required<AlertButton>[] {
 
 export function AppAlertHost() {
   const { UI, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const responsive = getResponsiveLayout(windowWidth);
+  const safeModal = getSafeModalMetrics({
+    windowHeight,
+    topInset: insets.top,
+    bottomInset: insets.bottom,
+    heightRatio: 0.86,
+  });
   const [open, setOpen] = useState(false);
   const [payload, setPayload] = useState<AlertPayload>({});
 
@@ -76,7 +88,9 @@ export function AppAlertHost() {
         flex: 1,
         backgroundColor: UI.backdrop,
         justifyContent: "center",
-        padding: 18,
+        paddingHorizontal: 18,
+        paddingTop: safeModal.paddingTop,
+        paddingBottom: safeModal.paddingBottom,
       },
       card: {
         backgroundColor: sheetBg,
@@ -84,6 +98,7 @@ export function AppAlertHost() {
         borderWidth: 1,
         borderColor: sheetBorder,
         padding: 14,
+        maxHeight: safeModal.maxHeight,
       },
       title: {
         color: UI.text,
@@ -123,7 +138,7 @@ export function AppAlertHost() {
         fontWeight: "900",
       },
     });
-  }, [UI, isDark]);
+  }, [UI, isDark, safeModal.maxHeight, safeModal.paddingBottom, safeModal.paddingTop]);
 
   function close() {
     setOpen(false);
@@ -146,11 +161,12 @@ export function AppAlertHost() {
           if (!hasCancel) close();
         }}
       >
-        <Pressable style={styles.card} onPress={() => {}}>
-          {!!payload.title && <Text style={styles.title}>{payload.title}</Text>}
-          {!!payload.message && <Text style={styles.msg}>{payload.message}</Text>}
+        <Pressable style={[styles.card, { width: responsive.modalWidth }]} onPress={() => {}}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 0 }}>
+            {!!payload.title && <Text style={styles.title}>{payload.title}</Text>}
+            {!!payload.message && <Text style={styles.msg}>{payload.message}</Text>}
 
-          <View style={styles.btnRow}>
+            <View style={styles.btnRow}>
             {buttons.map((b, idx) => {
               const isCancel = b.style === "cancel";
               const isDestructive = b.style === "destructive";
@@ -170,7 +186,8 @@ export function AppAlertHost() {
                 </Pressable>
               );
             })}
-          </View>
+            </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>

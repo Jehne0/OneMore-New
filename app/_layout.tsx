@@ -1,21 +1,19 @@
 import { Stack } from "expo-router";
 import { useEffect } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { signOut } from "firebase/auth";
-import { auth } from "../lib/firebase";
 
 import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
+import { AppState, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ThemeProvider, useTheme } from "../lib/theme";
 import { LanguageProvider } from "../lib/i18n";
 import { initClock } from "../lib/clock";
 import { initCloudSync } from "../lib/cloudSync";
-import { initRevenueCatAuth } from "../lib/revenuecat";
+import { initRevenueCatAuth, syncPremiumFromRevenueCat } from "../lib/revenuecat";
 import { AppAlertHost } from "../lib/appAlert";
 import { UpdateGate } from "../lib/UpdateGate";
+import { WhatsNewPopup } from "../lib/WhatsNewPopup";
+import { restorePremium } from "../lib/premium";
 import * as Notifications from "expo-notifications";
-
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -24,8 +22,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-const REMEMBER_ME_KEY = "onemore_remember_me";
 
 function RootStack() {
   const { UI, isDark } = useTheme();
@@ -67,14 +63,14 @@ export default function RootLayout() {
       initRevenueCatAuth();
     } catch {}
 
-    (async () => {
-      try {
-        const remember = await AsyncStorage.getItem(REMEMBER_ME_KEY);
-        if (remember === "0") {
-          await signOut(auth);
-        }
-      } catch {}
-    })();
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      void restorePremium().then(() => syncPremiumFromRevenueCat()).catch(() => {});
+    });
+    return () => subscription.remove();
   }, []);
 
   return (
@@ -82,6 +78,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <LanguageProvider>
           <AppAlertHost />
+          <WhatsNewPopup />
           <UpdateGate />
           <AppShell />
         </LanguageProvider>

@@ -1,4 +1,4 @@
-// app/profile.tsx
+// app/statistics.tsx
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,6 +8,14 @@ import { AppState, easyModeChallengeIdSet, getCachedState, isChallengeEasyMode, 
 import { isPremiumActive, subscribePremium } from "../lib/premium";
 import { useTheme } from "../lib/theme";
 import { useTodayISO } from "../lib/clock";
+import { useI18n, type Lang } from "../lib/i18n";
+
+const ROOT_PROFILE_STRINGS: Record<Lang, Record<string, string>> = {
+  cs: { title: "Statistika", currentStreak: "Aktuální série (dny)", longestStreak: "Nejdelší série v aplikaci", activeChallenges: "Aktivní výzvy", completed: "Celkem splněných výzev", medals: "Medaile", noMedals: "Zatím žádná. Medaile získáš po 5 / 10 / 20 / 30 / 90 / 180 dnech série.", history: "Otevřít historii výzev", days: "{count} dní" },
+  en: { title: "Statistics", currentStreak: "Current streak (days)", longestStreak: "Longest app streak", activeChallenges: "Active challenges", completed: "Challenges completed", medals: "Medals", noMedals: "None yet. You earn medals after streaks of 5 / 10 / 20 / 30 / 90 / 180 days.", history: "Open challenge history", days: "{count} days" },
+  pl: { title: "Statystyki", currentStreak: "Aktualna seria (dni)", longestStreak: "Najdłuższa seria w aplikacji", activeChallenges: "Aktywne wyzwania", completed: "Ukończone wyzwania", medals: "Medale", noMedals: "Jeszcze brak. Medale zdobędziesz za serie trwające 5 / 10 / 20 / 30 / 90 / 180 dni.", history: "Otwórz historię wyzwań", days: "{count} dni" },
+  de: { title: "Statistik", currentStreak: "Aktuelle Serie (Tage)", longestStreak: "Längste Serie in der App", activeChallenges: "Aktive Challenges", completed: "Abgeschlossene Challenges", medals: "Medaillen", noMedals: "Noch keine. Medaillen erhältst du für Serien von 5 / 10 / 20 / 30 / 90 / 180 Tagen.", history: "Challenge-Verlauf öffnen", days: "{count} Tage" },
+};
 
 type HistoryEntry = {
   date: string; // YYYY-MM-DD
@@ -72,6 +80,8 @@ function hasEverCompleted(state: AppState | null, challengeId: string, challenge
 }
 
 export default function ProfileScreen() {
+  const { lang } = useI18n();
+  const tx = ROOT_PROFILE_STRINGS[lang];
   const router = useRouter();
   const { UI, mode } = useTheme();
   const insets = useSafeAreaInsets();
@@ -147,31 +157,31 @@ export default function ProfileScreen() {
 
     // Medailové prahy: 5 / 10 / 20 / 30 / 90 / 180 dní
     while (remaining >= 180) {
-      medals.push({ icon: "🥇", label: "180 dní" });
+      medals.push({ icon: "🥇", label: tx.days.replace("{count}", "180") });
       remaining -= 180;
     }
     while (remaining >= 90) {
-      medals.push({ icon: "🥈", label: "90 dní" });
+      medals.push({ icon: "🥈", label: tx.days.replace("{count}", "90") });
       remaining -= 90;
     }
     while (remaining >= 30) {
-      medals.push({ icon: "🥈", label: "30 dní" });
+      medals.push({ icon: "🥈", label: tx.days.replace("{count}", "30") });
       remaining -= 30;
     }
     while (remaining >= 20) {
-      medals.push({ icon: "🥉", label: "20 dní" });
+      medals.push({ icon: "🥉", label: tx.days.replace("{count}", "20") });
       remaining -= 20;
     }
     while (remaining >= 10) {
-      medals.push({ icon: "🥉", label: "10 dní" });
+      medals.push({ icon: "🥉", label: tx.days.replace("{count}", "10") });
       remaining -= 10;
     }
     while (remaining >= 5) {
-      medals.push({ icon: "🥉", label: "5 dní" });
+      medals.push({ icon: "🥉", label: tx.days.replace("{count}", "5") });
       remaining -= 5;
     }
     return medals;
-  }, [stats.longestStreak]);
+  }, [stats.longestStreak, tx.days]);
 
   return (
     <View style={styles.screen}>
@@ -184,28 +194,28 @@ export default function ProfileScreen() {
       />
 
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 10 }]}>
-        <Text style={[styles.title, { color: UI.text }]}>Statistika</Text>
+        <Text style={[styles.title, { color: UI.text }]}>{tx.title}</Text>
 
         {/* GRID – jako na tvém screenshotu */}
         <View style={styles.grid}>
           <View style={[styles.card, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
             <Text style={[styles.big, { color: UI.text }]}>{stats.currentStreak}</Text>
-            <Text style={[styles.small, { color: UI.sub }]}>Aktuální streak (dny)</Text>
+            <Text style={[styles.small, { color: UI.sub }]}>{tx.currentStreak}</Text>
           </View>
 
           <View style={[styles.card, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
             <Text style={[styles.big, { color: UI.text }]}>{stats.longestStreak}</Text>
-            <Text style={[styles.small, { color: UI.sub }]}>Nejdelší streak (aplikace)</Text>
+            <Text style={[styles.small, { color: UI.sub }]}>{tx.longestStreak}</Text>
           </View>
 
           <View style={[styles.card, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
             <Text style={[styles.big, { color: UI.text }]}>{stats.activeChallengesCount}</Text>
-            <Text style={[styles.small, { color: UI.sub }]}>Aktivní výzvy</Text>
+            <Text style={[styles.small, { color: UI.sub }]}>{tx.activeChallenges}</Text>
           </View>
 
           <View style={[styles.card, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
             <Text style={[styles.big, { color: UI.text }]}>{stats.totalCompleted}</Text>
-            <Text style={[styles.small, { color: UI.sub }]}>Celkem splněných výzev</Text>
+            <Text style={[styles.small, { color: UI.sub }]}>{tx.completed}</Text>
           </View>
         </View>
 
@@ -214,9 +224,9 @@ export default function ProfileScreen() {
 
         {/* Medaile */}
         <View style={[styles.medalsCard, { backgroundColor: UI.card, borderColor: UI.stroke }]}>
-          <Text style={[styles.medalsTitle, { color: UI.text }]}>Medaile</Text>
+          <Text style={[styles.medalsTitle, { color: UI.text }]}>{tx.medals}</Text>
           {earnedMedals.length === 0 ? (
-            <Text style={[styles.medalsSub, { color: UI.sub }]}>Zatím žádná. Medaile získáš po 5 / 10 / 20 / 30 / 90 / 180 dnech ve streaku.</Text>
+            <Text style={[styles.medalsSub, { color: UI.sub }]}>{tx.noMedals}</Text>
           ) : (
             <View style={styles.medalsRow}>
               {earnedMedals.map((m, idx) => (
@@ -239,7 +249,7 @@ export default function ProfileScreen() {
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Text style={{ color: UI.text, fontWeight: "900" }}>Otevřít historii výzev</Text>
+            <Text style={{ color: UI.text, fontWeight: "900" }}>{tx.history}</Text>
           </Pressable>
         )}
 

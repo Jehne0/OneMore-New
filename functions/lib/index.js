@@ -33,19 +33,22 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifySharedChallengeProgress = exports.notifySharedChallengeCreated = exports.declineSharedChallengeMemberInvite = exports.acceptSharedChallengeMemberInvite = exports.inviteSharedChallengeMember = exports.deleteMyAccount = exports.sendTestPush = exports.acceptFriendInvite = exports.createFriendInvite = exports.blockFriend = exports.removeFriend = exports.declineFriend = exports.acceptFriend = exports.requestFriend = exports.sendSupportEmail = void 0;
+exports.notifySharedChallengeProgress = exports.notifySharedChallengeCreated = exports.declineSharedChallengeMemberInvite = exports.acceptSharedChallengeMemberInvite = exports.inviteSharedChallengeMember = exports.deleteMyAccount = exports.sendTestPush = exports.acceptFriendInvite = exports.createFriendInvite = exports.blockFriend = exports.removeFriend = exports.declineFriend = exports.acceptFriend = exports.requestFriend = exports.iosWidgetGateway = exports.revokeIosWidgetAccessGrants = exports.issueIosWidgetAccessGrant = exports.completeSharedChallengeFromWidget = exports.sendSupportEmail = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const params_1 = require("firebase-functions/params");
 const app_1 = require("firebase-admin/app");
 const auth_1 = require("firebase-admin/auth");
 const firestore_2 = require("firebase-admin/firestore");
+const sharedChallengePermissions_1 = require("./sharedChallengePermissions");
+const node_crypto_1 = require("node:crypto");
 //
 // Podpora (z aplikace)
 // - vždy uloží ticket do Firestore (admin)
 // - pokud je nastaven RESEND_API_KEY, pošle i e-mail
 //
 const RESEND_API_KEY = (0, params_1.defineSecret)("RESEND_API_KEY");
+const REVENUECAT_SECRET_API_KEY = (0, params_1.defineSecret)("REVENUECAT_SECRET_API_KEY");
 (0, app_1.initializeApp)();
 const db = (0, firestore_2.getFirestore)();
 function safeStr(v, max = 4000) {
@@ -129,6 +132,391 @@ function friendEdgeRef(uid, otherUid) {
 function setFriendEdge(tx, uid, otherUid, patch) {
     tx.set(friendEdgeRef(uid, otherUid), patch, { merge: true });
 }
+function widgetDateIsActive(challenge, dateISO) {
+    if (challenge.enabled === false || challenge.status !== "active")
+        return false;
+    const period = challenge.period === "every2" || challenge.period === "custom" ? challenge.period : "daily";
+    if (period === "daily")
+        return true;
+    const value = new Date(`${dateISO}T00:00:00Z`);
+    if (!Number.isFinite(value.getTime()))
+        return false;
+    if (period === "every2") {
+        const anchorISO = /^\d{4}-\d{2}-\d{2}$/.test(String(challenge.periodAnchor ?? ""))
+            ? String(challenge.periodAnchor) : dateISO;
+        const anchor = new Date(`${anchorISO}T00:00:00Z`);
+        return Math.abs(Math.floor((value.getTime() - anchor.getTime()) / 86400000)) % 2 === 0;
+    }
+    const mondayZero = (value.getUTCDay() + 6) % 7;
+    const days = Array.isArray(challenge.customDays)
+        ? challenge.customDays.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+        : [];
+    return days.includes(mondayZero);
+}
+/**
+ * Authenticated replay endpoint for iOS widget outbox mutations. The native
+ * extension never receives Firebase credentials; the main app calls this only
+ * after Auth restoration. Every membership/schedule check is repeated here.
+ */
+async function completeSharedChallengeForWidget(uid, challengeId, dateISO, mutationId, expectedDoneBefore) {
+    if (!challengeId || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO) || !mutationId) {
+        throw new https_1.HttpsError("invalid-argument", "Invalid widget completion.");
+    }
+    const challengeRef = db.collection("sharedChallenges").doc(challengeId);
+    const progressRef = challengeRef.collection("progress").doc(dateISO);
+    return db.runTransaction(async (tx) => {
+        const challengeSnap = await tx.get(challengeRef);
+        if (!challengeSnap.exists)
+            throw new https_1.HttpsError("not-found", "Shared challenge not found.");
+        const challenge = challengeSnap.data();
+        const memberUids = Array.isArray(challenge.memberUids) ? challenge.memberUids.map(String) : [];
+        const acceptedBy = Array.isArray(challenge.acceptedBy) ? challenge.acceptedBy.map(String) : [];
+        const pending = Array.isArray(challenge.pendingInviteUids) ? challenge.pendingInviteUids.map(String) : [];
+        const left = Array.isArray(challenge.leftBy) ? challenge.leftBy.map(String) : [];
+        if (!memberUids.includes(uid) || !acceptedBy.includes(uid) || pending.includes(uid) || left.includes(uid)) {
+            throw new https_1.HttpsError("permission-denied", "User cannot complete this shared challenge.");
+        }
+        if (!widgetDateIsActive(challenge, dateISO)) {
+            throw new https_1.HttpsError("failed-precondition", "Shared challenge is not active on this date.");
+        }
+        const progressSnap = await tx.get(progressRef);
+        const users = progressSnap.exists ? (progressSnap.data()?.users ?? {}) : {};
+        const mine = users[uid] ?? {};
+        const count = Math.max(0, Math.floor(Number(mine.completedCount ?? 0)));
+        const target = Math.max(1, Math.min(20, Math.floor(Number(challenge.targetPerDay ?? 1))));
+        const mutationIds = Array.isArray(mine.mutationIds) ? mine.mutationIds.map(String).slice(-40) : [];
+        if (mutationIds.includes(mutationId))
+            return { status: "already-completed", count };
+        if (expectedDoneBefore !== undefined && count !== expectedDoneBefore) {
+            throw new https_1.HttpsError("failed-precondition", "Shared challenge progress changed.");
+        }
+        const next = Math.min(target, count + 1);
+        tx.set(progressRef, {
+            date: dateISO,
+            users: { [uid]: {
+                    completedCount: next,
+                    completed: next >= target,
+                    mutationIds: [...mutationIds, mutationId].slice(-40),
+                    updatedAt: firestore_2.FieldValue.serverTimestamp(),
+                } },
+            updatedAt: firestore_2.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return { status: next === count ? "already-completed" : "completed", count: next };
+    });
+}
+exports.completeSharedChallengeFromWidget = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    const uid = assertAuth(request);
+    return completeSharedChallengeForWidget(uid, safeStr(request.data?.challengeId, 160), safeStr(request.data?.date, 10), safeStr(request.data?.mutationId, 300));
+});
+const WIDGET_GRANTS = "iosWidgetAccessGrants";
+const WIDGET_GRANT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+function sha256Hex(value) {
+    return (0, node_crypto_1.createHash)("sha256").update(value).digest("hex");
+}
+function stableJson(value) {
+    if (value === null || typeof value !== "object")
+        return JSON.stringify(value);
+    if (Array.isArray(value))
+        return `[${value.map(stableJson).join(",")}]`;
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+}
+function p256PublicKey(rawBase64) {
+    const raw = Buffer.from(rawBase64, "base64");
+    if (raw.length !== 65 || raw[0] !== 4)
+        throw new https_1.HttpsError("invalid-argument", "Invalid widget public key.");
+    const spkiPrefix = Buffer.from("3059301306072a8648ce3d020106082a8648ce3d030107034200", "hex");
+    return (0, node_crypto_1.createPublicKey)({ key: Buffer.concat([spkiPrefix, raw]), format: "der", type: "spki" });
+}
+async function revenueCatPremium(uid) {
+    const secret = REVENUECAT_SECRET_API_KEY.value();
+    if (!secret)
+        throw new https_1.HttpsError("unavailable", "Premium verification is temporarily unavailable.");
+    const response = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(uid)}`, {
+        headers: { Authorization: `Bearer ${secret}`, Accept: "application/json" },
+    });
+    if (response.status === 404)
+        return { state: "free", expirationDate: null, lifetime: false };
+    if (!response.ok)
+        throw new https_1.HttpsError("unavailable", "Premium verification is temporarily unavailable.");
+    const body = await response.json();
+    const entitlement = body?.subscriber?.entitlements?.premium;
+    if (!entitlement)
+        return { state: "free", expirationDate: null, lifetime: false };
+    const rawExpiration = entitlement.expires_date ?? entitlement.expiration_date ?? null;
+    const expiration = typeof rawExpiration === "string" && Number.isFinite(Date.parse(rawExpiration))
+        ? new Date(rawExpiration).toISOString() : null;
+    const lifetime = expiration === null;
+    return {
+        state: lifetime || Date.parse(expiration) > Date.now() ? "premium" : "free",
+        expirationDate: expiration,
+        lifetime,
+    };
+}
+function localDateInTimeZone(timeZone, date = new Date()) {
+    try {
+        const parts = new Intl.DateTimeFormat("en-CA", {
+            timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+        }).formatToParts(date);
+        const part = (type) => parts.find((value) => value.type === type)?.value ?? "";
+        const result = `${part("year")}-${part("month")}-${part("day")}`;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(result))
+            throw new Error("date");
+        return result;
+    }
+    catch {
+        throw new https_1.HttpsError("invalid-argument", "Invalid widget time zone.");
+    }
+}
+function localTimeInTimeZone(timeZone, date = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(date);
+    const part = (type) => parts.find((value) => value.type === type)?.value ?? "00";
+    return `${part("hour")}:${part("minute")}`;
+}
+function addIsoDays(dateISO, days) {
+    const value = new Date(`${dateISO}T00:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + days);
+    return value.toISOString().slice(0, 10);
+}
+function personalDateIsActive(challenge, dateISO) {
+    if (challenge.enabled === false || challenge.deletedAt)
+        return false;
+    return widgetDateIsActive({ ...challenge, status: "active" }, dateISO);
+}
+function previousPersonalActiveDate(challenge, dateISO) {
+    for (let offset = 1; offset <= 14; offset += 1) {
+        const candidate = addIsoDays(dateISO, -offset);
+        if (personalDateIsActive(challenge, candidate))
+            return candidate;
+    }
+    return addIsoDays(dateISO, -1);
+}
+async function completePersonalChallengeForWidget(uid, challengeId, dateISO, mutationId, expectedDoneBefore, timeZone) {
+    const stateRef = db.collection("users").doc(uid).collection("appState").doc("main");
+    return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(stateRef);
+        if (!snapshot.exists)
+            throw new https_1.HttpsError("not-found", "Personal challenge state not found.");
+        const document = snapshot.data();
+        const state = document.state;
+        if (!state)
+            throw new https_1.HttpsError("not-found", "Personal challenge state not found.");
+        const challenge = (Array.isArray(state.challenges) ? state.challenges : [])
+            .find((item) => String(item?.id ?? "") === challengeId);
+        if (!challenge)
+            throw new https_1.HttpsError("not-found", "Personal challenge not found.");
+        if (!personalDateIsActive(challenge, dateISO)) {
+            throw new https_1.HttpsError("failed-precondition", "Personal challenge is not active on this date.");
+        }
+        const history = Array.isArray(state.history) ? state.history : [];
+        if (history.some((entry) => entry.widgetMutationId === mutationId)) {
+            const count = history.filter((entry) => entry.date === dateISO && entry.status === "completed"
+                && String(entry.challengeId ?? "") === challengeId).length;
+            return { status: "already-completed", count };
+        }
+        const count = history.filter((entry) => entry.date === dateISO && entry.status === "completed"
+            && String(entry.challengeId ?? "") === challengeId).length;
+        if (count !== expectedDoneBefore)
+            throw new https_1.HttpsError("failed-precondition", "Personal challenge progress changed.");
+        const target = Math.max(1, Math.min(20, Math.floor(Number(challenge.targetPerDay ?? 1))));
+        if (count >= target)
+            return { status: "already-completed", count };
+        const nextCount = count + 1;
+        const completedDay = nextCount >= target;
+        const now = new Date();
+        const withoutSkip = history.filter((entry) => !(entry.date === dateISO && entry.status === "skipped"
+            && String(entry.challengeId ?? "") === challengeId));
+        const nextEntry = {
+            date: dateISO,
+            time: localTimeInTimeZone(timeZone, now),
+            atISO: now.toISOString(),
+            challengeId,
+            challengeText: safeStr(challenge.text, 500),
+            status: "completed",
+            partial: !completedDay,
+            widgetMutationId: mutationId,
+        };
+        const nextState = { ...state, history: [nextEntry, ...withoutSkip] };
+        if (completedDay) {
+            const statsMap = { ...(state.challengeStats ?? {}) };
+            const previous = statsMap[challengeId] ?? {};
+            const completedCount = Math.max(0, Math.floor(Number(previous.completedCount ?? 0))) + 1;
+            const easy = challenge.easyMode === true || (Array.isArray(state.easyModeChallengeIds)
+                && state.easyModeChallengeIds.map(String).includes(challengeId));
+            if (easy) {
+                statsMap[challengeId] = { ...previous, completedCount, lastCompletedDay: dateISO };
+            }
+            else {
+                const dayAlreadyCounted = previous.lastCompletedDay === dateISO;
+                const previousActive = previousPersonalActiveDate(challenge, dateISO);
+                const lastStreakDay = previous.lastStreakDay ?? previous.lastCompletedDay;
+                const current = Math.max(0, Math.floor(Number(previous.currentStreak ?? 0)));
+                const nextStreak = dayAlreadyCounted ? current : lastStreakDay === previousActive ? current + 1 : 1;
+                statsMap[challengeId] = {
+                    ...previous,
+                    completedCount,
+                    skippedCount: Math.max(0, Math.floor(Number(previous.skippedCount ?? 0))),
+                    lastCompletedDay: dateISO,
+                    lastStreakDay: dateISO,
+                    currentStreak: nextStreak,
+                    bestStreak: Math.max(Math.max(0, Math.floor(Number(previous.bestStreak ?? 0))), nextStreak),
+                    skipCredits: nextStreak > 0 && nextStreak % 10 === 0
+                        ? 1 : Math.min(1, Math.max(0, Math.floor(Number(previous.skipCredits ?? 0)))),
+                };
+                nextState.lastCompletedDate = dateISO;
+            }
+            nextState.challengeStats = statsMap;
+            const ever = new Set(Array.isArray(state.everCompletedKeys) ? state.everCompletedKeys.map(String) : []);
+            ever.add(`id:${challengeId}`);
+            nextState.everCompletedKeys = Array.from(ever);
+        }
+        tx.set(stateRef, {
+            ...document,
+            schemaVersion: Number(document.schemaVersion ?? 1),
+            clientUpdatedAtISO: now.toISOString(),
+            updatedAt: firestore_2.FieldValue.serverTimestamp(),
+            state: nextState,
+        });
+        return { status: "completed", count: nextCount };
+    });
+}
+exports.issueIosWidgetAccessGrant = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    const uid = assertAuth(request);
+    const publicKeyBase64 = safeStr(request.data?.publicKeyBase64, 256);
+    const keyId = safeStr(request.data?.keyId, 128);
+    const raw = Buffer.from(publicKeyBase64, "base64");
+    p256PublicKey(publicKeyBase64);
+    if (!keyId || keyId !== sha256Hex(raw))
+        throw new https_1.HttpsError("invalid-argument", "Widget key identifier mismatch.");
+    const [existingForUid, existingForKey] = await Promise.all([
+        db.collection(WIDGET_GRANTS).where("uid", "==", uid).get(),
+        db.collection(WIDGET_GRANTS).where("keyId", "==", keyId).get(),
+    ]);
+    const batch = db.batch();
+    const oldGrantRefs = new Map();
+    [...existingForUid.docs, ...existingForKey.docs].forEach((grant) => oldGrantRefs.set(grant.ref.path, grant.ref));
+    for (const grant of oldGrantRefs.values())
+        batch.update(grant, { revokedAt: firestore_2.FieldValue.serverTimestamp() });
+    const grantId = (0, node_crypto_1.randomUUID)();
+    const issuedAt = new Date();
+    const expiresAt = new Date(issuedAt.getTime() + WIDGET_GRANT_TTL_MS);
+    const rotateAfter = new Date(issuedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    batch.set(db.collection(WIDGET_GRANTS).doc(grantId), {
+        uid, keyId, publicKeyBase64, createdAt: firestore_2.FieldValue.serverTimestamp(), issuedAtISO: issuedAt.toISOString(),
+        expiresAtISO: expiresAt.toISOString(), rotateAfterISO: rotateAfter.toISOString(), revokedAt: null, recentNonces: [],
+    });
+    await batch.commit();
+    return {
+        grantId, uid, keyId, issuedAtISO: issuedAt.toISOString(),
+        rotateAfterISO: rotateAfter.toISOString(), expiresAtISO: expiresAt.toISOString(),
+    };
+});
+exports.revokeIosWidgetAccessGrants = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    const uid = assertAuth(request);
+    const existing = await db.collection(WIDGET_GRANTS).where("uid", "==", uid).get();
+    const batch = db.batch();
+    for (const grant of existing.docs)
+        batch.update(grant.ref, { revokedAt: firestore_2.FieldValue.serverTimestamp() });
+    await batch.commit();
+    return { ok: true, revoked: existing.size };
+});
+function widgetHttpStatus(error) {
+    if (!(error instanceof https_1.HttpsError))
+        return 500;
+    if (error.code === "invalid-argument")
+        return 400;
+    if (error.code === "unauthenticated")
+        return 401;
+    if (error.code === "permission-denied")
+        return 403;
+    if (error.code === "not-found")
+        return 404;
+    if (error.code === "failed-precondition" || error.code === "already-exists")
+        return 409;
+    if (error.code === "unavailable")
+        return 503;
+    return 500;
+}
+exports.iosWidgetGateway = (0, https_1.onRequest)({ region: "europe-west1", secrets: [REVENUECAT_SECRET_API_KEY], timeoutSeconds: 15 }, async (request, response) => {
+    try {
+        if (request.method !== "POST") {
+            response.status(405).json({ ok: false, permanent: true });
+            return;
+        }
+        const body = request.body;
+        const grantId = safeStr(body?.grantId, 128);
+        const nonce = safeStr(body?.nonce, 128);
+        const action = safeStr(body?.action, 32);
+        const payload = body?.payload && typeof body.payload === "object" ? body.payload : {};
+        const payloadHash = safeStr(body?.payloadHash, 64);
+        const signature = safeStr(body?.signature, 512);
+        const timestamp = Math.floor(Number(body?.timestamp));
+        if (!grantId || !/^[a-f0-9-]{20,128}$/i.test(nonce) || !["status", "complete"].includes(action)
+            || !Number.isFinite(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > 300
+            || payloadHash !== sha256Hex(stableJson(payload))) {
+            throw new https_1.HttpsError("invalid-argument", "Invalid signed widget request.");
+        }
+        const grantRef = db.collection(WIDGET_GRANTS).doc(grantId);
+        const grant = await db.runTransaction(async (tx) => {
+            const snapshot = await tx.get(grantRef);
+            if (!snapshot.exists)
+                throw new https_1.HttpsError("unauthenticated", "Widget grant not found.");
+            const value = snapshot.data();
+            if (value.revokedAt || Date.parse(String(value.expiresAtISO ?? "")) <= Date.now()) {
+                throw new https_1.HttpsError("unauthenticated", "Widget grant expired or revoked.");
+            }
+            const canonical = `v1\n${grantId}\n${timestamp}\n${nonce}\n${action}\n${payloadHash}`;
+            const valid = (0, node_crypto_1.verify)("sha256", Buffer.from(canonical), p256PublicKey(String(value.publicKeyBase64 ?? "")), Buffer.from(signature, "base64"));
+            if (!valid)
+                throw new https_1.HttpsError("unauthenticated", "Invalid widget signature.");
+            const recent = Array.isArray(value.recentNonces) ? value.recentNonces.map(String).slice(-39) : [];
+            if (recent.includes(nonce))
+                throw new https_1.HttpsError("already-exists", "Widget request was already used.");
+            const grantExpiresAtISO = new Date(Date.now() + WIDGET_GRANT_TTL_MS).toISOString();
+            tx.update(grantRef, { recentNonces: [...recent, nonce], expiresAtISO: grantExpiresAtISO, lastUsedAt: firestore_2.FieldValue.serverTimestamp() });
+            return { uid: String(value.uid ?? ""), keyId: String(value.keyId ?? ""), grantExpiresAtISO };
+        });
+        if (!grant.uid)
+            throw new https_1.HttpsError("unauthenticated", "Invalid widget grant scope.");
+        const authUser = await (0, auth_1.getAuth)().getUser(grant.uid).catch(() => null);
+        if (!authUser || authUser.disabled)
+            throw new https_1.HttpsError("unauthenticated", "Widget account is no longer active.");
+        const premium = await revenueCatPremium(grant.uid);
+        if (action === "status") {
+            response.status(200).json({ ok: true, status: "status", premium, grantExpiresAtISO: grant.grantExpiresAtISO });
+            return;
+        }
+        if (premium.state !== "premium") {
+            response.status(403).json({
+                ok: false, permanent: true, status: "rejected", premium,
+                grantExpiresAtISO: grant.grantExpiresAtISO,
+            });
+            return;
+        }
+        const timeZone = safeStr(payload.timeZoneIdentifier, 100);
+        const dateISO = safeStr(payload.date, 10);
+        const challengeId = safeStr(payload.challengeId, 160);
+        const challengeType = safeStr(payload.challengeType, 16);
+        const mutationId = safeStr(payload.mutationId, 300);
+        const expectedDoneBefore = Math.floor(Number(payload.expectedDoneBefore));
+        if (dateISO !== localDateInTimeZone(timeZone) || !Number.isInteger(expectedDoneBefore) || expectedDoneBefore < 0
+            || mutationId !== `ios:${grant.uid}:${challengeType}:${challengeId}:${dateISO}:${expectedDoneBefore}`) {
+            throw new https_1.HttpsError("failed-precondition", "Widget completion is not valid for today.");
+        }
+        const result = challengeType === "shared"
+            ? await completeSharedChallengeForWidget(grant.uid, challengeId, dateISO, mutationId, expectedDoneBefore)
+            : challengeType === "personal"
+                ? await completePersonalChallengeForWidget(grant.uid, challengeId, dateISO, mutationId, expectedDoneBefore, timeZone)
+                : (() => { throw new https_1.HttpsError("invalid-argument", "Invalid challenge type."); })();
+        response.status(200).json({ ok: true, ...result, premium, grantExpiresAtISO: grant.grantExpiresAtISO });
+    }
+    catch (error) {
+        const status = widgetHttpStatus(error);
+        console.error("[ios-widget-gateway] request rejected", error instanceof https_1.HttpsError ? error.code : "internal");
+        response.status(status).json({ ok: false, permanent: status >= 400 && status < 500, status: "rejected" });
+    }
+});
 function friendStatus(snap) {
     return snap.exists ? (snap.data()?.status ?? null) : null;
 }
@@ -417,6 +805,10 @@ exports.deleteMyAccount = (0, https_1.onCall)({ region: "europe-west1" }, async 
     }));
     await db.recursiveDelete(db.collection("friends").doc(uid)).catch(() => { });
     await db.recursiveDelete(userRef).catch(() => { });
+    const widgetGrants = await db.collection(WIDGET_GRANTS).where("uid", "==", uid).get();
+    const widgetGrantBatch = db.batch();
+    widgetGrants.docs.forEach((grant) => widgetGrantBatch.delete(grant.ref));
+    await widgetGrantBatch.commit().catch(() => { });
     await (0, auth_1.getAuth)().deleteUser(uid);
     return {
         ok: true,
@@ -435,42 +827,22 @@ exports.inviteSharedChallengeMember = (0, https_1.onCall)({ region: "europe-west
     let challengeTitle = "Spolecna vyzva";
     await db.runTransaction(async (tx) => {
         const challengeRef = sharedChallengeRef(challengeId);
-        const [challengeSnap, mineFriendSnap, theirFriendSnap] = await Promise.all([
-            tx.get(challengeRef),
-            tx.get(friendEdgeRef(uid, friendUid)),
-            tx.get(friendEdgeRef(friendUid, uid)),
-        ]);
+        const challengeSnap = await tx.get(challengeRef);
         if (!challengeSnap.exists) {
             throw new https_1.HttpsError("not-found", "Spolecna vyzva nebyla nalezena.");
         }
         const data = challengeSnap.data();
-        const memberUids = uniqueUids(arr(data?.memberUids));
-        const acceptedBy = uniqueUids(arr(data?.acceptedBy));
-        const pendingInviteUids = uniqueUids(arr(data?.pendingInviteUids));
-        const leftBy = uniqueUids(arr(data?.leftBy));
-        if (!memberUids.includes(uid) || !acceptedBy.includes(uid)) {
-            throw new https_1.HttpsError("permission-denied", "Pozvat muze jen prijaty ucastnik vyzvy.");
-        }
-        if (data?.enabled === false || data?.status === "declined") {
-            throw new https_1.HttpsError("failed-precondition", "Tato vyzva uz neni aktivni.");
-        }
+        const inviteUpdate = (0, sharedChallengePermissions_1.prepareSharedChallengeMemberInviteUpdate)(data, uid, friendUid, MAX_SHARED_MEMBERS);
+        const [mineFriendSnap, theirFriendSnap] = await Promise.all([
+            tx.get(friendEdgeRef(uid, friendUid)),
+            tx.get(friendEdgeRef(friendUid, uid)),
+        ]);
         if (friendStatus(mineFriendSnap) !== "accepted" || friendStatus(theirFriendSnap) !== "accepted") {
             throw new https_1.HttpsError("failed-precondition", "Pozvat lze jen prijateho pritele.");
         }
-        if (pendingInviteUids.includes(friendUid)) {
-            throw new https_1.HttpsError("already-exists", "Tento uzivatel uz ma pozvanku.");
-        }
-        if (memberUids.includes(friendUid)) {
-            throw new https_1.HttpsError("already-exists", "Tento uzivatel uz je ucastnik.");
-        }
-        if (uniqueUids([...memberUids, ...pendingInviteUids, friendUid]).length > MAX_SHARED_MEMBERS) {
-            throw new https_1.HttpsError("failed-precondition", "Spolecna vyzva uz ma maximalni pocet clenu.");
-        }
         challengeTitle = safeStr(data?.title, 120) || challengeTitle;
         tx.set(challengeRef, {
-            acceptedBy: acceptedBy.filter((memberUid) => memberUid !== friendUid),
-            pendingInviteUids: uniqueUids([...pendingInviteUids, friendUid]),
-            leftBy: leftBy.filter((memberUid) => memberUid !== friendUid),
+            ...inviteUpdate,
             updatedAt: firestore_2.FieldValue.serverTimestamp(),
         }, { merge: true });
     });

@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "snapshotRevision": 42,
+  "sessionState": "authenticated",
+  "activeUid": "fixture-user",
+  "accountUid": "fixture-user",
+  "locale": "cs",
+  "premium": true,
+  "premiumState": "premium",
+  "premiumExpirationDate": "2026-07-20T10:00:00.000Z",
+  "premiumLifetime": false,
+  "defaultConfiguration": {
+    "version": 2,
+    "configurationKey": "legacy-default",
+    "orderedChallengeIds": ["personal", "shared"],
+    "premiumSelectedChallengeIds": ["personal", "shared"],
+    "premiumSelectionRecorded": true,
+    "lastPremiumActive": true,
+    "updatedAtISO": "2026-07-19T10:00:00.000Z"
+  },
+  "selectedChallengeIds": ["personal", "shared"],
+  "challenges": [
+    {
+      "challengeId": "personal",
+      "challengeName": "Běh",
+      "challengeType": "personal",
+      "currentStreak": 4,
+      "bestStreak": 8,
+      "todayDone": 0,
+      "todayTarget": 1,
+      "todayCompleted": false,
+      "isActiveToday": true,
+      "dayState": "activePending",
+      "lockedByPremiumExpiration": false,
+      "week": [{"date":"2026-07-19","kind":"missed","done":0,"target":1}],
+      "timelineDays": [{"date":"2026-07-19","done":0,"target":1,"completed":false,"active":true,"dayState":"activePending","week":[{"date":"2026-07-19","kind":"missed","done":0,"target":1}]}]
+    },
+    {
+      "challengeId": "shared",
+      "challengeName": "Společná",
+      "challengeType": "shared",
+      "currentStreak": 2,
+      "bestStreak": 3,
+      "todayDone": 1,
+      "todayTarget": 2,
+      "todayCompleted": false,
+      "isActiveToday": true,
+      "dayState": "activePending",
+      "lockedByPremiumExpiration": false,
+      "week": [{"date":"2026-07-19","kind":"partial","done":1,"target":2}],
+      "timelineDays": [{"date":"2026-07-19","done":1,"target":2,"completed":false,"active":true,"dayState":"activePending","week":[{"date":"2026-07-19","kind":"partial","done":1,"target":2}]}]
+    }
+  ],
+  "completedToday": 0,
+  "countableToday": 2,
+  "generatedAtISO": "2026-07-19T10:00:00.000Z",
+  "generatedForDate": "2026-07-19",
+  "timeZoneIdentifier": "Europe/Prague"
+}

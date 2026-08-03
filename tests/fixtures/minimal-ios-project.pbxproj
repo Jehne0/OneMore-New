@@ -1,0 +1,162 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A00000000000000000000001 /* OneMore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OneMore.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B00000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C00000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				C00000000000000000000002 /* Products */,
+				C00000000000000000000003 /* Resources */,
+				C00000000000000000000004 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		C00000000000000000000002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000001 /* OneMore.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000003 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000004 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D00000000000000000000001 /* OneMore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00000000000000000000022 /* Build configuration list for PBXNativeTarget "OneMore" */;
+			buildPhases = (
+				E00000000000000000000001 /* Sources */,
+				B00000000000000000000001 /* Frameworks */,
+				F00000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OneMore;
+			productName = OneMore;
+			productReference = A00000000000000000000001 /* OneMore.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000007 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = C00000000000000000000021 /* Build configuration list for PBXProject "OneMore" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = C00000000000000000000001;
+			productRefGroup = C00000000000000000000002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D00000000000000000000001 /* OneMore */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F00000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E00000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		B00000000000000000000011 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "$(TARGET_NAME)"; }; name = Debug; };
+		B00000000000000000000012 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "$(TARGET_NAME)"; }; name = Release; };
+		B00000000000000000000013 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = OneMore; }; name = Debug; };
+		B00000000000000000000014 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = OneMore; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C00000000000000000000021 /* Build configuration list for PBXProject "OneMore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000011 /* Debug */,
+				B00000000000000000000012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C00000000000000000000022 /* Build configuration list for PBXNativeTarget "OneMore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000013 /* Debug */,
+				B00000000000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000000000000000000007 /* Project object */;
+}

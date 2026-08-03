@@ -14,11 +14,13 @@ import {
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   ScrollView
 } from "react-native";
 import DraggableFlatList, { type RenderItemParams } from "react-native-draggable-flatlist";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getSafeModalMetrics } from "../../lib/safeModalLayout";
 import { Alert } from "../../lib/appAlert";
 import { getTodayISO, useTodayISO } from "../../lib/clock";
 import { ensureDaily } from "../../lib/logic";
@@ -31,10 +33,21 @@ import {
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
-import { AppState, challengeDisplayText, loadState, renameChallenge, saveState } from "../../lib/storage";
+import { AppState, challengeDisplayText, loadState, renameChallenge, saveState, transitionChallengeEnabled } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
+import { useI18n, type Lang } from "../../lib/i18n";
 
 const FREE_MAX = FREE_MAX_CHALLENGES;
+
+const CHALLENGES_STRINGS: Record<Lang, Record<string, string>> = {
+  cs: { loading: "Načítám…", freeLimitTitle: "Limit ve Free verzi", freeLimit: "Ve Free verzi můžeš mít maximálně {count} výzvy.", missingTimeTitle: "Chybí čas", missingTime: "Nastav alespoň jeden čas, nebo vypni notifikace.", freeNotificationsTitle: "Notifikace ve Free verzi", freeNotifications: "Ve Free verzi můžeš mít notifikace jen u jedné výzvy. Nejdřív je vypni u jiné výzvy.", expoGoTitle: "Notifikace v Expo Go nefungují", expoGoText: "Od Expo SDK 53 byly notifikace v Expo Go vypnuté. Pro připomínky je potřeba development build.", notifications: "Notifikace", notificationsFailed: "Notifikace se nepodařilo nastavit.", renameTitle: "Přejmenovat výzvu", renameMissing: "Zadej název výzvy.", rename: "Přejmenovat", delete: "Smazat", targetTitle: "Kolikrát denně? (1×–20×)", cancel: "Zrušit", save: "Uložit", challengeNamePlaceholder: "Název výzvy…", enabled: "Zapnuto", disabled: "Vypnuto", freeNotificationHint: "Free: notifikace lze nastavit jen u jedné výzvy (max. 3× denně).", notificationCount: "Kolik notifikací denně?", notificationFrequencyHint: "Počet notifikací nesmí být vyšší než frekvence výzvy.", times: "Časy", set: "Nastavit", back: "Zpět", newChallenge: "Nová výzva… (např. 20 kliků)", freeMaxPlaceholder: "Ve Free verzi maximálně {count} výzvy", add: "Přidat", limit: "Limit {count}", deletedHistory: "Historie smazaných výzev", deletedAt: "Smazáno: {date}", restoreImpossibleTitle: "Nelze obnovit", restoreImpossible: "U této výzvy už existuje aktivní položka se stejným ID. Kvůli zachování historie nelze vytvořit kopii s jiným ID. Nejdřív smaž nebo archivuj aktivní položku a potom výzvu obnov z historie.", restore: "Obnovit", restoreHint: "Vrátit mezi aktivní", deleteForeverTitle: "Smazat nadobro?", deleteForeverText: "{name}\n\nTuto akci už nelze vrátit zpět.", deleteForever: "Smazat nadobro", locked: "Zamčeno" },
+  en: { loading: "Loading…", freeLimitTitle: "Free version limit", freeLimit: "The Free version allows up to {count} challenges.", missingTimeTitle: "Missing time", missingTime: "Set at least one time or turn notifications off.", freeNotificationsTitle: "Notifications in the Free version", freeNotifications: "The Free version allows notifications for only one challenge. Turn them off for another challenge first.", expoGoTitle: "Notifications do not work in Expo Go", expoGoText: "Notifications have been disabled in Expo Go since Expo SDK 53. Reminders require a development build.", notifications: "Notifications", notificationsFailed: "Notifications could not be configured.", renameTitle: "Rename challenge", renameMissing: "Enter a challenge name.", rename: "Rename", delete: "Delete", targetTitle: "How many times per day? (1–20)", cancel: "Cancel", save: "Save", challengeNamePlaceholder: "Challenge name…", enabled: "On", disabled: "Off", freeNotificationHint: "Free: notifications can be enabled for one challenge only (up to 3 times a day).", notificationCount: "How many notifications per day?", notificationFrequencyHint: "The number of notifications cannot exceed the challenge frequency.", times: "Times", set: "Set", back: "Back", newChallenge: "New challenge… (e.g. 20 push-ups)", freeMaxPlaceholder: "Up to {count} challenges in the Free version", add: "Add", limit: "Limit {count}", deletedHistory: "Deleted challenge history", deletedAt: "Deleted: {date}", restoreImpossibleTitle: "Cannot restore", restoreImpossible: "An active item with the same ID already exists for this challenge. To preserve history, a copy with a different ID cannot be created. Delete or archive the active item first, then restore this challenge from history.", restore: "Restore", restoreHint: "Return to active challenges", deleteForeverTitle: "Delete permanently?", deleteForeverText: "{name}\n\nThis action cannot be undone.", deleteForever: "Delete permanently", locked: "Locked" },
+  pl: { loading: "Wczytywanie…", freeLimitTitle: "Limit wersji Free", freeLimit: "W wersji Free możesz mieć maksymalnie {count} wyzwania.", missingTimeTitle: "Brak godziny", missingTime: "Ustaw co najmniej jedną godzinę albo wyłącz powiadomienia.", freeNotificationsTitle: "Powiadomienia w wersji Free", freeNotifications: "W wersji Free możesz mieć powiadomienia tylko dla jednego wyzwania. Najpierw wyłącz je przy innym wyzwaniu.", expoGoTitle: "Powiadomienia nie działają w Expo Go", expoGoText: "Od Expo SDK 53 powiadomienia są wyłączone w Expo Go. Przypomnienia wymagają development buildu.", notifications: "Powiadomienia", notificationsFailed: "Nie udało się skonfigurować powiadomień.", renameTitle: "Zmień nazwę wyzwania", renameMissing: "Wpisz nazwę wyzwania.", rename: "Zmień nazwę", delete: "Usuń", targetTitle: "Ile razy dziennie? (1–20)", cancel: "Anuluj", save: "Zapisz", challengeNamePlaceholder: "Nazwa wyzwania…", enabled: "Włączone", disabled: "Wyłączone", freeNotificationHint: "Free: powiadomienia można włączyć tylko dla jednego wyzwania (maks. 3 razy dziennie).", notificationCount: "Ile powiadomień dziennie?", notificationFrequencyHint: "Liczba powiadomień nie może przekraczać częstotliwości wyzwania.", times: "Godziny", set: "Ustaw", back: "Wstecz", newChallenge: "Nowe wyzwanie… (np. 20 pompek)", freeMaxPlaceholder: "Maksymalnie {count} wyzwania w wersji Free", add: "Dodaj", limit: "Limit {count}", deletedHistory: "Historia usuniętych wyzwań", deletedAt: "Usunięto: {date}", restoreImpossibleTitle: "Nie można przywrócić", restoreImpossible: "Dla tego wyzwania istnieje już aktywna pozycja z tym samym ID. Aby zachować historię, nie można utworzyć kopii z innym ID. Najpierw usuń lub zarchiwizuj aktywną pozycję, a potem przywróć wyzwanie z historii.", restore: "Przywróć", restoreHint: "Przenieś do aktywnych", deleteForeverTitle: "Usunąć na stałe?", deleteForeverText: "{name}\n\nTej operacji nie można cofnąć.", deleteForever: "Usuń na stałe", locked: "Zablokowane" },
+  de: { loading: "Wird geladen…", freeLimitTitle: "Limit der Free-Version", freeLimit: "In der Free-Version kannst du höchstens {count} Challenges haben.", missingTimeTitle: "Uhrzeit fehlt", missingTime: "Lege mindestens eine Uhrzeit fest oder deaktiviere die Benachrichtigungen.", freeNotificationsTitle: "Benachrichtigungen in der Free-Version", freeNotifications: "In der Free-Version sind Benachrichtigungen nur für eine Challenge möglich. Deaktiviere sie zuerst bei einer anderen Challenge.", expoGoTitle: "Benachrichtigungen funktionieren nicht in Expo Go", expoGoText: "Seit Expo SDK 53 sind Benachrichtigungen in Expo Go deaktiviert. Erinnerungen benötigen einen Development-Build.", notifications: "Benachrichtigungen", notificationsFailed: "Benachrichtigungen konnten nicht eingerichtet werden.", renameTitle: "Challenge umbenennen", renameMissing: "Gib einen Namen für die Challenge ein.", rename: "Umbenennen", delete: "Löschen", targetTitle: "Wie oft pro Tag? (1–20)", cancel: "Abbrechen", save: "Speichern", challengeNamePlaceholder: "Name der Challenge…", enabled: "Ein", disabled: "Aus", freeNotificationHint: "Free: Benachrichtigungen sind nur für eine Challenge möglich (max. 3-mal täglich).", notificationCount: "Wie viele Benachrichtigungen pro Tag?", notificationFrequencyHint: "Die Anzahl der Benachrichtigungen darf die Häufigkeit der Challenge nicht überschreiten.", times: "Uhrzeiten", set: "Festlegen", back: "Zurück", newChallenge: "Neue Challenge… (z. B. 20 Liegestütze)", freeMaxPlaceholder: "Höchstens {count} Challenges in der Free-Version", add: "Hinzufügen", limit: "Limit {count}", deletedHistory: "Verlauf gelöschter Challenges", deletedAt: "Gelöscht: {date}", restoreImpossibleTitle: "Wiederherstellen nicht möglich", restoreImpossible: "Für diese Challenge gibt es bereits einen aktiven Eintrag mit derselben ID. Damit der Verlauf erhalten bleibt, kann keine Kopie mit einer anderen ID erstellt werden. Lösche oder archiviere zuerst den aktiven Eintrag und stelle die Challenge dann aus dem Verlauf wieder her.", restore: "Wiederherstellen", restoreHint: "Zu den aktiven Challenges zurückholen", deleteForeverTitle: "Endgültig löschen?", deleteForeverText: "{name}\n\nDiese Aktion kann nicht rückgängig gemacht werden.", deleteForever: "Endgültig löschen", locked: "Gesperrt" },
+};
+
+const formatChallengeText = (value: string, params: Record<string, string | number>) =>
+  value.replace(/\{(\w+)\}/g, (_, key: string) => String(params[key] ?? `{${key}}`));
 
 function addDaysISO(iso: string, deltaDays: number) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -77,7 +90,8 @@ function streakForChallenge(history: any[], challengeId: string, todayISO: strin
   return streak;
 }
 
-function makeStyles(UI: any, isDark: boolean) {
+function makeStyles(UI: any, isDark: boolean, topInset: number, bottomInset: number, windowHeight: number) {
+  const safeModal = getSafeModalMetrics({ windowHeight, topInset, bottomInset, heightRatio: 0.86 });
   // Light mode in Challenges should still feel like OneMore: clean, bright background,
   // warm cards, orange accent — but NO orange "wash" over the whole screen.
   const inputBg = isDark ? UI.card : "#FFFFFF";
@@ -217,7 +231,9 @@ function makeStyles(UI: any, isDark: boolean) {
       flex: 1,
       backgroundColor: UI.backdrop,
       justifyContent: "center",
-      padding: 18,
+      paddingHorizontal: 18,
+      paddingTop: safeModal.paddingTop,
+      paddingBottom: safeModal.paddingBottom,
     },
     modalCard: {
       backgroundColor: UI.sheetBg,
@@ -225,6 +241,7 @@ function makeStyles(UI: any, isDark: boolean) {
       borderWidth: 1,
       borderColor: UI.sheetStroke,
       padding: 14,
+      maxHeight: safeModal.maxHeight,
     },
     modalTitle: { color: UI.text, fontWeight: "900", fontSize: 16, marginBottom: 10 },
     modalInput: {
@@ -376,9 +393,15 @@ function countFreeChallenges(s: AppState): number {
 }
 
 export default function ChallengesScreen() {
+  const { lang } = useI18n();
+  const tx = CHALLENGES_STRINGS[lang];
   const { UI, isDark, mode } = useTheme();
-  const styles = useMemo(() => makeStyles(UI, isDark), [UI, isDark]);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const styles = useMemo(
+    () => makeStyles(UI, isDark, insets.top, insets.bottom, windowHeight),
+    [UI, isDark, insets.top, insets.bottom, windowHeight]
+  );
 
   // Pokud sem přijdeš z OneMore pro správu konkrétní výzvy,
   // předá se manageId a rovnou otevřeme akce.
@@ -575,7 +598,7 @@ export default function ChallengesScreen() {
     await persist((latest) => {
       const nextChallenges = (latest.challenges ?? []).map((c: any) => {
         if (String(c.id) !== String(id)) return c;
-        return { ...c, enabled: !c.enabled };
+        return transitionChallengeEnabled(c, c.enabled === false, getTodayISO());
       });
       return { ...latest, challenges: nextChallenges };
     });
@@ -603,7 +626,7 @@ export default function ChallengesScreen() {
       const latest = await loadState();
       const n = countFreeChallenges(latest);
       if (n >= FREE_MAX) {
-        Alert.alert("Limit ve free verzi", `Ve free verzi můžeš mít max ${FREE_MAX} výzvy.`);
+        Alert.alert(tx.freeLimitTitle, formatChallengeText(tx.freeLimit, { count: FREE_MAX }));
         return;
       }
     }
@@ -709,7 +732,7 @@ export default function ChallengesScreen() {
     // ✅ Povolené je mít MÍŇ notifikací než je frekvence.
     // Jediná podmínka: když jsou notifikace zapnuté, musí být nastavený aspoň 1 čas.
     if (remEnabled && times.length === 0) {
-      Alert.alert("Chybí čas", "Nastav aspoň 1× čas, nebo vypni notifikace.");
+      Alert.alert(tx.missingTimeTitle, tx.missingTime);
       return;
     }
 
@@ -719,8 +742,8 @@ export default function ChallengesScreen() {
       const anySharedActive = await hasAnyActiveSharedNotification();
       if ((activeId && String(activeId) != id) || anySharedActive) {
         Alert.alert(
-          "Notifikace ve free verzi",
-          "Ve free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy."
+          tx.freeNotificationsTitle,
+          tx.freeNotifications
         );
         return;
       }
@@ -738,11 +761,11 @@ export default function ChallengesScreen() {
       const msg = String(e?.message ?? "");
       if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
         Alert.alert(
-          "Notifikace v Expo Go nefungují",
-          "Od Expo SDK 53 byly notifikace v Expo Go vypnuté. Pro připomínky je potřeba development build (EAS)."
+          tx.expoGoTitle,
+          tx.expoGoText
         );
       } else {
-        Alert.alert("Notifikace", "Nepodařilo se nastavit notifikace.");
+        Alert.alert(tx.notifications, tx.notificationsFailed);
       }
     }
 
@@ -822,7 +845,7 @@ export default function ChallengesScreen() {
     if (!renameId) return;
     const v = renameText.trim();
     if (!v) {
-      Alert.alert("Přejmenovat výzvu", "Zadej název výzvy.");
+      Alert.alert(tx.renameTitle, tx.renameMissing);
       return;
     }
 
@@ -891,7 +914,7 @@ export default function ChallengesScreen() {
         )}
 
         <View style={styles.center}>
-          <Text style={{ color: UI.text }}>Načítám…</Text>
+          <Text style={{ color: UI.text }}>{tx.loading}</Text>
         </View>
       </Animated.View>
     );
@@ -943,7 +966,7 @@ export default function ChallengesScreen() {
                     openRename(id, label);
                   }}
                 >
-                  <Text style={styles.modalBtnText}>Přejmenovat</Text>
+                  <Text style={styles.modalBtnText}>{tx.rename}</Text>
                 </Pressable>
 
                 <Pressable
@@ -955,7 +978,7 @@ export default function ChallengesScreen() {
                     void deleteChallengeNow(id);
                   }}
                 >
-                  <Text style={styles.modalBtnText}>Smazat</Text>
+                  <Text style={styles.modalBtnText}>{tx.delete}</Text>
                 </Pressable>
               </View>
             </Pressable>
@@ -966,7 +989,7 @@ export default function ChallengesScreen() {
         <Modal visible={targetOpen} transparent animationType="fade" onRequestClose={() => setTargetOpen(false)}>
           <Pressable style={styles.modalBackdrop} onPress={() => setTargetOpen(false)}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>Kolikrát denně? (1×–20×)</Text>
+              <Text style={styles.modalTitle}>{tx.targetTitle}</Text>
 
               <View style={styles.pills}>
                 {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
@@ -986,10 +1009,10 @@ export default function ChallengesScreen() {
 
               <View style={styles.modalBtns}>
                 <Pressable style={styles.modalBtn} onPress={() => setTargetOpen(false)}>
-                  <Text style={styles.modalBtnText}>Zrušit</Text>
+                  <Text style={styles.modalBtnText}>{tx.cancel}</Text>
                 </Pressable>
                 <Pressable style={styles.modalBtnPrimary} onPress={() => void saveTargetPicker(targetValue)}>
-                  <Text style={styles.modalBtnText}>Uložit</Text>
+                  <Text style={styles.modalBtnText}>{tx.save}</Text>
                 </Pressable>
               </View>
             </Pressable>
@@ -1004,12 +1027,12 @@ export default function ChallengesScreen() {
           >
             <Pressable style={styles.modalBackdrop} onPress={() => setRenameOpen(false)}>
               <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>Přejmenovat výzvu</Text>
+              <Text style={styles.modalTitle}>{tx.renameTitle}</Text>
 
               <TextInput
                 value={renameText}
                 onChangeText={setRenameText}
-                placeholder="Název výzvy…"
+                placeholder={tx.challengeNamePlaceholder}
                 placeholderTextColor={UI.sub}
                 style={styles.modalInput}
                 returnKeyType="done"
@@ -1019,11 +1042,11 @@ export default function ChallengesScreen() {
 
               <View style={styles.modalBtns}>
                 <Pressable style={styles.modalBtn} onPress={() => setRenameOpen(false)}>
-                  <Text style={styles.modalBtnText}>Zrušit</Text>
+                  <Text style={styles.modalBtnText}>{tx.cancel}</Text>
                 </Pressable>
 
                 <Pressable style={styles.modalBtnPrimary} onPress={() => void saveRename()}>
-                  <Text style={styles.modalBtnText}>Uložit</Text>
+                  <Text style={styles.modalBtnText}>{tx.save}</Text>
                 </Pressable>
               </View>
               </Pressable>
@@ -1040,7 +1063,7 @@ export default function ChallengesScreen() {
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setReminderOpen(false)}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>Notifikace</Text>
+              <Text style={styles.modalTitle}>{tx.notifications}</Text>
 
               <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ paddingBottom: 10 }} keyboardShouldPersistTaps="handled">
 
@@ -1053,19 +1076,19 @@ export default function ChallengesScreen() {
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={styles.toggleText}>{remEnabled ? "Zapnuto" : "Vypnuto"}</Text>
+                <Text style={styles.toggleText}>{remEnabled ? tx.enabled : tx.disabled}</Text>
               </Pressable>
 
               {!premium && (
                 <Text style={styles.modalHint}>
-                  Free: notifikace lze nastavit jen u jedné výzvy (max 3× denně).
+                  {tx.freeNotificationHint}
                 </Text>
               )}
 
               {/* Kolik notifikací denně? (max = frekvence výzvy; free max 3) */}
               {reminderMaxAllowed > 1 && (
                 <View style={styles.premiumRow}>
-                  <Text style={styles.modalLabel}>Kolik notifikací denně?</Text>
+                  <Text style={styles.modalLabel}>{tx.notificationCount}</Text>
                   <View style={styles.pills}>
                     {Array.from({ length: reminderMaxAllowed }, (_, i) => i + 1).map((n) => (
                       <Pressable
@@ -1088,14 +1111,14 @@ export default function ChallengesScreen() {
                       </Pressable>
                     ))}
                   </View>
-                  <Text style={styles.modalHint}>Notifikací nesmí být víc než frekvence výzvy.</Text>
+                  <Text style={styles.modalHint}>{tx.notificationFrequencyHint}</Text>
                 </View>
               )}
 
               {/* Step 2: times */}
               {(!premium || remStep === 2) && (
                 <View style={{ marginTop: 12 }}>
-                  <Text style={styles.modalLabel}>Časy</Text>
+                  <Text style={styles.modalLabel}>{tx.times}</Text>
                   <View style={styles.timesWrap}>
                     {Array.from(
                       { length: Math.min(Math.max(1, Number(tempTarget) || 1), reminderMaxAllowed) },
@@ -1107,7 +1130,7 @@ export default function ChallengesScreen() {
                             onPress={() => openTimePicker(idx)}
                             style={({ pressed }) => [styles.timeBtn, pressed && { opacity: 0.85 }]}
                           >
-                            <Text style={styles.timeText}>{t ? t : "Nastavit"}</Text>
+                            <Text style={styles.timeText}>{t ? t : tx.set}</Text>
                           </Pressable>
                         );
                       }
@@ -1123,17 +1146,17 @@ export default function ChallengesScreen() {
                         pressed && { opacity: 0.85 },
                       ]}
                     >
-                      <Text style={styles.modalBtnText}>Zpět</Text>
+                      <Text style={styles.modalBtnText}>{tx.back}</Text>
                     </Pressable>
                   )}
 
                   <View style={styles.modalBtns}>
                     <Pressable style={styles.modalBtn} onPress={() => setReminderOpen(false)}>
-                      <Text style={styles.modalBtnText}>Zrušit</Text>
+                      <Text style={styles.modalBtnText}>{tx.cancel}</Text>
                     </Pressable>
 
                     <Pressable style={styles.modalBtnPrimary} onPress={() => void saveReminderConfig()}>
-                      <Text style={styles.modalBtnText}>Uložit</Text>
+                      <Text style={styles.modalBtnText}>{tx.save}</Text>
                     </Pressable>
                   </View>
 
@@ -1154,7 +1177,7 @@ export default function ChallengesScreen() {
           <TextInput
             value={text}
             onChangeText={setText}
-            placeholder={atLimit ? `Ve free verzi max ${FREE_MAX} výzvy` : "Nová výzva… (např. 20 kliků)"}
+            placeholder={atLimit ? formatChallengeText(tx.freeMaxPlaceholder, { count: FREE_MAX }) : tx.newChallenge}
             placeholderTextColor={UI.sub}
             style={styles.input}
             returnKeyType="done"
@@ -1171,7 +1194,7 @@ export default function ChallengesScreen() {
               pressed && canAdd && styles.addButtonPressed,
             ]}
           >
-            <Text style={styles.addButtonText}>{atLimit ? "Limit 3" : "Přidat"}</Text>
+            <Text style={styles.addButtonText}>{atLimit ? formatChallengeText(tx.limit, { count: FREE_MAX }) : tx.add}</Text>
           </Pressable>
         </View>
 
@@ -1194,7 +1217,7 @@ export default function ChallengesScreen() {
                 {/* ARCHIVE (Premium) */}
                 {premium && (state.archivedChallenges ?? []).length > 0 && (
                   <View style={{ marginTop: 18 }}>
-                    <Text style={[styles.subtitle, { marginTop: 8 }]}>Historie smazaných výzev</Text>
+                    <Text style={[styles.subtitle, { marginTop: 8 }]}>{tx.deletedHistory}</Text>
 
                     <View style={{ marginTop: 10, gap: 10 }}>
                       {(state.archivedChallenges ?? []).map((a: any) => (
@@ -1218,7 +1241,7 @@ export default function ChallengesScreen() {
                             <Text style={styles.text} numberOfLines={2}>
                               {challengeDisplayText(a as any)}
                             </Text>
-                            <Text style={styles.subtitle}>Smazáno: {String(a.deletedAtISO).slice(0, 10)}</Text>
+                            <Text style={styles.subtitle}>{formatChallengeText(tx.deletedAt, { date: String(a.deletedAtISO).slice(0, 10) })}</Text>
                           </View>
 
                           <View style={styles.rowRight}>
@@ -1228,8 +1251,8 @@ export default function ChallengesScreen() {
                                 const clash = (state.challenges ?? []).some((c: any) => String(c.id) === String(a.id));
                                 if (clash) {
                                   Alert.alert(
-                                    "Nejde obnovit",
-                                    "U téhle výzvy už existuje aktivní položka se stejným ID. Aby se zachovala historie, nelze vytvořit kopii s jiným ID. Nejprve smaž/archivuj tu aktivní a pak obnov z historie."
+                                    tx.restoreImpossibleTitle,
+                                    tx.restoreImpossible
                                   );
                                   return;
                                 }
@@ -1266,20 +1289,20 @@ export default function ChallengesScreen() {
                                 });
                               }}
                             >
-                              <Text style={styles.remindText}>Obnovit</Text>
-                              <Text style={styles.remindSub}>Vrátit mezi aktivní</Text>
+                              <Text style={styles.remindText}>{tx.restore}</Text>
+                              <Text style={styles.remindSub}>{tx.restoreHint}</Text>
                             </Pressable>
 
                             <Pressable
                               style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.85 }]}
                               onPress={() => {
                                 Alert.alert(
-                                  "Smazat nadobro?",
-                                  `"${a.text}"\n\nTahle akce už nejde vrátit zpět.`,
+                                  tx.deleteForeverTitle,
+                                  formatChallengeText(tx.deleteForeverText, { name: `"${a.text}"` }),
                                   [
                                     { text: "Zrušit", style: "cancel" },
                                     {
-                                      text: "Smazat nadobro",
+                                      text: tx.deleteForever,
                                       style: "destructive",
                                       onPress: () => {
                                         void persist((latest) => {
@@ -1300,7 +1323,7 @@ export default function ChallengesScreen() {
                                 );
                               }}
                             >
-                              <Text style={styles.deleteText}>Smazat</Text>
+                              <Text style={styles.deleteText}>{tx.delete}</Text>
                             </Pressable>
                           </View>
                         </View>
@@ -1320,7 +1343,7 @@ export default function ChallengesScreen() {
                 !c.reminderEnabled;
 
               const target = Math.max(1, Number(c.targetPerDay ?? 1) || 1);
-              const notifLabel = freeLocked ? "Zamčeno" : c.reminderEnabled ? "Zapnuto" : "Vypnuto";
+              const notifLabel = freeLocked ? tx.locked : c.reminderEnabled ? tx.enabled : tx.disabled;
 
               return (
                 <Pressable
@@ -1344,8 +1367,8 @@ export default function ChallengesScreen() {
                         onPress={() => {
                           if (freeLocked) {
                             Alert.alert(
-                              "Notifikace ve free verzi",
-                              "Ve free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy."
+                              tx.freeNotificationsTitle,
+                              tx.freeNotifications
                             );
                             return;
                           }

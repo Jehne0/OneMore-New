@@ -13,8 +13,18 @@
     },
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
+      }
+    },
+    "cold-start-verification": {
+      "distribution": "internal",
+      "autoIncrement": true,
+      "developmentClient": false,
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       }
     },
     "production": {
@@ -22,6 +32,14 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6780685810"
+      },
+      "android": {
+        "track": "production",
+        "releaseStatus": "draft"
+      }
+    }
   }
 }

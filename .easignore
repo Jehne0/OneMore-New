@@ -1,0 +1,32 @@
+node_modules/
+.expo/
+dist/
+build/
+.env
+.env.*
+ios/
+expo-env.d.ts
+
+# Include the checked-in/local native Android project in the EAS upload, but
+# never upload machine-specific SDK paths or native build outputs.
+android/local.properties
+android/.gradle/
+android/.cxx/
+android/build/
+android/app/build/
+**/.gradle/
+**/.cxx/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake-build-*/
+**/build/
+
+# Firebase / FCM private service account keys
+fcm-service-account.json
+*firebase-adminsdk*.json
+*service-account*.json
+serviceAccountKey.json
+*.p8
+*.p12
+*.jks
+*.keystore

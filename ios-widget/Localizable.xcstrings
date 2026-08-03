@@ -1,0 +1,91 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Challenge" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzva" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenge" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwanie" } }
+    } },
+    "Challenge 1" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzva 1" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenge 1" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwanie 1" } }
+    } },
+    "Challenge 2" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzva 2" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenge 2" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwanie 2" } }
+    } },
+    "Challenge 3" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzva 3" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenge 3" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwanie 3" } }
+    } },
+    "Challenge 4" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzva 4" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenge 4" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwanie 4" } }
+    } },
+    "Challenge 5" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzva 5" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenge 5" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwanie 5" } }
+    } },
+    "Challenges, progress and streaks" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzvy, postup a série" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenges, Fortschritt und Serien" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwania, postęp i serie" } }
+    } },
+    "Choose challenges shown by this widget." : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Vyber výzvy zobrazené v tomto widgetu." } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle die Challenges für dieses Widget." } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wybierz wyzwania wyświetlane w tym widżecie." } }
+    } },
+    "Complete challenge" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Splnit výzvu" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Challenge erledigen" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wykonaj wyzwanie" } }
+    } },
+    "Date" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Datum" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Datum" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Data" } }
+    } },
+    "Expected progress" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Očekávaný postup" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Erwarteter Fortschritt" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Oczekiwany postęp" } }
+    } },
+    "Personal" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Osobní" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönlich" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Osobiste" } }
+    } },
+    "Records one completion in OneMore." : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Zapíše jedno splnění v OneMore." } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Erfasst eine Erledigung in OneMore." } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Zapisuje jedno wykonanie w OneMore." } }
+    } },
+    "Shared" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Společná" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Geteilt" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wspólne" } }
+    } },
+    "Type" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Typ" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Typ" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Typ" } }
+    } },
+    "Widget challenges" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Výzvy widgetu" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Widget-Challenges" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyzwania widżetu" } }
+    } },
+    "Widget configuration" : { "localizations" : {
+      "cs" : { "stringUnit" : { "state" : "translated", "value" : "Konfigurace widgetu" } },
+      "de" : { "stringUnit" : { "state" : "translated", "value" : "Widget-Konfiguration" } },
+      "pl" : { "stringUnit" : { "state" : "translated", "value" : "Konfiguracja widżetu" } }
+    } }
+  },
+  "version" : "1.0"
+}

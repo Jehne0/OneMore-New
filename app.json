@@ -18,10 +18,34 @@
       ],
       "expo-font",
       "expo-notifications",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withOneMoreWidgetResize",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "OneMore",
+              "label": "OneMore",
+              "description": "Today's challenges and streaks",
+              "minWidth": "110dp",
+              "minHeight": "56dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 1,
+              "maxResizeWidth": "500dp",
+              "maxResizeHeight": "600dp",
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ],
+      "./plugins/withOneMoreAndroidCompatibility",
+      "./plugins/withOneMoreIosWidget"
     ],
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "version": "1.0.1",
+    "orientation": "default",
     "icon": "./assets/icon/icon.png",
     "scheme": "onemore",
     "userInterfaceStyle": "automatic",
@@ -30,12 +54,21 @@
   "supportsTablet": false,
   "bundleIdentifier": "eu.desigame.onemore",
   "buildNumber": "1",
-  "googleServicesFile": "./GoogleService-Info.plist",
+ "googleServicesFile": "./GoogleService-Info.plist",
+  "entitlements": {
+    "com.apple.security.application-groups": [
+      "group.eu.desigame.onemore"
+    ],
+    "keychain-access-groups": [
+      "$(AppIdentifierPrefix)eu.desigame.onemore.widget"
+    ]
+  },
   "config": {
     "usesNonExemptEncryption": false
   }
 },
     "android": {
+      "versionCode": 56,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -59,14 +92,30 @@
     "splash": {
       "backgroundColor": "#0B1220"
     },
-    "androidStatusBar": {
-      "backgroundColor": "#0B1220",
-      "barStyle": "light-content"
-    },
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a81fe687-0040-4f78-ad9c-090d243d8a91"
+        "projectId": "a81fe687-0040-4f78-ad9c-090d243d8a91",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneMoreWidget",
+                  "bundleIdentifier": "eu.desigame.onemore.OneMoreWidget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.eu.desigame.onemore"
+                    ],
+                    "keychain-access-groups": [
+                      "$(AppIdentifierPrefix)eu.desigame.onemore.widget"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
       }
     }
   }

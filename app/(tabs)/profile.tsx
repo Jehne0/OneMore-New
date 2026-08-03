@@ -18,9 +18,16 @@ import {
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Alert } from "../../lib/appAlert";
+import { getSafeModalMetrics } from "../../lib/safeModalLayout";
+import { PremiumOfferingFlow } from "../../lib/premiumOfferingFlow";
+import {
+  canUpgradePremium,
+  type PremiumPaywallPhase,
+} from "../../lib/premiumOfferingSelection";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   acceptSharedChallenge,
@@ -49,6 +56,7 @@ import {
 
 import { useTheme } from "../../lib/theme";
 import { useI18n } from "../../lib/i18n";
+import { getWhatsNewCopy } from "../../lib/whatsNew";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
@@ -69,6 +77,7 @@ import {
   sendPasswordResetEmail,
   signOut,
   updateProfile,
+  onAuthStateChanged,
 } from "firebase/auth";
 import { deleteDoc, doc, getDoc, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -84,6 +93,8 @@ import {
 } from "../../lib/friends";
 import { resolveUidByUsername, getProfile } from "../../lib/usernames";
 import { changeUsername } from "../../lib/usernames";
+import { clearSessionAfterExplicitLogout } from "../../lib/cloudSync";
+import { updateAccountDisplayName } from "../../lib/accountSnapshot";
 
 async function clearOneMoreStorage() {
   try {
@@ -139,6 +150,7 @@ async function withUsernameSaveTimeout<T>(request: Promise<T>): Promise<T> {
 
 type InfoScreen =
   | "menu"
+  | "whatsnew"
   | "support"
   | "streak_medals"
   | "freeprem"
@@ -328,6 +340,9 @@ medalsIntro: "Sbírej medaile za své ohýnky. Jednou získaná medaile zůstane
     reminders: "Připomínky",
     historyChallenges: "Historie výzev",
     sharedChallenges: "Společné výzvy",
+    homeScreenWidget: "Widget na ploše",
+    homeScreenWidgetFree: "1 výzva",
+    homeScreenWidgetPremium: "Neomezeně výzev",
     activePremiumInfo: "Premium je aktivní. Můžeš ho kdykoliv zrušit nebo zkusit obnovit stav.",
     unlockPremiumInfo: "Odemkni Premium a získej neomezené výzvy, připomínky a přátele.",
     priceInfo: "Cena: zobrazí se po napojení nabídky (Offering) v RevenueCat.",
@@ -529,6 +544,9 @@ medalsIntro: "Earn medals for your streaks. Once earned, a medal stays unlocked,
   reminders: "Reminders",
   historyChallenges: "Challenge history",
   sharedChallenges: "Shared challenges",
+  homeScreenWidget: "Home screen widget",
+  homeScreenWidgetFree: "1 challenge",
+  homeScreenWidgetPremium: "Unlimited challenges",
   activePremiumInfo: "Premium is active. You can cancel it anytime or try restoring the status.",
   unlockPremiumInfo: "Unlock Premium and get unlimited challenges, reminders, and friends.",
   priceInfo: "Price will appear after the RevenueCat offering is connected.",
@@ -592,6 +610,7 @@ unlimitedReminders: "Nieograniczone przypomnienia",
 fullHistory: "Pełna historia wyzwań",
 unlimitedFriends: "Nieograniczeni znajomi",
 unlimitedSharedChallenges: "Nieograniczone wspólne wyzwania",
+historyEmpty: "Brak historii.",
 historyCompleted: "Ukończono",
 historyMissed: "Niewykonano",
 historyFreeDay: "Dzień wolny",
@@ -738,6 +757,9 @@ medalsIntro: "Zdobywaj medale za swoje serie. Raz zdobyty medal pozostaje odblok
   reminders: "Przypomnienia",
   historyChallenges: "Historia wyzwań",
   sharedChallenges: "Wspólne wyzwania",
+  homeScreenWidget: "Widżet na ekranie",
+  homeScreenWidgetFree: "1 wyzwanie",
+  homeScreenWidgetPremium: "Nieograniczone wyzwania",
   activePremiumInfo: "Premium jest aktywne. Możesz je anulować w dowolnym momencie albo spróbować przywrócić status.",
   unlockPremiumInfo: "Odblokuj Premium i zyskaj nieograniczone wyzwania, przypomnienia i znajomych.",
   priceInfo: "Cena pojawi się po podłączeniu oferty w RevenueCat.",
@@ -947,6 +969,9 @@ history: "Herausforderungsverlauf",
   reminders: "Erinnerungen",
   historyChallenges: "Herausforderungen-Verlauf",
   sharedChallenges: "Gemeinsame Herausforderungen",
+  homeScreenWidget: "Startbildschirm-Widget",
+  homeScreenWidgetFree: "1 Challenge",
+  homeScreenWidgetPremium: "Unbegrenzte Challenges",
   activePremiumInfo: "Premium ist aktiv. Du kannst es jederzeit kündigen oder den Status wiederherstellen.",
   unlockPremiumInfo: "Schalte Premium frei und erhalte unbegrenzte Herausforderungen, Erinnerungen und Freunde.",
   priceInfo: "Der Preis erscheint nach dem Verbinden des Offerings in RevenueCat.",
@@ -983,6 +1008,27 @@ history: "Herausforderungsverlauf",
 }
 
 } as const;
+
+const PROFILE_RUNTIME_STRINGS: Record<"cs" | "en" | "pl" | "de", Record<string, string>> = {
+  cs: { notifications: "Oznámení", newChallenge: "Nová výzva", accepted: "Výzva byla přijata.", acceptFailed: "Výzvu se nepodařilo přijmout.", declined: "Výzva byla odmítnuta.", declineFailed: "Výzvu se nepodařilo odmítnout.", cancelPremium: "Zrušit Premium", cancelPremiumText: "Předplatné se ruší ve Store (Google Play / App Store). Chceš otevřít správu předplatného?", no: "Ne", premiumActive: "Premium je aktivní.", premiumInactive: "Premium není aktivní.", premiumRestoreFailed: "Stav Premium se nepodařilo obnovit.", support: "Podpora", supportMissing: "Vyplň prosím e-mail, předmět i zprávu.", signInRequired: "Musíš být přihlášený/á.", sent: "Odesláno", supportSent: "Díky! Zpráva byla odeslána na podporu.", supportFailed: "Zprávu se nepodařilo odeslat. Zkus to prosím znovu.", permissionDenied: "Nemáš oprávnění odeslat zprávu.", checkFields: "Zkontroluj prosím vyplněné údaje.", error: "Chyba", enterEmail: "Zadej prosím e-mail.", missingEmail: "Chybí e-mail", missingEmailText: "Zadej prosím e-mail a zkus to znovu.", done: "Hotovo", resetSent: "Poslali jsme ti e-mail s odkazem na změnu hesla. Zkontroluj i spam.", emailFailed: "E-mail se nepodařilo odeslat. Zkus to prosím znovu.", invalidEmail: "E-mail není ve správném formátu.", noAccount: "Pro tento e-mail neexistuje účet.", tooMany: "Příliš mnoho pokusů. Zkus to prosím později.", couldNotSend: "Nepodařilo se odeslat", usernameChange: "Změna uživatelského jména", notSignedIn: "Nejsi přihlášený/á.", changeFailed: "Změna se nepovedla.", selectFriend: "Vyber alespoň jednoho přítele.", enterChallenge: "Zadej název výzvy.", selectDay: "Vyber alespoň jeden den.", sharedCreated: "Výzva byla vytvořena pro {count} přátel.", sharedCreateFailed: "Společnou výzvu se nepodařilo vytvořit.", privacy: "Soukromí", privacyFailed: "Nastavení se nepodařilo uložit.", sentFor: "Odesláno pro", waiting: "Čeká na přijetí.", cancel: "Zrušit" },
+  en: { notifications: "Notifications", newChallenge: "New challenge", accepted: "Challenge accepted.", acceptFailed: "The challenge could not be accepted.", declined: "Challenge declined.", declineFailed: "The challenge could not be declined.", cancelPremium: "Cancel Premium", cancelPremiumText: "Subscription cancellation is handled in the Store (Google Play / App Store). Open subscription management?", no: "No", premiumActive: "Premium is active.", premiumInactive: "Premium is not active.", premiumRestoreFailed: "Premium status could not be restored.", support: "Support", supportMissing: "Please fill in the email, subject, and message.", signInRequired: "You must be signed in.", sent: "Sent", supportSent: "Thanks! Your message was sent to support.", supportFailed: "The message could not be sent. Please try again.", permissionDenied: "You do not have permission to send the message.", checkFields: "Please check the entered details.", error: "Error", enterEmail: "Please enter your email.", missingEmail: "Missing email", missingEmailText: "Enter your email and try again.", done: "Done", resetSent: "We sent you an email with a password reset link. Check spam too.", emailFailed: "The email could not be sent. Please try again.", invalidEmail: "The email format is invalid.", noAccount: "There is no account for this email.", tooMany: "Too many attempts. Please try again later.", couldNotSend: "Could not send", usernameChange: "Change username", notSignedIn: "You are not signed in.", changeFailed: "Change failed.", selectFriend: "Select at least one friend.", enterChallenge: "Enter a challenge name.", selectDay: "Select at least one day.", sharedCreated: "Challenge created for {count} friends.", sharedCreateFailed: "The shared challenge could not be created.", privacy: "Privacy", privacyFailed: "The settings could not be saved.", sentFor: "Sent to", waiting: "Waiting for acceptance.", cancel: "Cancel" },
+  pl: { notifications: "Powiadomienia", newChallenge: "Nowe wyzwanie", accepted: "Wyzwanie zostało zaakceptowane.", acceptFailed: "Nie udało się zaakceptować wyzwania.", declined: "Wyzwanie zostało odrzucone.", declineFailed: "Nie udało się odrzucić wyzwania.", cancelPremium: "Anuluj Premium", cancelPremiumText: "Subskrypcję anulujesz w sklepie Google Play lub App Store. Otworzyć zarządzanie subskrypcją?", no: "Nie", premiumActive: "Premium jest aktywne.", premiumInactive: "Premium nie jest aktywne.", premiumRestoreFailed: "Nie udało się przywrócić statusu Premium.", support: "Pomoc", supportMissing: "Wypełnij e-mail, temat i wiadomość.", signInRequired: "Musisz się zalogować.", sent: "Wysłano", supportSent: "Dziękujemy! Wiadomość została wysłana do pomocy.", supportFailed: "Nie udało się wysłać wiadomości. Spróbuj ponownie.", permissionDenied: "Nie masz uprawnień do wysłania wiadomości.", checkFields: "Sprawdź wprowadzone dane.", error: "Błąd", enterEmail: "Wpisz adres e-mail.", missingEmail: "Brak e-maila", missingEmailText: "Wpisz e-mail i spróbuj ponownie.", done: "Gotowe", resetSent: "Wysłaliśmy e-mail z linkiem do zmiany hasła. Sprawdź też spam.", emailFailed: "Nie udało się wysłać e-maila. Spróbuj ponownie.", invalidEmail: "Format adresu e-mail jest nieprawidłowy.", noAccount: "Nie ma konta dla tego adresu e-mail.", tooMany: "Zbyt wiele prób. Spróbuj ponownie później.", couldNotSend: "Nie udało się wysłać", usernameChange: "Zmiana nazwy użytkownika", notSignedIn: "Nie jesteś zalogowany/a.", changeFailed: "Zmiana nie powiodła się.", selectFriend: "Wybierz co najmniej jednego znajomego.", enterChallenge: "Wpisz nazwę wyzwania.", selectDay: "Wybierz co najmniej jeden dzień.", sharedCreated: "Utworzono wyzwanie dla {count} znajomych.", sharedCreateFailed: "Nie udało się utworzyć wspólnego wyzwania.", privacy: "Prywatność", privacyFailed: "Nie udało się zapisać ustawień.", sentFor: "Wysłano do", waiting: "Oczekuje na akceptację.", cancel: "Anuluj" },
+  de: { notifications: "Benachrichtigungen", newChallenge: "Neue Challenge", accepted: "Challenge angenommen.", acceptFailed: "Die Challenge konnte nicht angenommen werden.", declined: "Challenge abgelehnt.", declineFailed: "Die Challenge konnte nicht abgelehnt werden.", cancelPremium: "Premium kündigen", cancelPremiumText: "Das Abo wird im Google Play Store oder App Store gekündigt. Aboverwaltung öffnen?", no: "Nein", premiumActive: "Premium ist aktiv.", premiumInactive: "Premium ist nicht aktiv.", premiumRestoreFailed: "Der Premium-Status konnte nicht wiederhergestellt werden.", support: "Support", supportMissing: "Fülle bitte E-Mail, Betreff und Nachricht aus.", signInRequired: "Du musst angemeldet sein.", sent: "Gesendet", supportSent: "Danke! Deine Nachricht wurde an den Support gesendet.", supportFailed: "Die Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.", permissionDenied: "Du darfst keine Nachricht senden.", checkFields: "Überprüfe bitte deine Eingaben.", error: "Fehler", enterEmail: "Gib bitte deine E-Mail-Adresse ein.", missingEmail: "E-Mail-Adresse fehlt", missingEmailText: "Gib deine E-Mail-Adresse ein und versuche es erneut.", done: "Fertig", resetSent: "Wir haben dir eine E-Mail mit einem Link zum Ändern des Passworts gesendet. Prüfe auch den Spamordner.", emailFailed: "Die E-Mail konnte nicht gesendet werden. Bitte versuche es erneut.", invalidEmail: "Das E-Mail-Format ist ungültig.", noAccount: "Für diese E-Mail-Adresse gibt es kein Konto.", tooMany: "Zu viele Versuche. Bitte versuche es später erneut.", couldNotSend: "Senden fehlgeschlagen", usernameChange: "Benutzernamen ändern", notSignedIn: "Du bist nicht angemeldet.", changeFailed: "Änderung fehlgeschlagen.", selectFriend: "Wähle mindestens einen Freund aus.", enterChallenge: "Gib einen Namen für die Challenge ein.", selectDay: "Wähle mindestens einen Tag aus.", sharedCreated: "Challenge für {count} Freunde erstellt.", sharedCreateFailed: "Die gemeinsame Challenge konnte nicht erstellt werden.", privacy: "Datenschutz", privacyFailed: "Die Einstellungen konnten nicht gespeichert werden.", sentFor: "Gesendet an", waiting: "Wartet auf Annahme.", cancel: "Abbrechen" },
+};
+
+const PROFILE_ACCOUNT_STRINGS: Record<"cs" | "en" | "pl" | "de", Record<string, string>> = {
+  cs: { enterUsername: "Zadej prosím nové uživatelské jméno.", usernameChanged: "Uživatelské jméno bylo změněno.", saveTimeout: "Ukládání trvá příliš dlouho. Zkontroluj připojení a zkus to znovu.", friendLocked: "Tento přítel je ve Free verzi zamčený. Obnov Premium a znovu se odemkne.", lockedFree: "Zamčeno ve Free verzi" },
+  en: { enterUsername: "Please enter a new username.", usernameChanged: "Username has been changed.", saveTimeout: "Saving is taking too long. Check your connection and try again.", friendLocked: "This friend is locked in the Free version. Restore Premium to unlock them again.", lockedFree: "Locked in the Free version" },
+  pl: { enterUsername: "Wpisz nową nazwę użytkownika.", usernameChanged: "Nazwa użytkownika została zmieniona.", saveTimeout: "Zapisywanie trwa zbyt długo. Sprawdź połączenie i spróbuj ponownie.", friendLocked: "Ten znajomy jest zablokowany w wersji Free. Przywróć Premium, aby go odblokować.", lockedFree: "Zablokowano w wersji Free" },
+  de: { enterUsername: "Gib einen neuen Benutzernamen ein.", usernameChanged: "Der Benutzername wurde geändert.", saveTimeout: "Das Speichern dauert zu lange. Prüfe deine Verbindung und versuche es erneut.", friendLocked: "Dieser Freund ist in der Free-Version gesperrt. Stelle Premium wieder her, um ihn zu entsperren.", lockedFree: "In der Free-Version gesperrt" },
+};
+
+const PROFILE_ACCESS_STRINGS: Record<"cs" | "en" | "pl" | "de", Record<string, string>> = {
+  cs: { notificationSaveFailed: "Nastavení oznámení se nepodařilo uložit.", newInvite: "Máš novou pozvánku do společné výzvy.", sharedLimit: "Ve Free verzi můžeš mít jen jednu společnou výzvu. Pro více je potřeba Premium.", acceptFailed: "Výzvu se nepodařilo přijmout.", historyPremium: "Historie výzev je dostupná v Premium. Tvoje historie se nemaže, jen je ve Free verzi zamčená.", lockedFree: "Zamčeno ve Free verzi" },
+  en: { notificationSaveFailed: "Notification settings could not be saved.", newInvite: "You have a new shared challenge invitation.", sharedLimit: "The Free version allows one shared challenge. Upgrade to Premium for more.", acceptFailed: "The challenge could not be accepted.", historyPremium: "Challenge history is available with Premium. Your history is not deleted; it is only locked in the Free version.", lockedFree: "Locked in the Free version" },
+  pl: { notificationSaveFailed: "Nie udało się zapisać ustawień powiadomień.", newInvite: "Masz nowe zaproszenie do wspólnego wyzwania.", sharedLimit: "W wersji Free możesz mieć jedno wspólne wyzwanie. Więcej wymaga Premium.", acceptFailed: "Nie udało się zaakceptować wyzwania.", historyPremium: "Historia wyzwań jest dostępna w Premium. Twoja historia nie jest usuwana — w wersji Free pozostaje tylko zablokowana.", lockedFree: "Zablokowano w wersji Free" },
+  de: { notificationSaveFailed: "Die Benachrichtigungseinstellungen konnten nicht gespeichert werden.", newInvite: "Du hast eine neue Einladung zu einer gemeinsamen Challenge.", sharedLimit: "In der Free-Version ist eine gemeinsame Challenge möglich. Für weitere benötigst du Premium.", acceptFailed: "Die Challenge konnte nicht angenommen werden.", historyPremium: "Der Challenge-Verlauf ist mit Premium verfügbar. Dein Verlauf wird nicht gelöscht, sondern ist in der Free-Version nur gesperrt.", lockedFree: "In der Free-Version gesperrt" },
+};
 
 function getIncomingSharedChallengeInvitesForUid(
   sharedChallenges: SharedChallenge[],
@@ -1076,15 +1122,25 @@ export default function ProfileTabScreen() {
   const router = useRouter();
   const { open, t } = useLocalSearchParams<{ open?: string; t?: string }>();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { UI, isDark, toggle } = useTheme();
   const { lang, setLang } = useI18n();
+  const whatsNew = getWhatsNewCopy(lang);
 const profileLang =
   lang === "cs" || lang === "en" || lang === "pl" || lang === "de"
     ? lang
     : "en";
 
 const p = PROFILE_STRINGS[profileLang];
-const currentUserUid = auth.currentUser?.uid ?? "";
+const runtimeText = PROFILE_RUNTIME_STRINGS[profileLang];
+const accountText = PROFILE_ACCOUNT_STRINGS[profileLang];
+const accessText = PROFILE_ACCESS_STRINGS[profileLang];
+const [currentUserUid, setCurrentUserUid] = useState(auth.currentUser?.uid ?? "");
+
+useEffect(() => onAuthStateChanged(auth, (user) => {
+  setCurrentUserUid(user?.uid ?? "");
+  if (user?.displayName) setMyUsername((current) => current || user.displayName || "");
+}), []);
 
 const medalDayUnit =
   profileLang === "cs"
@@ -1128,19 +1184,38 @@ const unknownUserText =
   const [premiumSubscription, setPremiumSubscription] =
     useState<PremiumSubscriptionState>(() => getPremiumSubscriptionState());
   const [premiumBusy, setPremiumBusy] = useState(false);
-  const [premiumOfferLoading, setPremiumOfferLoading] = useState(false);
-  const [premiumPackages, setPremiumPackages] =
-    useState<Awaited<ReturnType<typeof getOfferingPackages>>>([]);
+  const [premiumPaywallPhase, setPremiumPaywallPhase] =
+    useState<PremiumPaywallPhase>("idle");
+  const [premiumPaywallPackage, setPremiumPaywallPackage] =
+    useState<Awaited<ReturnType<typeof getOfferingPackages>>[number] | null>(null);
   const [premiumPurchaseStatus, setPremiumPurchaseStatus] =
     useState<"opening" | "processing" | null>(null);
-  const premiumOfferRequestRef = useRef(false);
+  const premiumOfferingFlowRef = useRef(
+    new PremiumOfferingFlow<Awaited<ReturnType<typeof getOfferingPackages>>[number]>()
+  );
+  const premiumPackagesRef = useRef<Awaited<ReturnType<typeof getOfferingPackages>>>([]);
+  const premiumPackageUidRef = useRef<string | null>(null);
+  const lastPremiumAuthUidRef = useRef<string | null>(currentUserUid || null);
   const premiumPurchaseGuardRef = useRef(false);
-  const selectedPremiumPackage = premiumPackages[0] ?? null;
+  const selectedPremiumPackage = premiumPaywallPackage;
+  const premiumOfferLoading =
+    premiumPaywallPhase === "waitingForAuth" ||
+    premiumPaywallPhase === "loadingOffering";
   const premiumSubscriptionPeriodText =
     selectedPremiumPackage?.product.subscriptionPeriod === "P1M" ||
     selectedPremiumPackage?.packageType === "MONTHLY"
       ? p.monthlySubscription
       : null;
+
+  useEffect(() => {
+    const uid = currentUserUid || null;
+    if (lastPremiumAuthUidRef.current === uid) return;
+    lastPremiumAuthUidRef.current = uid;
+    premiumPackagesRef.current = [];
+    premiumPackageUidRef.current = null;
+    setPremiumPaywallPackage(null);
+    if (!uid) setPremiumPaywallPhase("waitingForAuth");
+  }, [currentUserUid]);
 
   // ✅ Modaly – všechno schované
   const [accountOpen, setAccountOpen] = useState(false);
@@ -1280,10 +1355,8 @@ const updateNotificationSetting = async (
   } catch {
     showPwdPopup(
       "error",
-      lang === "cs" ? "Oznámení" : "Notifications",
-      lang === "cs"
-        ? "Nepodařilo se uložit nastavení oznámení."
-        : "Could not save notification settings."
+      runtimeText.notifications,
+      accessText.notificationSaveFailed
     );
   }
 };
@@ -1320,17 +1393,25 @@ useEffect(() => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const uid = auth.currentUser?.uid;
+      const uid = currentUserUid;
       if (!uid) return;
+      const profileNameKey = `onemore_profile_name:${uid}`;
       try {
-        const p = await getProfile(uid);
-        if (!cancelled) setMyUsername((p?.username ?? "").trim());
+        const cachedName = (await AsyncStorage.getItem(profileNameKey))?.trim();
+        if (!cancelled && cachedName) setMyUsername(cachedName);
+        const profile = await getProfile(uid);
+        const freshName = (profile?.username ?? "").trim();
+        if (freshName) {
+          await AsyncStorage.setItem(profileNameKey, freshName);
+          await updateAccountDisplayName(uid, freshName).catch(() => {});
+          if (!cancelled) setMyUsername(freshName);
+        }
       } catch {}
     })();
     return () => {
       cancelled = true;
     };
-  }, [auth.currentUser?.uid]);
+  }, [currentUserUid]);
 
     useEffect(() => {
     let cancelled = false;
@@ -1504,10 +1585,8 @@ if (sharedInvitesInitializedRef.current) {
   if (hasNewInvite) {
     showPwdPopup(
       "success",
-      lang === "cs" ? "Nová výzva" : "New challenge",
-      lang === "cs"
-        ? "Máš novou pozvánku do společné výzvy."
-        : "You have a new shared challenge invite."
+      runtimeText.newChallenge,
+      accessText.newInvite
     );
   }
 } else {
@@ -1548,7 +1627,7 @@ setSharedInvitesLoading(false);
       cancelled = true;
       unsub?.();
     };
-  }, [currentUserUid, friendsOpen, lang, unknownUserText]);
+  }, [accessText.newInvite, currentUserUid, friendsOpen, lang, runtimeText.newChallenge, unknownUserText]);
 
   const email = (auth.currentUser?.email ?? "").trim();
 
@@ -1792,9 +1871,7 @@ async function acceptSharedInviteFromFriends(challengeId: string) {
   if (!premium && blockingCountExceptThis >= 1) {
     Alert.alert(
       p.premium,
-      lang === "cs"
-        ? "Ve Free verzi můžeš mít jen 1 společnou výzvu. Pro více je potřeba Premium."
-        : "In the Free version you can have only 1 shared challenge. Upgrade to Premium for more."
+      accessText.sharedLimit
     );
     return;
   }
@@ -1805,7 +1882,7 @@ async function acceptSharedInviteFromFriends(challengeId: string) {
     showPwdPopup(
       "success",
       p.challenges,
-      lang === "cs" ? "Výzva byla přijata." : "Challenge was accepted."
+      runtimeText.accepted
     );
   } catch (e: any) {
     showPwdPopup(
@@ -1813,9 +1890,7 @@ async function acceptSharedInviteFromFriends(challengeId: string) {
       p.challenges,
       getSharedInviteActionErrorMessage(
         e,
-        lang === "cs"
-          ? "Nepodařilo se přijmout výzvu."
-          : "Could not accept the challenge."
+        accessText.acceptFailed
       )
     );
   } finally {
@@ -1827,14 +1902,14 @@ async function declineSharedInviteFromFriends(challengeId: string) {
   try {
     setFriendsBusy(true);
     await declineSharedChallenge(challengeId);
-    showPwdPopup("success", p.challenges, lang === "cs" ? "Výzva byla odmítnuta." : "Challenge was declined.");
+    showPwdPopup("success", p.challenges, runtimeText.declined);
   } catch (e: any) {
     showPwdPopup(
       "error",
       p.challenges,
       getSharedInviteActionErrorMessage(
         e,
-        lang === "cs" ? "Nepodařilo se odmítnout výzvu." : "Could not decline the challenge."
+        runtimeText.declineFailed
       )
     );
   } finally {
@@ -1843,8 +1918,8 @@ async function declineSharedInviteFromFriends(challengeId: string) {
 }
 
   const styles = useMemo(
-    () => makeStyles(UI, insets.bottom),
-    [UI, insets.bottom]
+    () => makeStyles(UI, insets.top, insets.bottom, windowHeight),
+    [UI, insets.top, insets.bottom, windowHeight]
   );
 const noScaleText = {
   allowFontScaling: false as const,
@@ -2097,64 +2172,89 @@ const faqItems = useMemo(() => {
   }, [infoScreen]);
 
   const loadPremiumPackages = async () => {
-    if (premiumOfferRequestRef.current) return null;
-
-    premiumOfferRequestRef.current = true;
-    setPremiumOfferLoading(true);
+    const uid = auth.currentUser?.uid ?? null;
+    if (!uid) {
+      setPremiumPaywallPackage(null);
+      setPremiumPaywallPhase("waitingForAuth");
+      return null;
+    }
+    setPremiumPaywallPhase("loadingOffering");
 
     try {
-      const packages = await withPremiumRequestTimeout(getOfferingPackages());
+      if (__DEV__) console.log("[RevenueCat Paywall] offering load started", { firebaseUidReady: !!auth.currentUser?.uid });
+      const outcome = await premiumOfferingFlowRef.current.load(async (attempt) => {
+        if (__DEV__) console.log("[RevenueCat Paywall] offering attempt", { attempt: attempt + 1, firebaseUidReady: !!auth.currentUser?.uid });
+        return withPremiumRequestTimeout(getOfferingPackages(attempt > 0));
+      }, 2);
+      if (outcome.status === "stale") {
+        if (__DEV__) console.log("[RevenueCat Paywall] ignored stale offering result", { requestId: outcome.requestId });
+        return null;
+      }
+      if (outcome.status === "cached") {
+        premiumPackagesRef.current = outcome.packages;
+        premiumPackageUidRef.current = uid;
+        setPremiumPaywallPackage(outcome.packages[0] ?? null);
+        setPremiumPaywallPhase(outcome.packages[0] ? "ready" : "unavailable");
+        if (__DEV__) console.log("[RevenueCat Paywall] refresh failed; retained valid package", { packageCount: outcome.packages.length });
+        return outcome.packages;
+      }
+      const packages = outcome.status === "ready" ? outcome.packages : [];
 
       if (!packages.length) {
-        setPremiumPackages([]);
-        Alert.alert(
-          p.premium,
-          lang === "cs"
-            ? "V nabídce Premium se nepodařilo načíst žádný produkt. Zkus to prosím znovu."
-            : lang === "pl"
-            ? "Nie udało się wczytać żadnego produktu z oferty Premium. Spróbuj ponownie."
-            : lang === "de"
-            ? "Aus dem Premium-Angebot konnte kein Produkt geladen werden. Bitte versuche es erneut."
-            : "No product could be loaded from the Premium offer. Please try again."
-        );
+        premiumPackagesRef.current = [];
+        premiumPackageUidRef.current = uid;
+        setPremiumPaywallPackage(null);
+        setPremiumPaywallPhase("unavailable");
         return null;
       }
 
-      setPremiumPackages(packages);
+      premiumPackagesRef.current = packages;
+      premiumPackageUidRef.current = uid;
+      setPremiumPaywallPackage(packages[0]);
+      setPremiumPaywallPhase("ready");
+      if (__DEV__) console.log("[RevenueCat Paywall] package ready", { packageCount: packages.length, packageType: packages[0]?.packageType ?? null });
       return packages;
-    } catch {
-      setPremiumPackages([]);
-      Alert.alert(
-        p.premium,
-        lang === "cs"
-          ? "Nabídku Premium se nepodařilo načíst. Zkontroluj připojení a zkus to prosím znovu."
-          : lang === "pl"
-          ? "Nie udało się wczytać oferty Premium. Sprawdź połączenie i spróbuj ponownie."
-          : lang === "de"
-          ? "Das Premium-Angebot konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut."
-          : "The Premium offer could not be loaded. Check your connection and try again."
-      );
+    } catch (error) {
+      if (premiumPackageUidRef.current === uid && premiumPackagesRef.current.length) {
+        setPremiumPaywallPackage(premiumPackagesRef.current[0]);
+        setPremiumPaywallPhase("ready");
+        return premiumPackagesRef.current;
+      }
+      setPremiumPaywallPackage(null);
+      setPremiumPaywallPhase("unavailable");
+      if (__DEV__) console.log("[RevenueCat] offering request failed", String((error as any)?.code ?? (error as any)?.message ?? error));
       return null;
-    } finally {
-      premiumOfferRequestRef.current = false;
-      setPremiumOfferLoading(false);
     }
   };
 
   useEffect(() => {
     if (!infoOpen || infoScreen !== "paywall" || premium) return;
 
+    const offeringFlow = premiumOfferingFlowRef.current;
+    const uid = auth.currentUser?.uid ?? null;
+    const cachedPackages = premiumPackageUidRef.current === uid
+      ? premiumPackagesRef.current
+      : [];
+    if (!cachedPackages.length) {
+      premiumPackagesRef.current = [];
+      setPremiumPaywallPackage(null);
+    }
+    offeringFlow.beginOpen(cachedPackages);
+    setPremiumPaywallPhase(uid ? "loadingOffering" : "waitingForAuth");
     setPremiumPurchaseStatus(null);
     void loadPremiumPackages();
-    // Loading is intentionally tied only to entering/leaving the paywall.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [infoOpen, infoScreen, premium]);
+    return () => {
+      offeringFlow.close();
+      setPremiumPaywallPhase("idle");
+    };
+  }, [infoOpen, infoScreen, premium, currentUserUid]);
 
 const buyPremium = async () => {
   if (
     premium ||
     premiumBusy ||
     premiumOfferLoading ||
+    !canUpgradePremium(premiumPaywallPhase, premiumPaywallPackage) ||
     premiumPurchaseGuardRef.current
   ) {
     return;
@@ -2164,16 +2264,15 @@ const buyPremium = async () => {
   setPremiumBusy(true);
 
   try {
-    let packages = premiumPackages;
-    if (!packages.length) {
-      packages = (await loadPremiumPackages()) ?? [];
-      if (!packages.length) return;
-    }
+    const selectedPackage = premiumPaywallPackage;
+    if (!selectedPackage) return;
 
+    if (__DEV__) console.log("[RevenueCat Paywall] purchase started", { packageIdentifier: selectedPackage.identifier, packageType: selectedPackage.packageType, productIdentifier: selectedPackage.product.identifier });
+    setPremiumPaywallPhase("purchasing");
     setPremiumPurchaseStatus("opening");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-    await purchasePackage(packages[0], {
+    await purchasePackage(selectedPackage, {
       onStorePurchaseCompleted: () =>
         setPremiumPurchaseStatus("processing"),
     });
@@ -2193,6 +2292,10 @@ const buyPremium = async () => {
       originalError?.userCancelled === true ||
       errorCode === "1" ||
       readableErrorCode.includes("purchase_cancelled");
+
+    if (__DEV__) console.log("[RevenueCat Paywall] purchase failed", { cancelled: wasCancelled, code: errorCode || readableErrorCode || "unknown" });
+
+    setPremiumPaywallPhase(wasCancelled ? "purchaseCancelled" : "purchaseFailed");
 
     Alert.alert(
       p.premium,
@@ -2236,10 +2339,10 @@ const buyPremium = async () => {
     }
 
     Alert.alert(
-      lang === "cs" ? "Zrušit Premium" : "Cancel Premium",
-      lang === "cs" ? "Zrušení předplatného se provádí ve Store (Google Play / App Store). Chceš otevřít správu předplatného?" : "Subscription cancellation is handled in the Store (Google Play / App Store). Do you want to open subscription management?",
+      runtimeText.cancelPremium,
+      runtimeText.cancelPremiumText,
       [
-        { text: lang === "cs" ? "Ne" : "No", style: "cancel" },
+        { text: runtimeText.no, style: "cancel" },
         {
           text: p.open,
           style: "default",
@@ -2256,9 +2359,9 @@ const buyPremium = async () => {
       await restorePurchases();
       // stav se propíše přes subscribePremium listener
       const v = await isPremiumActive();
-      Alert.alert(p.premium, v ? (lang === "cs" ? "Premium je aktivní." : "Premium is active.") : (lang === "cs" ? "Premium není aktivní." : "Premium is not active."));
+      Alert.alert(p.premium, v ? runtimeText.premiumActive : runtimeText.premiumInactive);
     } catch {
-      Alert.alert(p.premium, lang === "cs" ? "Nepodařilo se obnovit stav Premium." : "Could not restore Premium status.");
+      Alert.alert(p.premium, runtimeText.premiumRestoreFailed);
     } finally {
       setPremiumBusy(false);
     }
@@ -2323,6 +2426,7 @@ const buyPremium = async () => {
       }
 
       try {
+        await clearSessionAfterExplicitLogout();
         await signOut(auth);
       } catch {
         // The backend already removed the Firebase Auth user.
@@ -2412,12 +2516,12 @@ const buyPremium = async () => {
     const m = supportMessage.trim();
 
     if (!e || !s || !m) {
-      showPwdPopup("error", lang === "cs" ? "Podpora" : "Support", lang === "cs" ? "Vyplň prosím e-mail, předmět i zprávu." : "Please fill in email, subject, and message." );
+      showPwdPopup("error", runtimeText.support, runtimeText.supportMissing);
       return;
     }
 
     if (!auth.currentUser) {
-      showPwdPopup("error", lang === "cs" ? "Podpora" : "Support", lang === "cs" ? "Musíš být přihlášený/á." : "You must be signed in.");
+      showPwdPopup("error", runtimeText.support, runtimeText.signInRequired);
       return;
     }
 
@@ -2430,22 +2534,22 @@ const buyPremium = async () => {
       setSupportMessage("");
 
       // ✅ místo bílého Alert.alert použijeme tvůj oranžový popup
-      showPwdPopup("success", lang === "cs" ? "Odesláno" : "Sent", lang === "cs" ? "Díky! Zpráva byla odeslána na podporu." : "Thanks! Your message was sent to support.");
+      showPwdPopup("success", runtimeText.sent, runtimeText.supportSent);
 
       setInfoScreen("menu");
     } catch (err: any) {
       const code = String(err?.code ?? "");
       const msg0 = String(err?.message ?? "");
 
-      let msg = lang === "cs" ? "Nepodařilo se odeslat zprávu. Zkus to prosím znovu." : "Could not send the message. Please try again.";
-      if (code.includes("unauthenticated")) msg = lang === "cs" ? "Musíš být přihlášený/á." : "You must be signed in.";
+      let msg = runtimeText.supportFailed;
+      if (code.includes("unauthenticated")) msg = runtimeText.signInRequired;
       else if (code.includes("permission-denied"))
-        msg = lang === "cs" ? "Nemáš oprávnění odeslat zprávu." : "You do not have permission to send the message.";
+        msg = runtimeText.permissionDenied;
       else if (code.includes("invalid-argument"))
-        msg = lang === "cs" ? "Zkontroluj prosím vyplněné údaje." : "Please check the entered details.";
+        msg = runtimeText.checkFields;
       else if (msg0) msg = msg0;
 
-      showPwdPopup("error", lang === "cs" ? "Chyba" : "Error", msg);
+      showPwdPopup("error", runtimeText.error, msg);
     } finally {
       setSupportSending(false);
     }
@@ -2454,8 +2558,8 @@ const buyPremium = async () => {
   const requestPasswordReset = async () => {
     const e = pwdEmail.trim();
     if (!e) {
-      setPwdError(lang === "cs" ? "Zadej prosím e-mail." : "Please enter your email.");
-      showPwdPopup("error", lang === "cs" ? "Chybí e-mail" : "Missing email", lang === "cs" ? "Zadej prosím e-mail a zkus to znovu." : "Please enter your email and try again.");
+      setPwdError(runtimeText.enterEmail);
+      showPwdPopup("error", runtimeText.missingEmail, runtimeText.missingEmailText);
       return;
     }
 
@@ -2467,22 +2571,22 @@ const buyPremium = async () => {
       setPwdSent(true);
       showPwdPopup(
         "success",
-        lang === "cs" ? "Hotovo" : "Done",
-        lang === "cs" ? "Poslali jsme ti e-mail s odkazem na změnu hesla. Zkontroluj i spam." : "We sent you an email with a password reset link. Check spam too."
+        runtimeText.done,
+        runtimeText.resetSent
       );
     } catch (err: any) {
       const code = String(err?.code ?? "");
-      let msg = lang === "cs" ? "Nepodařilo se odeslat e-mail. Zkus to prosím znovu." : "Could not send the email. Please try again.";
+      let msg = runtimeText.emailFailed;
 
       if (code.includes("auth/invalid-email"))
-        msg = lang === "cs" ? "E-mail není ve správném formátu." : "The email format is invalid.";
+        msg = runtimeText.invalidEmail;
       else if (code.includes("auth/user-not-found"))
-        msg = lang === "cs" ? "Pro tento e-mail neexistuje účet." : "There is no account for this email.";
+        msg = runtimeText.noAccount;
       else if (code.includes("auth/too-many-requests"))
-        msg = lang === "cs" ? "Příliš mnoho pokusů. Zkus to prosím později." : "Too many attempts. Please try again later.";
+        msg = runtimeText.tooMany;
 
       setPwdError(msg);
-      showPwdPopup("error", lang === "cs" ? "Nepodařilo se odeslat" : "Could not send", msg);
+      showPwdPopup("error", runtimeText.couldNotSend, msg);
     } finally {
       setPwdSending(false);
     }
@@ -2495,10 +2599,8 @@ const buyPremium = async () => {
     if (!username) {
       showPwdPopup(
         "error",
-        lang === "cs" ? "Změna username" : "Change username",
-        lang === "cs"
-          ? "Zadej prosím nové uživatelské jméno."
-          : "Please enter a new username."
+        runtimeText.usernameChange,
+        accountText.enterUsername
       );
       return;
     }
@@ -2507,8 +2609,8 @@ const buyPremium = async () => {
     if (!user) {
       showPwdPopup(
         "error",
-        lang === "cs" ? "Změna username" : "Change username",
-        lang === "cs" ? "Nejsi přihlášený." : "You are not signed in."
+        runtimeText.usernameChange,
+        runtimeText.notSignedIn
       );
       return;
     }
@@ -2531,23 +2633,18 @@ const buyPremium = async () => {
 
       showPwdPopup(
         "success",
-        lang === "cs" ? "Hotovo" : "Done",
-        lang === "cs"
-          ? "Uživatelské jméno bylo změněno."
-          : "Username has been changed."
+        runtimeText.done,
+        accountText.usernameChanged
       );
     } catch (error: any) {
       const message =
         error?.message === USERNAME_SAVE_TIMEOUT_ERROR
-          ? lang === "cs"
-            ? "Uložení trvá příliš dlouho. Zkontroluj připojení a zkus to znovu."
-            : "Saving is taking too long. Check your connection and try again."
-          : error?.message ??
-            (lang === "cs" ? "Změna se nepovedla." : "Change failed.");
+          ? accountText.saveTimeout
+          : error?.message ?? runtimeText.changeFailed;
 
       showPwdPopup(
         "error",
-        lang === "cs" ? "Změna username" : "Change username",
+        runtimeText.usernameChange,
         message
       );
     } finally {
@@ -2747,17 +2844,17 @@ function openChallengeInvite(friendUid: string) {
       const title = challengeInviteTitle.trim();
 
       if (!friendUids.length) {
-        showPwdPopup("error", p.sharedChallenge, lang === "cs" ? "Vyber aspoň jednoho přítele." : "Select at least one friend.");
+        showPwdPopup("error", p.sharedChallenge, runtimeText.selectFriend);
         return;
       }
 
       if (!title) {
-        showPwdPopup("error", p.sharedChallenge, lang === "cs" ? "Zadej název výzvy." : "Enter a challenge name.");
+        showPwdPopup("error", p.sharedChallenge, runtimeText.enterChallenge);
         return;
       }
 
       if (challengeInvitePeriod === "custom" && challengeInviteCustomDays.length === 0) {
-        showPwdPopup("error", p.sharedChallenge, lang === "cs" ? "Vyber aspoň jeden den." : "Select at least one day.");
+        showPwdPopup("error", p.sharedChallenge, runtimeText.selectDay);
         return;
       }
 
@@ -2784,13 +2881,13 @@ function openChallengeInvite(friendUid: string) {
       showPwdPopup(
         "success",
         p.sharedChallenge,
-        lang === "cs" ? `Výzva byla vytvořena pro ${friendUids.length} ${friendUids.length === 1 ? "přítele" : friendUids.length >= 2 && friendUids.length <= 4 ? "přátele" : "přátel"}.` : `Challenge was created for ${friendUids.length} ${friendUids.length === 1 ? "friend" : "friends"}.`
+        runtimeText.sharedCreated.replace("{count}", String(friendUids.length))
       );
     } catch (e: any) {
       showPwdPopup(
         "error",
         p.sharedChallenge,
-        e?.message ?? (lang === "cs" ? "Nepodařilo se vytvořit společnou výzvu." : "Could not create the shared challenge.")
+        e?.message ?? runtimeText.sharedCreateFailed
       );
     } finally {
       setChallengeInviteBusy(false);
@@ -2888,6 +2985,8 @@ function openChallengeInvite(friendUid: string) {
         return p.info;
       case "support":
         return p.sendQuestion;
+      case "whatsnew":
+        return whatsNew.title;
       case "streak_medals":
         return p.streaksMedals;
       case "freeprem":
@@ -2909,7 +3008,7 @@ function openChallengeInvite(friendUid: string) {
       default:
         return p.info;
     }
-  }, [infoScreen]);
+  }, [infoScreen, whatsNew.title]);
 
 const incomingCount = friendEdges.filter(
   (e) =>
@@ -2941,7 +3040,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
         >
           <ScrollView
@@ -3269,7 +3368,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                     });
                   } catch {
                     setShareAchievementsWithFriends((prev) => !prev);
-                    showPwdPopup("error", lang === "cs" ? "Soukromí" : "Privacy", lang === "cs" ? "Nepodařilo se uložit nastavení." : "Could not save settings.");
+                    showPwdPopup("error", runtimeText.privacy, runtimeText.privacyFailed);
                   }
                 }}
               />
@@ -3418,6 +3517,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             <Pressable
               onPress={async () => {
                 try {
+                  await clearSessionAfterExplicitLogout();
                   await signOut(auth);
                 } finally {
                   await AsyncStorage.removeItem("onemore_saved_login");
@@ -3463,7 +3563,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         >
           <View style={styles.sheetHeader}>
             <Text style={[styles.sheetTitle, { color: UI.text }]}>
-              {lang === "cs" ? "Oznámení" : "Notifications"}
+              {runtimeText.notifications}
             </Text>
 
             <Pressable
@@ -3634,9 +3734,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
       if (!premium) {
         Alert.alert(
           p.premium,
-          lang === "cs"
-            ? "Historie výzev je dostupná v Premium. Tvoje historie se nemaže, jen je ve Free verzi zamčená."
-            : "Challenge history is available in Premium. Your history is not deleted, it is only locked in the Free version."
+          accessText.historyPremium
         );
         return;
       }
@@ -3677,9 +3775,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
       }}
     >
       {!premium
-        ? lang === "cs"
-          ? "Zamčeno ve Free verzi"
-          : "Locked in Free version"
+        ? accessText.lockedFree
         : p.historySubtitle}
     </Text>
   </Pressable>
@@ -3856,6 +3952,22 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
       {p.sendQuestion}
     </Text>
   </Pressable>
+
+  <Pressable
+    testID="whats-new-tile"
+    onPress={() => setInfoScreen("whatsnew")}
+    style={({ pressed }) => [
+      styles.iconTile,
+      { borderColor: UI.stroke, backgroundColor: UI.card },
+      pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+    ]}
+  >
+    <View style={[styles.iconCircle, { backgroundColor: UI.card2, borderColor: UI.stroke }]}>
+      <Ionicons name="sparkles-outline" size={24} color={UI.accent} />
+    </View>
+    <Text style={[styles.iconTileText, { color: UI.text }]}>{whatsNew.title}</Text>
+    <Text style={[styles.iconTileSubtitle, { color: UI.sub }]}>{whatsNew.menuSubtitle}</Text>
+  </Pressable>
 </View>
 </ScrollView>
 ) : (
@@ -3965,6 +4077,25 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                       </View>
                     ))}
                   </View>
+                </View>
+              )}
+
+              {infoScreen === "whatsnew" && (
+                <View testID="whats-new-list" style={styles.whatsNewList}>
+                  {whatsNew.entries.map((entry) => (
+                    <View key={entry.id} style={[styles.infoCard, { borderColor: UI.stroke, backgroundColor: UI.card }]}>
+                      <Text style={[styles.whatsNewDate, { color: UI.accent }]}>{entry.date}</Text>
+                      <Text style={[styles.infoTitle, { color: UI.text }]}>{entry.title}</Text>
+                      <View style={styles.whatsNewBullets}>
+                        {entry.bullets.map((bullet) => (
+                          <View key={bullet} style={styles.whatsNewBulletRow}>
+                            <View style={[styles.whatsNewDot, { backgroundColor: UI.accent }]} />
+                            <Text style={[styles.whatsNewBulletText, { color: UI.sub }]}>{bullet}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
                 </View>
               )}
 
@@ -4197,7 +4328,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
           </Text>
         </View>
 
-        <View style={styles.pmListRowLast}>
+        <View style={Platform.OS === "android" ? styles.pmListRow : styles.pmListRowLast}>
           <Text
             {...noScaleText}
             style={[
@@ -4219,6 +4350,32 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             1
           </Text>
         </View>
+        {Platform.OS === "android" && (
+          <View style={styles.pmListRowLast}>
+            <Text
+              {...noScaleText}
+              style={[
+                styles.pmListLabel,
+                styles.pmWidgetLabel,
+                { color: UI.text },
+                !isDark && { color: "#1E293B" },
+              ]}
+            >
+              {p.homeScreenWidget}
+            </Text>
+            <Text
+              {...noScaleText}
+              style={[
+                styles.pmListValue,
+                styles.pmValueFlexible,
+                { color: UI.text },
+                !isDark && { color: "#0F172A" },
+              ]}
+            >
+              {p.homeScreenWidgetFree}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
 
@@ -4308,6 +4465,14 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             {p.unlimitedSharedChallenges}
           </Text>
         </View>
+
+        {Platform.OS === "android" && (
+          <View style={styles.pmFeatureRow}>
+            <Ionicons name="checkmark-circle" size={18} color="#FFD166" />
+            <Text {...noScaleText} style={styles.pmFeatureText}>{p.homeScreenWidget}</Text>
+            <Text {...noScaleText} style={[styles.pmListValue, styles.pmPremiumWidgetValue]}>{p.homeScreenWidgetPremium}</Text>
+          </View>
+        )}
       </View>
     </LinearGradient>
 
@@ -4481,24 +4646,44 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                         </View>
                       )}
 
-                      <View
-                        style={[
-                          styles.premiumPlanDetails,
-                          { borderColor: UI.stroke, backgroundColor: UI.card2 },
-                        ]}
-                      >
-                        <Text style={[styles.premiumPlanName, { color: UI.text }]}>
-                          {p.premiumProductName}
-                        </Text>
-                        <Text style={[styles.premiumPlanPeriod, { color: UI.sub }]}>
-                          {premiumSubscriptionPeriodText ?? p.monthlySubscription}
-                        </Text>
-                        {selectedPremiumPackage?.product.priceString ? (
+                      {selectedPremiumPackage ? (
+                        <View
+                          style={[
+                            styles.premiumPlanDetails,
+                            { borderColor: UI.stroke, backgroundColor: UI.card2 },
+                          ]}
+                        >
+                          <Text style={[styles.premiumPlanName, { color: UI.text }]}>
+                            {selectedPremiumPackage.product.title || p.premiumProductName}
+                          </Text>
+                          <Text style={[styles.premiumPlanPeriod, { color: UI.sub }]}>
+                            {premiumSubscriptionPeriodText ?? selectedPremiumPackage.product.subscriptionPeriod}
+                          </Text>
                           <Text style={[styles.premiumPlanPrice, { color: UI.text }]}>
                             {selectedPremiumPackage.product.priceString} {p.perMonth}
                           </Text>
-                        ) : null}
-                      </View>
+                        </View>
+                      ) : premiumOfferLoading ? null : (
+                        <View style={[styles.premiumPlanDetails, { borderColor: UI.stroke, backgroundColor: UI.card2 }]}>
+                          <Text style={[styles.premiumPurchaseStatusText, { color: UI.text }]}>
+                            {lang === "cs"
+                              ? "Měsíční produkt Premium momentálně není dostupný."
+                              : lang === "pl"
+                              ? "Miesięczny produkt Premium jest obecnie niedostępny."
+                              : lang === "de"
+                              ? "Das monatliche Premium-Produkt ist derzeit nicht verfügbar."
+                              : "The monthly Premium product is currently unavailable."}
+                          </Text>
+                          <Pressable
+                            onPress={() => void loadPremiumPackages()}
+                            style={({ pressed }) => [styles.primaryBtn, { marginTop: 12 }, pressed && { opacity: 0.9 }]}
+                          >
+                            <Text style={styles.primaryBtnText}>
+                              {lang === "cs" ? "Zkusit znovu" : lang === "pl" ? "Spróbuj ponownie" : lang === "de" ? "Erneut versuchen" : "Try again"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      )}
 
                       <Pressable
                         disabled={
@@ -5055,9 +5240,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
           if (lockedByFree) {
             Alert.alert(
               p.premium,
-              lang === "cs"
-                ? "Tento přítel je ve Free verzi zamčený. Obnov Premium a znovu se odemkne."
-                : "This friend is locked in the Free version. Restore Premium to unlock it again."
+              accountText.friendLocked
             );
             return;
           }
@@ -5087,9 +5270,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
             }}
             numberOfLines={1}
           >
-            {lang === "cs"
-              ? "Zamčeno ve Free verzi"
-              : "Locked in Free version"}
+            {accountText.lockedFree}
           </Text>
         )}
       </Pressable>
@@ -5381,11 +5562,11 @@ const incomingCount = incoming.length;
         </Text>
 
         <Text style={[styles.infoText, { color: UI.sub }]}>
-          {lang === "cs" ? "Odesláno pro" : "Sent to"}: {getInviteMembersLabel(item)}
+          {runtimeText.sentFor}: {getInviteMembersLabel(item)}
         </Text>
 
         <Text style={[styles.infoText, { color: UI.sub, marginTop: 4 }]}>
-          {lang === "cs" ? "Čeká na přijetí." : "Waiting for acceptance."}
+          {runtimeText.waiting}
         </Text>
 
         <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
@@ -5399,7 +5580,7 @@ const incomingCount = incoming.length;
             ]}
           >
             <Text style={styles.smallBtnGhostText}>
-              {lang === "cs" ? "Zrušit" : "Cancel"}
+              {runtimeText.cancel}
             </Text>
           </Pressable>
         </View>
@@ -5920,7 +6101,7 @@ const incomingCount = incoming.length;
   ]}
 >
   <Text style={[styles.bigItemText, { color: UI.text }]}>
-    {lang === "cs" ? "Oznámení" : "Notifications"}
+    {runtimeText.notifications}
   </Text>
   <Text style={[styles.chevron, { color: UI.text }]}>›</Text>
 </Pressable>
@@ -6094,7 +6275,8 @@ const incomingCount = incoming.length;
   );
 }
 
-function makeStyles(UI: any, bottomInset: number) {
+function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight: number) {
+  const safeModal = getSafeModalMetrics({ windowHeight, topInset, bottomInset });
   return StyleSheet.create({
     screen: { flex: 1 },
     gradient: { ...StyleSheet.absoluteFillObject },
@@ -6151,8 +6333,8 @@ function makeStyles(UI: any, bottomInset: number) {
       position: "absolute",
       left: 12,
       right: 12,
-      bottom: Platform.OS === "ios" ? Math.max(12, bottomInset + 8) : 12,
-      height: "82%",
+      bottom: safeModal.bottom,
+      maxHeight: safeModal.maxHeight,
       borderRadius: 22,
       borderWidth: 1,
       padding: 14,
@@ -6303,6 +6485,26 @@ pmListLabel: {
 pmListValue: {
   fontSize: 15,
   fontWeight: "900",
+},
+
+pmWidgetLabel: {
+  flexShrink: 1,
+  paddingVertical: 10,
+},
+
+pmValueFlexible: {
+  maxWidth: "48%",
+  flexShrink: 1,
+  marginLeft: 12,
+  paddingVertical: 10,
+  textAlign: "right",
+},
+
+pmPremiumWidgetValue: {
+  maxWidth: "48%",
+  flexShrink: 1,
+  color: "#FFF7EF",
+  textAlign: "right",
 },
 
 pmFeatureList: {
@@ -6666,6 +6868,18 @@ pmBottomText: {
   textAlign: "center",
   lineHeight: 18,
 },
+    iconTileSubtitle: {
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    whatsNewList: { gap: 12 },
+    whatsNewDate: { fontSize: 12, lineHeight: 17, fontWeight: "900", marginBottom: 5 },
+    whatsNewBullets: { marginTop: 10, gap: 9 },
+    whatsNewBulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
+    whatsNewDot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
+    whatsNewBulletText: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "700" },
 
     popupWrap: {
       flex: 1,
@@ -6678,7 +6892,8 @@ pmBottomText: {
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: 18,
-      paddingVertical: 24,
+      paddingTop: safeModal.paddingTop,
+      paddingBottom: safeModal.paddingBottom,
     },
     popupCard: {
       width: "100%",

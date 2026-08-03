@@ -17,6 +17,13 @@ import {
   type HistoryEntry,
 } from "./storage";
 import { registerPushTokenForCurrentUser } from "./pushTokens";
+import { acknowledgeCompletionOutbox, applyChallengeCompletion, readCompletionOutbox } from "./challengeCompletion";
+import { updateAllOneMoreWidgets } from "../widgets/widgetService";
+import { clearWidgetSessionForExplicitSignOut, setWidgetActiveUid } from "./widgetSession";
+import { updateAccountDisplayName } from "./accountSnapshot";
+import { replaySharedCompletionsForCurrentUser } from "./sharedCompletion";
+import { shouldUploadLocalState } from "./cloudMergePolicy";
+import { revokeIosWidgetAccessGrant } from "./iosWidgetAccess";
 
 const REVIEW_ACCOUNT_EMAIL = "review@desigame.eu";
 
@@ -372,13 +379,32 @@ export async function syncNow(expectedUid?: string): Promise<void> {
   const uid = user.uid;
   if (expectedUid && expectedUid !== uid) return;
 
-  const local = await loadStateForUid(uid);
-  const localISO = await getLocalUpdatedAtISO(uid);
+  let local = await loadStateForUid(uid);
+  let localISO = await getLocalUpdatedAtISO(uid);
   const cloud = await fetchCloudState(uid);
 
   if (auth.currentUser?.uid !== uid) return;
 
   const cloudISO = cloud?.clientUpdatedAtISO || null;
+  const pending = await readCompletionOutbox(uid);
+
+  // A durable local mutation always wins over an older cloud snapshot.
+  if (pending.length > 0) {
+    for (const mutation of pending) {
+      const replayed = applyChallengeCompletion(local, mutation.challengeId, mutation.date, new Date(mutation.createdAtISO));
+      local = replayed.state;
+    }
+    await replaceStateForUid(local, uid);
+    localISO = await getLocalUpdatedAtISO(uid);
+  }
+  if (shouldUploadLocalState(localISO, cloudISO, pending.length)) {
+    const iso = localISO ?? new Date().toISOString();
+    await writeCloudState(uid, local, iso);
+    await setLocalUpdatedAtISO(uid, iso);
+    await acknowledgeCompletionOutbox(uid);
+    await updateAllOneMoreWidgets();
+    return;
+  }
 
   if (cloud?.state && hasMeaningfulState(cloud.state)) {
     const repaired = isReviewAccount() ? ensureReviewDemoState(cloud.state) : null;
@@ -389,6 +415,7 @@ export async function syncNow(expectedUid?: string): Promise<void> {
       await writeCloudState(uid, state, iso);
     }
     await setLocalUpdatedAtISO(uid, iso);
+    await updateAllOneMoreWidgets();
     return;
   }
 
@@ -401,6 +428,8 @@ export async function syncNow(expectedUid?: string): Promise<void> {
     }
     await writeCloudState(uid, state, iso);
     await setLocalUpdatedAtISO(uid, iso);
+    await acknowledgeCompletionOutbox(uid);
+    await updateAllOneMoreWidgets();
     return;
   }
 
@@ -427,6 +456,8 @@ function scheduleUpload(uid: string, state: AppState) {
     try {
       await writeCloudState(p.uid, p.state, p.iso);
       await setLocalUpdatedAtISO(p.uid, p.iso);
+      await acknowledgeCompletionOutbox(p.uid);
+      await updateAllOneMoreWidgets();
     } catch {
       // Keep the AsyncStorage cache as the source until connectivity returns.
     }
@@ -454,6 +485,18 @@ export function stopCloudAutoSync() {
   _unsubState = null;
 }
 
+export async function clearSessionAfterExplicitLogout(): Promise<void> {
+  ++_authGeneration;
+  _lastUid = null;
+  _bootstrapUid = null;
+  _bootstrapPromise = Promise.resolve();
+  stopCloudAutoSync();
+  clearInMemoryState();
+  await revokeIosWidgetAccessGrant().catch(() => {});
+  await clearWidgetSessionForExplicitSignOut();
+  await updateAllOneMoreWidgets();
+}
+
 export function initCloudSync() {
   if (_unsubAuth) return;
 
@@ -461,12 +504,25 @@ export function initCloudSync() {
     const generation = ++_authGeneration;
     const uid = user?.uid ?? null;
     const previousUid = _lastUid;
-    _lastUid = uid;
     _bootstrapUid = uid;
+
+    // Firebase can emit null while restoring its persisted JS session. This is
+    // not proof of an explicit logout, so preserve the durable widget UID and
+    // the last UID-scoped state. Explicit account actions clear them directly.
+    if (!user) {
+      _bootstrapPromise = Promise.resolve();
+      return;
+    }
+
+    _lastUid = user.uid;
 
     const task = (async () => {
       stopCloudAutoSync();
       clearInMemoryState();
+
+      await setWidgetActiveUid(user.uid);
+      await updateAccountDisplayName(user.uid, user.displayName ?? null).catch(() => {});
+      await updateAllOneMoreWidgets();
 
       if (previousUid && previousUid !== uid) {
         try {
@@ -490,6 +546,10 @@ export function initCloudSync() {
         // Offline startup should still use the local AsyncStorage cache.
       }
 
+      try {
+        await replaySharedCompletionsForCurrentUser(user.uid);
+      } catch {}
+
       if (generation !== _authGeneration || auth.currentUser?.uid !== user.uid) return;
 
       try {
@@ -502,6 +562,10 @@ export function initCloudSync() {
 
       if (generation === _authGeneration && auth.currentUser?.uid === user.uid) {
         startCloudAutoSync();
+        await updateAllOneMoreWidgets();
+        void import("./widgetCompletionAction").then(({ drainPendingWidgetCompletions }) =>
+          drainPendingWidgetCompletions(user.uid)
+        ).catch(() => {});
       }
     })();
 

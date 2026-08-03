@@ -1,8 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { LANG_KEY, parseStoredLanguage } from "./languageStorage";
 
 export type Lang = "cs" | "en" | "pl" | "de";
-const LANG_KEY = "onemore_lang";
+
+export async function readStoredLanguage(): Promise<Lang> {
+  return parseStoredLanguage(await AsyncStorage.getItem(LANG_KEY));
+}
 
 export type Dictionary = {
   appSubtitle: string;
@@ -500,6 +505,11 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const setLang = async (l: Lang) => {
     setLangState(l);
     await AsyncStorage.setItem(LANG_KEY, l);
+    if (Platform.OS === "android" || Platform.OS === "ios") {
+      void import("../widgets/widgetService").then(({ updateAllOneMoreWidgets }) =>
+        updateAllOneMoreWidgets()
+      ).catch(() => {});
+    }
   };
 
   const t = useMemo(() => STRINGS[lang], [lang]);

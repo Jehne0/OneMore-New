@@ -18,11 +18,13 @@ import {
   type SharedChallenge,
   type SharedChallengeDayProgress,
 } from "../../lib/sharedChallenges";
+import { canInviteSharedChallengeMembers } from "../../lib/sharedChallengePermissions";
 import { subscribeFriends, type FriendEdge } from "../../lib/friends";
 import { getProfile } from "../../lib/usernames";
 import { doc, updateDoc } from "firebase/firestore";
 import {
   Animated,
+  AppState as RNAppState,
   Alert as NativeAlert,
   FlatList,
   Image,
@@ -41,6 +43,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert } from "../../lib/appAlert";
+import { getSafeModalMetrics } from "../../lib/safeModalLayout";
 import { useTodayISO } from "../../lib/clock";
 import { auth, db } from "../../lib/firebase";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
@@ -70,12 +73,14 @@ import {
   challengeDisplayText,
   ensureDailyPick,
   getCachedState,
+  isChallengeActiveOnDate as isStoredChallengeActiveOnDate,
   isChallengeEasyMode,
   loadState,
   purgeChallenge,
   renameChallenge,
   saveState,
   subscribeState,
+  transitionChallengeEnabled,
   updateStatsOnCompleted,
 } from "../../lib/storage";
 import { useTheme } from "../../lib/theme";
@@ -85,6 +90,17 @@ import {
 } from "../../lib/medals";
 import * as Haptics from "expo-haptics";
 import { useI18n } from "../../lib/i18n";
+import { completeChallengeForUid } from "../../lib/challengeCompletion";
+import { newestChallengeTimelineFirst } from "../../lib/challengeHistoryTimeline";
+import { updateAllOneMoreWidgets } from "../../widgets/widgetService";
+import {
+  cacheSharedChallenges,
+  cacheSharedProgress,
+  cacheSharedProgressHistory,
+  completeSharedChallengeForUid,
+  replaySharedCompletionsForCurrentUser,
+  readSharedCache,
+} from "../../lib/sharedCompletion";
 
 const FLAME_IMG = require("../../assets/images/flame.png");
 
@@ -169,13 +185,6 @@ function dowMon0(todayISO: string): number {
   if (!d) return 0;
   const js = d.getDay(); // 0=Ne..6=So
   return (js + 6) % 7;
-}
-
-function diffDaysISO(aISO: string, bISO: string): number {
-  const a = dateKeyOrdinal(aISO);
-  const b = dateKeyOrdinal(bISO);
-  if (a == null || b == null) return 0;
-  return a - b;
 }
 
 function addDaysISO(iso: string, days: number) {
@@ -454,7 +463,8 @@ function SparkleBurst({ progress }: { progress: Animated.Value }) {
   );
 }
 
-function makeStyles(UI: any, bottomInset: number) {
+function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight: number) {
+  const safeModal = getSafeModalMetrics({ windowHeight, topInset, bottomInset });
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: "transparent" },
     gradient: { ...StyleSheet.absoluteFillObject },
@@ -793,13 +803,13 @@ function makeStyles(UI: any, bottomInset: number) {
       position: "absolute",
       left: 12,
       right: 12,
-      bottom: Platform.OS === "ios" ? Math.max(12, bottomInset + 8) : 12,
+      bottom: safeModal.bottom,
       borderRadius: 22,
       backgroundColor: UI.sheetBg,
       borderWidth: 1,
       borderColor: UI.sheetStroke,
       padding: 14,
-      maxHeight: "80%",
+      maxHeight: safeModal.maxHeight,
     },
     sheetHeader: {
       flexDirection: "row",
@@ -867,7 +877,7 @@ pickerSheet: {
   position: "absolute",
   left: 16,
   right: 16,
-  bottom: Platform.OS === "ios" ? Math.max(24, bottomInset + 12) : 24,
+bottom: safeModal.bottom,
   borderRadius: 16,
   borderWidth: 1,
   overflow: "hidden",
@@ -967,6 +977,8 @@ pickerRow: {
     },
     timeIndex: { fontWeight: "900" },
 
+    historyScroll: { flexShrink: 1 },
+    historyScrollContent: { paddingBottom: 8 },
     historyRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -1337,6 +1349,10 @@ notificationCount: "Number of notifications",
       notificationFreeLimit: "In the free version, you can only have notifications for one challenge. Turn them off on another challenge first.",
       expoGoNotifications: "Notifications do not work in Expo Go. Since Expo SDK 53, notifications are disabled in Expo Go. A development build (EAS) is required.",
       notificationsFailed: "Could not set notifications.",
+      notificationsSaved: "Notifications were saved.",
+      notificationsDisabled: "Notifications were turned off.",
+      doneAction: "Done",
+      chooseHistoryChallenge: "Choose a challenge to view its history.",
       notificationPermissionDenied: "Notifications are off in system settings. Enable them to turn on reminders.",
       deleteQuestion: "Delete challenge?",
       deleteQuestionText: "This action cannot be undone.",
@@ -1440,6 +1456,10 @@ notificationCount: "Liczba powiadomień",
       notificationFreeLimit: "W wersji Free możesz mieć powiadomienia tylko dla jednego wyzwania. Najpierw wyłącz je przy innym wyzwaniu.",
       expoGoNotifications: "Powiadomienia nie działają w Expo Go. Od Expo SDK 53 powiadomienia w Expo Go są wyłączone. Wymagany jest development build (EAS).",
       notificationsFailed: "Nie udało się ustawić powiadomień.",
+      notificationsSaved: "Powiadomienia zostały zapisane.",
+      notificationsDisabled: "Powiadomienia zostały wyłączone.",
+      doneAction: "Gotowe",
+      chooseHistoryChallenge: "Wybierz wyzwanie, aby wyświetlić jego historię.",
       notificationPermissionDenied: "Powiadomienia są wyłączone w ustawieniach systemu. Włącz je, aby korzystać z przypomnień.",
       deleteQuestion: "Usunąć wyzwanie?",
       deleteQuestionText: "Tej akcji nie można cofnąć.",
@@ -1544,6 +1564,10 @@ notificationCount: "Anzahl der Benachrichtigungen",
       notificationFreeLimit: "In der Free-Version kannst du Benachrichtigungen nur für eine Challenge haben. Schalte sie zuerst bei einer anderen Challenge aus.",
       expoGoNotifications: "Benachrichtigungen funktionieren in Expo Go nicht. Seit Expo SDK 53 sind Benachrichtigungen in Expo Go deaktiviert. Ein Development Build (EAS) ist erforderlich.",
       notificationsFailed: "Benachrichtigungen konnten nicht eingestellt werden.",
+      notificationsSaved: "Benachrichtigungen wurden gespeichert.",
+      notificationsDisabled: "Benachrichtigungen wurden deaktiviert.",
+      doneAction: "Fertig",
+      chooseHistoryChallenge: "Wähle eine Challenge aus, um ihren Verlauf anzuzeigen.",
       notificationPermissionDenied: "Mitteilungen sind in den Systemeinstellungen deaktiviert. Aktiviere sie, um Erinnerungen einzuschalten.",
       deleteQuestion: "Challenge löschen?",
       deleteQuestionText: "Diese Aktion kann nicht rückgängig gemacht werden.",
@@ -1646,6 +1670,10 @@ notificationCount: "Počet notifikací",
     notificationFreeLimit: "Ve Free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy.",
     expoGoNotifications: "Notifikace v Expo Go nefungují. Od Expo SDK 53 byly notifikace v Expo Go vypnuté. Je potřeba development build (EAS).",
     notificationsFailed: "Nepodařilo se nastavit notifikace.",
+    notificationsSaved: "Notifikace byly uloženy.",
+    notificationsDisabled: "Notifikace byly vypnuty.",
+    doneAction: "Hotovo",
+    chooseHistoryChallenge: "Vyber výzvu pro zobrazení historie.",
     notificationPermissionDenied: "Oznámení jsou vypnutá v nastavení telefonu. Pro zapnutí připomínek je povol.",
     deleteQuestion: "Smazat výzvu?",
     deleteQuestionText: "Tahle akce nejde vrátit zpět.",
@@ -1659,37 +1687,14 @@ notificationCount: "Počet notifikací",
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const styles = useMemo(
-    () => makeStyles(UI, insets.bottom),
-    [UI, insets.bottom]
+    () => makeStyles(UI, insets.top, insets.bottom, windowHeight),
+    [UI, insets.top, insets.bottom, windowHeight]
   );
 
   const todayISO = useTodayISO();
 
   const isChallengeActiveOnDate = useCallback(
-    (c: any, dateISO: string): boolean => {
-      if (!c) return false;
-      if (c.enabled === false) return false;
-      if (c.deletedAt) return false;
-
-      const period = c.period === "every2" || c.period === "custom" ? c.period : "daily";
-      if (period === "daily") return true;
-
-      if (period === "every2") {
-        const anchor =
-          typeof c.periodAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.periodAnchor) ? c.periodAnchor : dateISO;
-        const diff = diffDaysISO(dateISO, anchor);
-        return Math.abs(diff) % 2 === 0;
-      }
-
-      const days: number[] = Array.isArray(c.customDays)
-        ? c.customDays
-            .map((n: any) => Number(n))
-            .filter((n: number) => Number.isFinite(n) && n >= 0 && n <= 6)
-            .map((n: number) => Math.floor(n))
-        : [];
-      const dow = dowMon0(dateISO);
-      return days.includes(dow);
-    },
+    (c: any, dateISO: string): boolean => !!c && isStoredChallengeActiveOnDate(c, dateISO),
     []
   );
 
@@ -1699,6 +1704,7 @@ notificationCount: "Počet notifikací",
   const [appState, setAppState] = useState<AppState | null>(() => getCachedState());
   const [sharedChallenges, setSharedChallenges] = useState<SharedChallenge[]>([]);
   const [sharedChallengesLoaded, setSharedChallengesLoaded] = useState(false);
+  const [sharedRefreshEpoch, setSharedRefreshEpoch] = useState(0);
   const [sharedTodayMap, setSharedTodayMap] = useState<Record<string, SharedChallengeDayProgress | null>>({});
   const [sharedFriendNames, setSharedFriendNames] = useState<Record<string, string>>({});
   const [sharedProgressMap, setSharedProgressMap] = useState<Record<string, SharedChallengeDayProgress[]>>({});
@@ -1710,6 +1716,13 @@ notificationCount: "Počet notifikací",
   const [sharedInviteStatus, setSharedInviteStatus] = useState("");
   const [localSharedInviteUids, setLocalSharedInviteUids] = useState<Record<string, string[]>>({});
   const [premiumReady, setPremiumReady] = useState(false);
+
+  useEffect(() => {
+    const subscription = RNAppState.addEventListener("change", (next) => {
+      if (next === "active") setSharedRefreshEpoch((value) => value + 1);
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const cached = getCachedState();
@@ -1790,12 +1803,25 @@ notificationCount: "Počet notifikací",
       };
     }
 
+    const uid = auth.currentUser.uid;
+    void readSharedCache(uid).then((cached) => {
+      if (!mounted || cached.length === 0) return;
+      setSharedChallenges((current) => current.length > 0 ? current : cached);
+      setSharedChallengesLoaded(true);
+      if (__DEV__) console.log("[shared-challenges] restored cache", { count: cached.length });
+    });
+
     const unsubShared = subscribeSharedChallenges(
       async (items) => {
         if (!mounted) return;
 
         setSharedChallenges(items);
         setSharedChallengesLoaded(true);
+        const cacheUid = auth.currentUser?.uid;
+        if (cacheUid) {
+          await cacheSharedChallenges(cacheUid, items);
+          void replaySharedCompletionsForCurrentUser(cacheUid).catch(() => {});
+        }
         setLocalSharedInviteUids((prev) => {
           const next: Record<string, string[]> = {};
 
@@ -1825,6 +1851,9 @@ notificationCount: "Počet notifikací",
               item.id,
               today,
               (data) => {
+                const currentUid = auth.currentUser?.uid;
+                const count = currentUid ? Number(data?.users?.[currentUid]?.completedCount ?? 0) : 0;
+                if (currentUid) void cacheSharedProgress(currentUid, item.id, today, count);
                 setSharedTodayMap((prev) => ({
                   ...prev,
                   [item.id]: data,
@@ -1842,6 +1871,13 @@ notificationCount: "Počet notifikací",
             const unsubAll = subscribeSharedChallengeProgress(
               item.id,
               (rows) => {
+                const currentUid = auth.currentUser?.uid;
+                if (currentUid) {
+                  void cacheSharedProgressHistory(currentUid, item.id, rows.map((row) => ({
+                    date: row.date,
+                    completedCount: Number(row.users?.[currentUid]?.completedCount ?? 0),
+                  })));
+                }
                 setSharedProgressMap((prev) => ({
                   ...prev,
                   [item.id]: rows,
@@ -1903,10 +1939,9 @@ notificationCount: "Počet notifikací",
       },
       () => {
         if (!mounted) return;
-        setSharedChallenges([]);
-        setSharedChallengesLoaded(true);
-        setSharedTodayMap({});
-        setSharedProgressMap({});
+        // A listener error is not a valid empty cloud state. Keep the last
+        // successful in-memory/cache snapshot; foreground will re-subscribe.
+        if (__DEV__) console.log("[shared-challenges] cloud request failed; preserving last valid data");
       }
     );
 
@@ -1916,7 +1951,7 @@ notificationCount: "Počet notifikací",
       unsubDays.forEach((u) => u());
       unsubProgress.forEach((u) => u());
     };
-  }, [TXT.unknownUser]);
+  }, [TXT.unknownUser, sharedRefreshEpoch]);
 
   
 
@@ -2125,7 +2160,10 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         const prevEnabled = prevItem?.enabled !== false;
         const willEnabled = !!nextEnabled;
 
-        const item = { ...prevItem, enabled: willEnabled, targetPerDay: target };
+        const item = {
+          ...transitionChallengeEnabled(prevItem, willEnabled, todayISO),
+          targetPerDay: target,
+        };
 
         if (prevEnabled === willEnabled) {
           list[idx] = item;
@@ -2163,7 +2201,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         setManageRemTimes((arr) => (Array.isArray(arr) ? arr.slice(0, clamp(manageRemCount, 1, maxN)) : []));
       }
     },
-    [manageId, manageRemCount, manageRemEnabled, persist]
+    [manageId, manageRemCount, manageRemEnabled, persist, todayISO]
   );
 
   const enableEasyMode = useCallback(async () => {
@@ -2320,14 +2358,14 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       setManageRemTimes(times);
       setManageRemCount(times.length);
 
-      Alert.alert(TXT.notifications, "Notifikace byly uloženy.");
+      Alert.alert(TXT.notifications, TXT.notificationsSaved);
     } else {
       await clearDailyRemindersForChallenge(id);
 
       setManageRemTimes([]);
       setManageRemCount(1);
 
-      Alert.alert(TXT.notifications, "Notifikace byly vypnuty.");
+      Alert.alert(TXT.notifications, TXT.notificationsDisabled);
     }
   } catch (e: any) {
     const msg = String(e?.message ?? "");
@@ -2359,6 +2397,8 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   TXT.expoGoNotifications,
   TXT.notificationPermissionDenied,
   TXT.notificationsFailed,
+  TXT.notificationsSaved,
+  TXT.notificationsDisabled,
 ]);
 
   const deleteManagedChallenge = useCallback(async () => {
@@ -2368,7 +2408,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     Alert.alert(TXT.deleteQuestion, TXT.deleteQuestionText, [
       { text: TXT.close, style: "cancel" },
       {
-        text: "Smazat",
+        text: TXT.delete,
         style: "destructive",
         onPress: async () => {
           try {
@@ -2377,12 +2417,13 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
 
           const next = await purgeChallenge(id);
           await saveState(next);
+          await updateAllOneMoreWidgets();
 
           closeManage();
         },
       },
     ]);
-  }, [closeManage, manageId]);
+  }, [closeManage, manageId, TXT.close, TXT.delete, TXT.deleteQuestion, TXT.deleteQuestionText]);
 
   useEffect(() => {
     setRemindersPremiumEnabled(!!premium);
@@ -2496,7 +2537,7 @@ const sidePadding = 18;
       if (h?.status === "completed") {
         cur.completed += 1;
         const t = String(h?.time ?? "");
-        if (t) cur.lastTime = t;
+        if (t && (!cur.lastTime || t > cur.lastTime)) cur.lastTime = t;
       } else if (h?.status === "skipped") {
         cur.skipped = true;
         if (h?.protectedByFreeze === true) cur.protectedByFreeze = true;
@@ -2598,20 +2639,11 @@ const sidePadding = 18;
   }
 
   function canInviteToSharedChallenge(item: SharedChallenge): boolean {
-    const me = auth.currentUser?.uid ?? "";
-    const challengeId = String(item.id ?? "").trim();
-    return (
-      !!me &&
-      !!challengeId &&
-      item.enabled !== false &&
-      item.status === "active" &&
-      item.memberUids.includes(me) &&
-      item.acceptedBy.includes(me)
-    );
+    return canInviteSharedChallengeMembers(item, auth.currentUser?.uid ?? "");
   }
 
   function getEligibleSharedInviteFriends(item: SharedChallenge | null): FriendEdge[] {
-    if (!item) return [];
+    if (!item || !canInviteToSharedChallenge(item)) return [];
 
     const me = auth.currentUser?.uid ?? "";
     const pendingInviteUids = getPendingSharedInviteUids(item);
@@ -2862,6 +2894,26 @@ const sidePadding = 18;
       Alert.alert(TXT.sharedChallenge, TXT.accountNotLogged);
       return;
     }
+
+    const sharedDate = getSharedTodayISO();
+    setSharedCompletingMap((prev) => ({ ...prev, [item.id]: true }));
+    try {
+      const status = await completeSharedChallengeForUid(me, item.id, sharedDate);
+      if (status === "completed") {
+        const cachedCount = Math.min(item.targetPerDay, getSharedUserCompletedCount(item, me) + 1);
+        applySharedCompletionLocally(item, me, cachedCount, sharedDate);
+        await updateAllOneMoreWidgets();
+        void replaySharedCompletionsForCurrentUser(me).catch(() => {});
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } finally {
+      setSharedCompletingMap((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    }
+    if (me) return;
 
     if (item.status !== "active") {
       Alert.alert(TXT.sharedChallenge, TXT.challengeNotAccepted);
@@ -3244,11 +3296,48 @@ useEffect(() => {
       });
     }
 
-    days.reverse();
-    return days;
-  }, [selectedId, tdy, dayIndex]);
+    return newestChallengeTimelineFirst(days);
+  }, [selectedId, tdy, dayIndex, appState?.challenges]);
 
  async function markDoneToday(challengeId: string) {
+  const uid = auth.currentUser?.uid;
+  if (uid) {
+    const result = await completeChallengeForUid(uid, challengeId, tdy);
+    if (result.status === "inactive") {
+      Alert.alert(TXT.freeDay, TXT.freeRelax);
+      return;
+    }
+    if (result.status === "completed") {
+      setAppState(result.state);
+      await updateAllOneMoreWidgets();
+      const allVisible = (result.state.challenges ?? [])
+        .filter((challenge) => challenge.enabled !== false && !isChallengeEasyMode(challenge));
+      const visible = premium ? allVisible : allVisible.slice(0, FREE_MAX);
+      const dayComplete = visible.length > 0 && visible
+        .filter((challenge) => isChallengeActiveOnDate(challenge, tdy))
+        .every((challenge) => {
+          const target = Math.max(1, Math.floor(Number(challenge.targetPerDay ?? 1)) || 1);
+          return result.state.history.filter((entry) =>
+            entry.date === tdy && entry.status === "completed" &&
+            String(entry.challengeId) === String(challenge.id)
+          ).length >= target;
+        });
+      if (dayComplete) {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        heroPulse.setValue(0);
+        sparkle.setValue(0);
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(heroPulse, { toValue: 1, duration: 220, useNativeDriver: true }),
+            Animated.timing(heroPulse, { toValue: 0, duration: 320, useNativeDriver: true }),
+          ]),
+          Animated.timing(sparkle, { toValue: 1, duration: 900, useNativeDriver: true }),
+        ]).start(() => sparkle.setValue(0));
+      }
+    }
+    return;
+  }
+  if (!uid) return;
   if (!appState) return;
 
   const challenge = (appState.challenges ?? []).find(
@@ -3626,7 +3715,7 @@ useEffect(() => {
             </View>
 
             <Pressable onPress={() => setReorderMode(false)} style={({ pressed }) => [styles.reorderDoneBtn, pressed && { opacity: 0.88 }]}>
-              <Text style={styles.reorderDoneText}>Hotovo</Text>
+              <Text style={styles.reorderDoneText}>{TXT.doneAction}</Text>
             </Pressable>
           </View>
         )}
@@ -3789,6 +3878,11 @@ useEffect(() => {
 </Modal>
 
       <Modal visible={manageOpen} transparent animationType="fade" onRequestClose={closeManage}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
+        >
         <Pressable style={styles.backdrop} onPress={closeManage}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
@@ -4164,6 +4258,7 @@ useEffect(() => {
             )}
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
 {sharedTimePickerOpen && (
@@ -4231,9 +4326,14 @@ useEffect(() => {
               </Pressable>
             </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={styles.historyScroll}
+              contentContainerStyle={styles.historyScrollContent}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
               {!selectedId ? (
-                <Text style={styles.modalHint}>Vyber výzvu pro zobrazení historie.</Text>
+                <Text style={styles.modalHint}>{TXT.chooseHistoryChallenge}</Text>
               ) : (
                 <>
                   <View style={styles.modalRow}>
@@ -4276,7 +4376,7 @@ useEffect(() => {
                     Nejlepší streak této výzvy: {selectedChallengeBestStreak} dní
                   </Text>
 
-                  {([...timeline].reverse() as any[]).map((d: any) => (
+                  {(timeline as any[]).map((d: any) => (
                     <View key={d.date} style={styles.historyRow}>
                       <Text style={styles.historyDate}>{d.date}</Text>
                       <Text style={styles.historyStatus}>
@@ -4356,7 +4456,11 @@ useEffect(() => {
       </Modal>
 
       <Modal
-        visible={sharedInviteOpen}
+        visible={
+          sharedInviteOpen &&
+          !!selectedSharedInvite &&
+          canInviteToSharedChallenge(selectedSharedInvite)
+        }
         transparent
         animationType="fade"
         onRequestClose={closeSharedInviteModal}
@@ -4794,7 +4898,7 @@ try {
 <Pressable
   disabled={sharedCompleting || myDoneToday}
   onPress={() => {
-    if (lockedByFree) {
+    if (false && lockedByFree) {
       Alert.alert(
         TXT.premium,
         lang === "cs"
@@ -4808,7 +4912,7 @@ try {
   }}
   style={({ pressed }) => [
     styles.sharedDoneBtn,
-    lockedByFree && {
+    false && lockedByFree && {
       backgroundColor: UI.card2,
       borderColor: UI.stroke,
       opacity: 0.55,
@@ -4828,16 +4932,16 @@ try {
       borderColor: UI.stroke,
       opacity: 0.78,
     },
-    pressed && !lockedByFree && !myDoneToday && !sharedCompleting && activeToday && { opacity: 0.9 },
+    pressed && !myDoneToday && !sharedCompleting && activeToday && { opacity: 0.9 },
   ]}
 >
   <Text
     style={[
       styles.sharedDoneBtnText,
-      (lockedByFree || myDoneToday || sharedCompleting || !activeToday) && { color: UI.sub },
+      (myDoneToday || sharedCompleting || !activeToday) && { color: UI.sub },
     ]}
   >
-    {lockedByFree
+    {false && lockedByFree
       ? TXT.premium
       : myDoneToday || sharedCompleting
         ? TXT.done

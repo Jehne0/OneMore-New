@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ensureDaily } from "./logic";
 import { getTodayISO } from "./clock";
 import { auth } from "./firebase";
+import { requestIosWidgetStateSync } from "./iosWidgetUpdateSignal";
 
 const LEGACY_STORAGE_KEY = "onemore_state";
 const LEGACY_BACKUP_KEY = "onemore_state_backup";
@@ -254,6 +255,9 @@ export type Challenge = {
 
   /** Irreversible fun mode: no streak reset, no new competitive stats/medals. */
   easyMode?: boolean;
+
+  /** Inactive date ranges. `endDate` is exclusive; a missing end means paused now. */
+  inactivePeriods?: { startDate: string; endDate?: string }[];
 };
 
 
@@ -455,8 +459,12 @@ function diffDaysISO(aISO: string, bISO: string): number {
 
 export function isChallengeActiveOnDate(c: Challenge | undefined | null, dateISO: string): boolean {
   if (!c) return true; // když nemáme definici, bereme jako daily
-  if (c.enabled === false) return false;
   if (c.deletedAt) return false;
+  const inactivePeriods = Array.isArray(c.inactivePeriods) ? c.inactivePeriods : [];
+  if (inactivePeriods.some((period) =>
+    period.startDate <= dateISO && (!period.endDate || dateISO < period.endDate)
+  )) return false;
+  if (c.enabled === false && inactivePeriods.length === 0) return false;
 
   const period = c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily";
   if (period === "daily") return true;
@@ -480,17 +488,38 @@ export function isChallengeActiveOnDate(c: Challenge | undefined | null, dateISO
 
 function prevActiveDayISO(c: Challenge | undefined | null, todayISO: string): string {
   if (!c) return addDaysISO(todayISO, -1);
-
-  const period = c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily";
-  if (period === "daily") return addDaysISO(todayISO, -1);
-  if (period === "every2") return addDaysISO(todayISO, -2);
-
-  // custom: najdi nejbližší předchozí aktivní den (max 14 dní zpět jako pojistka)
-  for (let i = 1; i <= 14; i++) {
+  for (let i = 1; i <= 36600; i++) {
     const d = addDaysISO(todayISO, -i);
     if (isChallengeActiveOnDate(c, d)) return d;
   }
   return addDaysISO(todayISO, -1);
+}
+
+function normalizeInactivePeriods(raw: unknown): { startDate: string; endDate?: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((value: any) => {
+    const startDate = String(value?.startDate ?? "");
+    const endDate = value?.endDate == null ? undefined : String(value.endDate);
+    if (!DATE_KEY_RE.test(startDate) || (endDate && !DATE_KEY_RE.test(endDate))) return [];
+    if (endDate && endDate <= startDate) return [];
+    return [endDate ? { startDate, endDate } : { startDate }];
+  }).sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+export function transitionChallengeEnabled(challenge: Challenge, enabled: boolean, dateISO = getTodayISO()): Challenge {
+  const wasEnabled = challenge.enabled !== false;
+  if (wasEnabled === enabled) return { ...challenge, enabled };
+  const periods = normalizeInactivePeriods(challenge.inactivePeriods);
+  if (!enabled) {
+    return { ...challenge, enabled: false, inactivePeriods: periods.some((p) => !p.endDate) ? periods : [...periods, { startDate: dateISO }] };
+  }
+  return {
+    ...challenge,
+    enabled: true,
+    inactivePeriods: periods
+      .map((period) => !period.endDate ? { ...period, endDate: dateISO } : period)
+      .filter((period) => !period.endDate || period.endDate > period.startDate),
+  };
 }
 
 // ---------- INTERNAL HELPERS ----------
@@ -711,6 +740,9 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
         ? [normalizeTimeHHMM(c.reminderTime) as string]
         : [],
     easyMode: c.easyMode === true || existingEasyIds.has(String(c.id)),
+    inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
+      ? normalizeInactivePeriods(c.inactivePeriods)
+      : c.enabled === false ? [{ startDate: "0001-01-01" }] : [],
   }));
 
   merged.easyModeChallengeIds = Array.from(
@@ -772,6 +804,9 @@ reminderTimes: Array.isArray(c.reminderTimes)
     ? [normalizeTimeHHMM(c.reminderTime) as string]
     : [],
 easyMode: c.easyMode === true || parsedEasyIds.has(String(c.id)),
+inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
+  ? normalizeInactivePeriods(c.inactivePeriods)
+  : c.enabled === false ? [{ startDate: "0001-01-01" }] : [],
 
   }));
 
@@ -836,9 +871,10 @@ for (const h of state.history ?? []) {
  * One-time normalization for older stats where currentStreak could be higher
  * than the stored historical maximum. Only raises bestStreak; never lowers it.
  */
-function calculateStreaksFromHistoryForChallenge(
+export function calculateStreaksFromHistoryForChallenge(
   history: HistoryEntry[],
-  challengeId: string
+  challengeId: string,
+  challenge?: Challenge
 ): { currentStreak: number; bestStreak: number; latestCompletedDay?: string; sortedDateKeys: string[] } {
   const eventsByDate = new Map<string, { completed: boolean; skipped: boolean }>();
 
@@ -867,10 +903,17 @@ function calculateStreaksFromHistoryForChallenge(
       continue;
     }
 
-    runLength =
-      previousCompletedDay && addDaysISO(previousCompletedDay, 1) === date
-        ? runLength + 1
-        : 1;
+    let connectsToPrevious = false;
+    if (previousCompletedDay) {
+      connectsToPrevious = true;
+      for (let cursor = addDaysISO(previousCompletedDay, 1); cursor < date; cursor = addDaysISO(cursor, 1)) {
+        if (isChallengeActiveOnDate(challenge, cursor)) {
+          connectsToPrevious = false;
+          break;
+        }
+      }
+    }
+    runLength = previousCompletedDay && connectsToPrevious ? runLength + 1 : 1;
     bestStreak = Math.max(bestStreak, runLength);
     previousCompletedDay = date;
     latestCompletedDay = date;
@@ -881,12 +924,14 @@ function calculateStreaksFromHistoryForChallenge(
     const latestEventDay = sortedDateKeys[sortedDateKeys.length - 1];
     if (latestEventDay === latestCompletedDay) {
       currentStreak = 1;
-      for (
-        let cursor = addDaysISO(latestCompletedDay, -1);
-        eventsByDate.get(cursor)?.completed === true;
-        cursor = addDaysISO(cursor, -1)
-      ) {
-        currentStreak += 1;
+      let cursor = addDaysISO(latestCompletedDay, -1);
+      while (true) {
+        const event = eventsByDate.get(cursor);
+        if (event?.skipped) break;
+        if (event?.completed) currentStreak += 1;
+        else if (isChallengeActiveOnDate(challenge, cursor)) break;
+        cursor = addDaysISO(cursor, -1);
+        if (!sortedDateKeys.length || cursor < sortedDateKeys[0]) break;
       }
     }
   }
@@ -909,7 +954,8 @@ function migrateBestStreakFromCurrent(state: AppState): { next: AppState; change
     const value = stats[id];
     const currentStreak = safeNonNegativeStreak(value?.currentStreak);
     const bestStreak = safeNonNegativeStreak(value?.bestStreak);
-    const calculated = calculateStreaksFromHistoryForChallenge(state.history ?? [], id);
+    const challenge = (state.challenges ?? []).find((item) => String(item.id) === id);
+    const calculated = calculateStreaksFromHistoryForChallenge(state.history ?? [], id, challenge);
     const hasHistory = calculated.sortedDateKeys.length > 0;
     const repairedCurrent = hasHistory ? calculated.currentStreak : currentStreak;
     const repairedBest = Math.max(bestStreak, calculated.bestStreak);
@@ -971,7 +1017,7 @@ function migrateBestStreakFromCurrent(state: AppState): { next: AppState; change
  * - Starší dny se NEdoplňují → žádné zahlcení.
  * - Pokud se něco doplní jako skipped, streak se přeruší (streak = 0).
  */
-function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; changed: boolean } {
+export function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; changed: boolean } {
   const today = getTodayISO();
   const lastOpen = state.lastOpenDate ?? state.lastPickDate ?? state.lastCompletedDate;
 
@@ -1141,6 +1187,9 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
               ? [normalizeTimeHHMM((c as any).reminderTime) as string]
               : [],
           easyMode: c.easyMode === true,
+          inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
+            ? normalizeInactivePeriods(c.inactivePeriods)
+            : c.enabled === false ? [{ startDate: "0001-01-01" }] : [],
         })) as Challenge[];
 
         if (auth.currentUser?.uid === uid) {
@@ -1454,6 +1503,7 @@ export async function saveStateForUid(state: AppState, uid: string): Promise<voi
     _cacheUid = uid;
     _notify(safe);
   }
+  requestIosWidgetStateSync();
 }
 
 export async function saveState(state: AppState): Promise<void> {

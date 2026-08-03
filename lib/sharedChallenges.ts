@@ -364,6 +364,8 @@ export function subscribeSharedChallenges(
 
   const memberItems = new Map<string, SharedChallenge>();
   const pendingItems = new Map<string, SharedChallenge>();
+  let memberSettled = false;
+  let pendingSettled = false;
 
   const readDoc = (d: any): SharedChallenge => {
     const data = d.data() as any;
@@ -401,6 +403,10 @@ export function subscribeSharedChallenges(
   };
 
   const emit = () => {
+    // Do not publish a partial/empty snapshot while the companion query is still
+    // starting. Either query may fail independently; once both have settled we
+    // still publish the successful side and Firestore can recover the failed one.
+    if (!memberSettled || !pendingSettled) return;
     const merged = new Map<string, SharedChallenge>();
 
     pendingItems.forEach((item, id) => merged.set(id, item));
@@ -419,6 +425,7 @@ export function subscribeSharedChallenges(
     });
 
     onItems(items);
+    if (__DEV__) console.log("[shared-challenges] merged", { count: items.length });
   };
 
   const unsubMembers = onSnapshot(
@@ -427,15 +434,18 @@ export function subscribeSharedChallenges(
       memberItems.clear();
       snap.docs.forEach((d) => memberItems.set(d.id, readDoc(d)));
       onQueryDebug?.({ queryName: "memberUids", count: snap.docs.length });
+      memberSettled = true;
       if (__DEV__) {
         console.log("[shared-invites/query] member query", { uid, count: snap.docs.length });
       }
       emit();
     },
     (err) => {
+      memberSettled = true;
       if (__DEV__) console.log("[shared-invites/query] member query error", err);
       onQueryDebug?.({ queryName: "memberUids", error: err });
       onError?.(err);
+      emit();
     }
   );
 
@@ -445,6 +455,7 @@ export function subscribeSharedChallenges(
       pendingItems.clear();
       snap.docs.forEach((d) => pendingItems.set(d.id, readDoc(d)));
       onQueryDebug?.({ queryName: "pendingInviteUids", count: snap.docs.length });
+      pendingSettled = true;
       if (__DEV__) {
         console.log("[shared-invites/query] pending invite query", {
           uid,
@@ -464,9 +475,11 @@ export function subscribeSharedChallenges(
       emit();
     },
     (err) => {
+      pendingSettled = true;
       if (__DEV__) console.log("[shared-invites/query] pending invite query error", err);
       onQueryDebug?.({ queryName: "pendingInviteUids", error: err });
       onError?.(err);
+      emit();
     }
   );
 
@@ -556,7 +569,8 @@ export async function getSharedChallenge(challengeId: string): Promise<SharedCha
 
 export async function completeSharedChallengeToday(
   challengeId: string,
-  dateISO = getTodayISO()
+  dateISO = getTodayISO(),
+  mutationId?: string
 ) {
   const uid = myUid();
 
@@ -572,7 +586,7 @@ export async function completeSharedChallengeToday(
   const nextCount = await runTransaction(db, async (tx) => {
     const challengeSnap = await tx.get(challengeRef);
     if (!challengeSnap.exists()) {
-      throw new Error("Společná výzva nebyla nalezena.");
+      throw new Error("shared/not-found");
     }
 
     const challengeData = challengeSnap.data() as any;
@@ -598,20 +612,27 @@ export async function completeSharedChallengeToday(
       acceptedBy: Array.isArray(challengeData.acceptedBy)
         ? challengeData.acceptedBy.map((x: any) => String(x))
         : [],
+      leftBy: Array.isArray(challengeData.leftBy)
+        ? challengeData.leftBy.map((x: any) => String(x))
+        : [],
       createdAt: challengeData.createdAt,
       updatedAt: challengeData.updatedAt,
     };
 
+    if (challenge.enabled === false) throw new Error("shared/disabled");
+    if (challenge.leftBy?.includes(uid)) throw new Error("shared/left");
+    if (!challenge.acceptedBy.includes(uid)) throw new Error("shared/not-accepted");
+
     if (!challenge.memberUids.includes(uid)) {
-      throw new Error("Do této výzvy nepatříš.");
+      throw new Error("shared/not-member");
     }
 
     if (challenge.status !== "active") {
-      throw new Error("Tato společná výzva ještě nebyla přijata všemi členy.");
+      throw new Error("shared/not-active");
     }
 
     if (!isSharedChallengeActiveOnDate(challenge, dateISO)) {
-      throw new Error("Dnes je podle periody volno.");
+      throw new Error("shared/rest-day");
     }
 
     const daySnap = await tx.get(dayRef);
@@ -621,6 +642,10 @@ export async function completeSharedChallengeToday(
       0,
       Math.floor(Number(mine?.completedCount ?? 0) || 0)
     );
+    const mutationIds = Array.isArray(mine?.mutationIds)
+      ? mine.mutationIds.map((value: unknown) => String(value)).slice(-40)
+      : [];
+    if (mutationId && mutationIds.includes(mutationId)) return prevCount;
 
     const newCount = Math.min(challenge.targetPerDay, prevCount + 1);
 
@@ -632,6 +657,9 @@ export async function completeSharedChallengeToday(
           [uid]: {
             completedCount: newCount,
             completed: newCount >= challenge.targetPerDay,
+            mutationIds: mutationId
+              ? [...mutationIds.filter((id: string) => id !== mutationId), mutationId].slice(-40)
+              : mutationIds,
             updatedAt: serverTimestamp(),
           },
         },
@@ -644,6 +672,18 @@ export async function completeSharedChallengeToday(
   });
 
   return nextCount;
+}
+
+export async function completeSharedChallengeFromWidgetBackend(
+  challengeId: string,
+  dateISO: string,
+  mutationId: string,
+): Promise<number> {
+  if (auth.currentUser?.uid == null) throw new Error("shared/unauthenticated");
+  const complete = httpsCallable(functions, "completeSharedChallengeFromWidget");
+  const response = await complete({ challengeId, date: dateISO, mutationId });
+  const count = Math.max(0, Math.floor(Number((response.data as { count?: unknown })?.count ?? 0)));
+  return count;
 }
 
 export async function setSharedChallengeEnabled(challengeId: string, enabled: boolean) {

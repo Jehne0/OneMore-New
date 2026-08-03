@@ -4,11 +4,17 @@ import Purchases, {
 } from "react-native-purchases";
 import { Linking, Platform } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
+import { OfferingCache } from "./offeringCache";
 import {
   applyPremiumEntitlement,
   resetPremiumStateForAuthChange,
+  restorePremium,
 } from "./premium";
 import { auth } from "./firebase";
+import {
+  describeRevenueCatPackages,
+  selectMonthlyRevenueCatPackage,
+} from "./premiumOfferingSelection";
 
 const ENTITLEMENT_ID = "premium";
 
@@ -119,6 +125,11 @@ async function applyCustomerInfoForUid(
     entitlementId: entitlement?.identifier ?? ENTITLEMENT_ID,
     expiresDate: entitlement?.expirationDate ?? null,
     lastVerifiedAt: info.requestDate || new Date().toISOString(),
+    revenueCatAppUserId: appUserID,
+    willRenew: typeof entitlement?.willRenew === "boolean" ? entitlement.willRenew : null,
+    managementURL: info.managementURL ?? null,
+    source: "customerInfo",
+    isLifetime: entitlement?.isActive === true && entitlement?.expirationDate == null,
   });
 
   if (
@@ -254,6 +265,7 @@ function setExpectedFirebaseUid(
   identityGeneration += 1;
   resetPremiumStateForAuthChange();
   resetPremiumSubscriptionState();
+  offeringCache.clear();
 
   if (__DEV__) {
     console.log("[RC PREMIUM STATE RESET]", {
@@ -288,7 +300,8 @@ export function initRevenueCatAuth() {
       return;
     }
 
-    void revenueCatLogin(uid).catch((error) => {
+    setExpectedFirebaseUid(uid, "firebase-auth-restore");
+    void restorePremium().then(() => revenueCatLogin(uid)).catch((error) => {
       if (__DEV__) {
         console.log("[RC AUTH LOGIN ERROR]", {
           firebaseUid: uid,
@@ -422,15 +435,55 @@ export async function syncPremiumFromRevenueCat() {
   await revenueCatLogin(requireFirebaseUid());
 }
 
-export async function getOfferingPackages(): Promise<PurchasesPackage[]> {
+const offeringCache = new OfferingCache<PurchasesPackage>();
+
+function maskedIdentity(value: string | null | undefined) {
+  const safe = value?.trim();
+  if (!safe) return null;
+  if (safe.length <= 6) return `${safe.slice(0, 1)}***${safe.slice(-1)}`;
+  return `${safe.slice(0, 3)}***${safe.slice(-3)}`;
+}
+
+export async function getOfferingPackages(forceRefresh = false): Promise<PurchasesPackage[]> {
   if (!REVENUECAT_ENABLED) return [];
-
-  await revenueCatLogin(requireFirebaseUid());
-
-  const offerings = await Purchases.getOfferings();
-  const current = offerings.current;
-
-  return current?.availablePackages ?? [];
+  const uid = requireFirebaseUid();
+  await revenueCatLogin(uid);
+  return offeringCache.get(uid, async () => {
+    const appUserID = await Purchases.getAppUserID();
+    try {
+      const offerings = await Purchases.getOfferings();
+      const available = offerings.current?.availablePackages ?? [];
+      const selected = selectMonthlyRevenueCatPackage(available);
+      console.info("[RC OFFERING DIAGNOSTIC]", {
+          success: true,
+          platform: Platform.OS,
+          buildVariant: __DEV__ ? "development" : "release",
+          firebaseUid: uid,
+          appUserID: maskedIdentity(appUserID),
+          identitiesMatch: appUserID === uid,
+          currentOfferingId: offerings.current?.identifier ?? null,
+          availablePackageCount: available.length,
+          packages: describeRevenueCatPackages(available),
+          expectedSelection: "packageType=MONTHLY, then $rc_monthly, then one usable P1M package",
+          monthlyPackageFound: !!selected,
+          selectedIdentifier: selected?.identifier ?? null,
+          selectedProductIdentifier: selected?.product.identifier ?? null,
+        });
+      return selected ? [selected] : [];
+    } catch (error: any) {
+      console.info("[RC OFFERING DIAGNOSTIC]", {
+          success: false,
+          platform: Platform.OS,
+          buildVariant: __DEV__ ? "development" : "release",
+          firebaseUid: uid,
+          appUserID: maskedIdentity(appUserID),
+          identitiesMatch: appUserID === uid,
+          errorCode: String(error?.code ?? error?.readableErrorCode ?? "unknown"),
+          errorMessage: String(error?.message ?? "unknown"),
+        });
+      throw error;
+    }
+  }, forceRefresh);
 }
 
 export async function purchasePackage(
