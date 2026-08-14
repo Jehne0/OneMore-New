@@ -1,6 +1,7 @@
 import { collection, doc, onSnapshot, type Unsubscribe } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "./firebase";
+import { assertCloudAccessVerified } from "./cloudAccessGate";
 
 export type FriendStatus = "pending" | "accepted" | "blocked";
 
@@ -13,6 +14,7 @@ export type FriendEdge = {
 };
 
 function myUid() {
+  assertCloudAccessVerified();
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Nejsi přihlášený.");
   return uid;

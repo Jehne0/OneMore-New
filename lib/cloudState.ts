@@ -3,6 +3,7 @@ import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { APP_STATE_DOC_ID } from "./cloud";
 import type { AppState } from "./storage";
+import { assertCloudAccessVerified } from "./cloudAccessGate";
 
 const USER_STATE_VERSION = 1;
 
@@ -27,6 +28,7 @@ export function userStateDocRef() {
  * Načte state z cloudu (nebo null, pokud ještě neexistuje).
  */
 export async function loadCloudState(): Promise<{ state: AppState; updatedAtMillis: number } | null> {
+  assertCloudAccessVerified();
   const ref = userStateDocRef();
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
@@ -46,6 +48,7 @@ export async function loadCloudState(): Promise<{ state: AppState; updatedAtMill
  * Uloží state do cloudu (merge).
  */
 export async function saveCloudState(state: AppState): Promise<void> {
+  assertCloudAccessVerified();
   const ref = userStateDocRef();
   const payload: CloudStateDoc = {
     version: USER_STATE_VERSION,

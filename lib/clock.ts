@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
 
 const DEBUG_TODAY_KEY = "onemore_debug_today"; // "YYYY-MM-DD"
 
@@ -48,14 +47,4 @@ export async function clearDebugTodayISO() {
   await AsyncStorage.removeItem(DEBUG_TODAY_KEY);
   cachedDebugToday = null;
   notify();
-}
-
-export function useTodayISO(): string {
-  const [today, setToday] = useState(getTodayISO());
-
-  useEffect(() => {
-    return subscribeClock(() => setToday(getTodayISO()));
-  }, []);
-
-  return today;
 }

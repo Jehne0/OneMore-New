@@ -95,6 +95,7 @@ import { resolveUidByUsername, getProfile } from "../../lib/usernames";
 import { changeUsername } from "../../lib/usernames";
 import { clearSessionAfterExplicitLogout } from "../../lib/cloudSync";
 import { updateAccountDisplayName } from "../../lib/accountSnapshot";
+import { assertCloudAccessVerified, useCloudAccess } from "../../lib/cloudAccessGate";
 
 async function clearOneMoreStorage() {
   try {
@@ -1017,10 +1018,10 @@ const PROFILE_RUNTIME_STRINGS: Record<"cs" | "en" | "pl" | "de", Record<string, 
 };
 
 const PROFILE_ACCOUNT_STRINGS: Record<"cs" | "en" | "pl" | "de", Record<string, string>> = {
-  cs: { enterUsername: "Zadej prosím nové uživatelské jméno.", usernameChanged: "Uživatelské jméno bylo změněno.", saveTimeout: "Ukládání trvá příliš dlouho. Zkontroluj připojení a zkus to znovu.", friendLocked: "Tento přítel je ve Free verzi zamčený. Obnov Premium a znovu se odemkne.", lockedFree: "Zamčeno ve Free verzi" },
-  en: { enterUsername: "Please enter a new username.", usernameChanged: "Username has been changed.", saveTimeout: "Saving is taking too long. Check your connection and try again.", friendLocked: "This friend is locked in the Free version. Restore Premium to unlock them again.", lockedFree: "Locked in the Free version" },
-  pl: { enterUsername: "Wpisz nową nazwę użytkownika.", usernameChanged: "Nazwa użytkownika została zmieniona.", saveTimeout: "Zapisywanie trwa zbyt długo. Sprawdź połączenie i spróbuj ponownie.", friendLocked: "Ten znajomy jest zablokowany w wersji Free. Przywróć Premium, aby go odblokować.", lockedFree: "Zablokowano w wersji Free" },
-  de: { enterUsername: "Gib einen neuen Benutzernamen ein.", usernameChanged: "Der Benutzername wurde geändert.", saveTimeout: "Das Speichern dauert zu lange. Prüfe deine Verbindung und versuche es erneut.", friendLocked: "Dieser Freund ist in der Free-Version gesperrt. Stelle Premium wieder her, um ihn zu entsperren.", lockedFree: "In der Free-Version gesperrt" },
+  cs: { enterUsername: "Zadej prosím nové uživatelské jméno.", usernameChanged: "Uživatelské jméno bylo změněno.", saveTimeout: "Ukládání trvá příliš dlouho. Zkontroluj připojení a zkus to znovu.", cloudRequired: "Změna jména vyžaduje připojení a úspěšné ověření verze aplikace.", friendLocked: "Tento přítel je ve Free verzi zamčený. Obnov Premium a znovu se odemkne.", lockedFree: "Zamčeno ve Free verzi" },
+  en: { enterUsername: "Please enter a new username.", usernameChanged: "Username has been changed.", saveTimeout: "Saving is taking too long. Check your connection and try again.", cloudRequired: "Changing your username requires a connection and successful app version verification.", friendLocked: "This friend is locked in the Free version. Restore Premium to unlock them again.", lockedFree: "Locked in the Free version" },
+  pl: { enterUsername: "Wpisz nową nazwę użytkownika.", usernameChanged: "Nazwa użytkownika została zmieniona.", saveTimeout: "Zapisywanie trwa zbyt długo. Sprawdź połączenie i spróbuj ponownie.", cloudRequired: "Zmiana nazwy wymaga połączenia i pomyślnej weryfikacji wersji aplikacji.", friendLocked: "Ten znajomy jest zablokowany w wersji Free. Przywróć Premium, aby go odblokować.", lockedFree: "Zablokowano w wersji Free" },
+  de: { enterUsername: "Gib einen neuen Benutzernamen ein.", usernameChanged: "Der Benutzername wurde geändert.", saveTimeout: "Das Speichern dauert zu lange. Prüfe deine Verbindung und versuche es erneut.", cloudRequired: "Zum Ändern des Benutzernamens sind eine Verbindung und eine erfolgreiche Versionsprüfung erforderlich.", friendLocked: "Dieser Freund ist in der Free-Version gesperrt. Stelle Premium wieder her, um ihn zu entsperren.", lockedFree: "In der Free-Version gesperrt" },
 };
 
 const PROFILE_ACCESS_STRINGS: Record<"cs" | "en" | "pl" | "de", Record<string, string>> = {
@@ -1119,6 +1120,7 @@ function logProfileSharedChallengeInviteDiagnostics(
 }
 
 export default function ProfileTabScreen() {
+  const { allowed: cloudAllowed, sessionEpoch: cloudSessionEpoch } = useCloudAccess();
   const router = useRouter();
   const { open, t } = useLocalSearchParams<{ open?: string; t?: string }>();
   const insets = useSafeAreaInsets();
@@ -1399,6 +1401,7 @@ useEffect(() => {
       try {
         const cachedName = (await AsyncStorage.getItem(profileNameKey))?.trim();
         if (!cancelled && cachedName) setMyUsername(cachedName);
+        if (!cloudAllowed) return;
         const profile = await getProfile(uid);
         const freshName = (profile?.username ?? "").trim();
         if (freshName) {
@@ -1411,14 +1414,14 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [currentUserUid]);
+  }, [cloudAllowed, cloudSessionEpoch, currentUserUid]);
 
     useEffect(() => {
     let cancelled = false;
 
     (async () => {
       const uid = auth.currentUser?.uid;
-      if (!uid) return;
+      if (!cloudAllowed || !uid) return;
 
       try {
         const snap = await getDoc(doc(db, "users", uid));
@@ -1439,12 +1442,18 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [auth.currentUser?.uid]);
+  }, [cloudAllowed, cloudSessionEpoch, currentUserUid]);
 
   // ✅ Přátelé: live list z Firestore + rovnou jména bez preblikávání
   useEffect(() => {
     
     const uid = auth.currentUser?.uid;
+    if (!cloudAllowed) {
+      setFriendEdges([]);
+      setFriendNames({});
+      setFriendsLoading(false);
+      return;
+    }
     if (!uid) {
       setFriendEdges([]);
       setFriendNames({});
@@ -1497,7 +1506,7 @@ await Promise.all(
       cancelled = true;
       unsub?.();
     };
-  }, [friendsOpen]);
+  }, [cloudAllowed, cloudSessionEpoch, friendsOpen]);
   
 const seenIncomingInviteIdsRef = useRef<string[]>([]);
 const sharedInvitesInitializedRef = useRef(false);
@@ -1506,6 +1515,13 @@ const sharedInvitesInitializedRef = useRef(false);
   useEffect(() => {
    
     const uid = currentUserUid;
+    if (!cloudAllowed) {
+      setSharedInvites([]);
+      setSentSharedInvites([]);
+      setSharedChallenges([]);
+      setSharedInvitesLoading(false);
+      return;
+    }
     if (!uid) {
       setSharedInvites([]);
       setSentSharedInvites([]);
@@ -1627,7 +1643,7 @@ setSharedInvitesLoading(false);
       cancelled = true;
       unsub?.();
     };
-  }, [accessText.newInvite, currentUserUid, friendsOpen, lang, runtimeText.newChallenge, unknownUserText]);
+  }, [accessText.newInvite, cloudAllowed, cloudSessionEpoch, currentUserUid, friendsOpen, lang, runtimeText.newChallenge, unknownUserText]);
 
   const email = (auth.currentUser?.email ?? "").trim();
 
@@ -1788,6 +1804,7 @@ const getInviteCreatorName = (challenge: SharedChallenge) => {
 
   async function openFriendStats(friendUid: string) {
     try {
+      assertCloudAccessVerified();
       setSelectedFriendLoading(true);
       setFriendStatsOpen(true);
       setSelectedFriendName(getShownFriendName(friendUid));
@@ -2409,6 +2426,7 @@ const buyPremium = async () => {
     setDeleteWorking(true);
 
     try {
+      assertCloudAccessVerified();
       const credential = EmailAuthProvider.credential(user.email, pwd);
       await reauthenticateWithCredential(user, credential);
       await user.getIdToken(true);
@@ -2527,6 +2545,7 @@ const buyPremium = async () => {
 
     setSupportSending(true);
     try {
+      assertCloudAccessVerified();
       const call = httpsCallable(functions, "sendSupportEmail");
       await call({ email: e, subject: s, message: m });
 
@@ -2594,6 +2613,15 @@ const buyPremium = async () => {
 
   const saveUsername = async () => {
     if (usernameBusy) return;
+
+    if (!cloudAllowed) {
+      showPwdPopup(
+        "error",
+        runtimeText.usernameChange,
+        accountText.cloudRequired
+      );
+      return;
+    }
 
     const username = newUsername.trim();
     if (!username) {
@@ -3274,13 +3302,19 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
               ]}
             />
 
+            {!cloudAllowed && (
+              <Text style={[styles.smallLabel, { color: UI.sub, marginTop: 10 }]}>
+                {accountText.cloudRequired}
+              </Text>
+            )}
+
             <Pressable
-              disabled={usernameBusy}
+              disabled={usernameBusy || !cloudAllowed}
               onPress={saveUsername}
               style={({ pressed }) => [
                 styles.primaryBtn,
                 (pressed || usernameBusy) && { opacity: 0.9 },
-                usernameBusy && { opacity: 0.6 },
+                (usernameBusy || !cloudAllowed) && { opacity: 0.6 },
               ]}
             >
               <Text style={styles.primaryBtnText}>
@@ -3360,6 +3394,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
                 onValueChange={async (v) => {
                   setShareAchievementsWithFriends(v);
                   try {
+                    assertCloudAccessVerified();
                     const uid = auth.currentUser?.uid;
                     if (!uid) return;
 

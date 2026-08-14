@@ -3,6 +3,19 @@ import { ensureDaily } from "./logic";
 import { getTodayISO } from "./clock";
 import { auth } from "./firebase";
 import { requestIosWidgetStateSync } from "./iosWidgetUpdateSignal";
+import {
+  FLEXIBLE_WEEKLY_PERIOD,
+  flexibleWeeklyWindowForDate,
+  isLocalDateKey,
+  normalizeFlexibleWeeklyFields,
+  normalizeFlexibleWeeklyDefinitions,
+  reconcileFlexibleWeeklyPeriods,
+  restoreFlexibleWeeklyDefinitions,
+  resumeFlexibleWeeklyChallenge,
+  synchronizeFlexibleWeeklyDefinitions,
+  type FlexibleWeeklyPendingSettings,
+} from "./flexibleWeekly";
+import { getPlanAccessibleChallengeIds } from "./plan";
 
 const LEGACY_STORAGE_KEY = "onemore_state";
 const LEGACY_BACKUP_KEY = "onemore_state_backup";
@@ -231,7 +244,7 @@ export type Challenge = {
    * - every2: obden (podle anchor dne)
    * - custom: jen vybrané dny v týdnu
    */
-  period?: "daily" | "every2" | "custom";
+  period?: "daily" | "every2" | "custom" | "flexibleWeekly";
 
   /**
    * Pouze pro period="custom": dny v týdnu (0=Po … 6=Ne)
@@ -242,6 +255,14 @@ export type Challenge = {
    * Pouze pro period="every2": anchor den (YYYY-MM-DD)
    */
   periodAnchor?: string;
+
+  /** Local creation date and flexible seven-day period configuration. */
+  createdDate?: string;
+  flexibleWeeklyTarget?: number;
+  flexibleWeeklyStartDay?: number; // 0=Po … 6=Ne
+  flexibleWeeklyFirstPeriodStart?: string;
+  flexibleWeeklyLastEvaluatedPeriodStart?: string;
+  flexibleWeeklyPending?: FlexibleWeeklyPendingSettings;
 
   /**
    * Kolikrát denně se má výzva splnit (Premium může 2×/3×/…)
@@ -257,7 +278,7 @@ export type Challenge = {
   easyMode?: boolean;
 
   /** Inactive date ranges. `endDate` is exclusive; a missing end means paused now. */
-  inactivePeriods?: { startDate: string; endDate?: string }[];
+  inactivePeriods?: { startDate: string; endDate?: string; reason?: "disabled" | "planLock" }[];
 };
 
 
@@ -281,6 +302,11 @@ export type HistoryEntry = {
   // Streak se počítá až při posledním kroku, např. 4/4.
   partial?: boolean;
   protectedByFreeze?: boolean;
+  /** Present only on the single audit entry for a failed flexible week. */
+  flexibleWeeklyPeriodStart?: string;
+  eventType?: "weeklyGoalMissed" | "flexibleWeeklyCompleted";
+  flexibleWeeklyDone?: number;
+  flexibleWeeklyTarget?: number;
 };
 
 
@@ -335,6 +361,10 @@ export type AppState = {
   // ✅ TRVALÉ: výzvy, které byly někdy splněné (nikdy nemažeme při delete/disable/purge)
   // ukládáme jako klíče "id:<id>" nebo fallback "text:<snapshot>"
   everCompletedKeys: string[];
+
+  /** Sidecar retained by legacy clients so a newer client can restore the type. */
+  flexibleWeeklyWriterVersion?: 2;
+  flexibleWeeklyDefinitions?: Record<string, import("./flexibleWeekly").FlexibleWeeklyDefinition>;
 };
 
 // ---------- DEFAULT STATE ----------
@@ -466,8 +496,12 @@ export function isChallengeActiveOnDate(c: Challenge | undefined | null, dateISO
   )) return false;
   if (c.enabled === false && inactivePeriods.length === 0) return false;
 
-  const period = c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily";
+  const period = c.period === FLEXIBLE_WEEKLY_PERIOD || c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily";
   if (period === "daily") return true;
+
+  if (period === FLEXIBLE_WEEKLY_PERIOD) {
+    return flexibleWeeklyWindowForDate(c, dateISO) !== null;
+  }
 
   if (period === "every2") {
     const anchor = typeof c.periodAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.periodAnchor) ? c.periodAnchor : dateISO;
@@ -495,14 +529,15 @@ function prevActiveDayISO(c: Challenge | undefined | null, todayISO: string): st
   return addDaysISO(todayISO, -1);
 }
 
-function normalizeInactivePeriods(raw: unknown): { startDate: string; endDate?: string }[] {
+function normalizeInactivePeriods(raw: unknown): { startDate: string; endDate?: string; reason?: "disabled" | "planLock" }[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((value: any) => {
     const startDate = String(value?.startDate ?? "");
     const endDate = value?.endDate == null ? undefined : String(value.endDate);
     if (!DATE_KEY_RE.test(startDate) || (endDate && !DATE_KEY_RE.test(endDate))) return [];
     if (endDate && endDate <= startDate) return [];
-    return [endDate ? { startDate, endDate } : { startDate }];
+    const reason = value?.reason === "disabled" || value?.reason === "planLock" ? value.reason : undefined;
+    return [endDate ? { startDate, endDate, reason } : { startDate, reason }];
   }).sort((a, b) => a.startDate.localeCompare(b.startDate));
 }
 
@@ -511,15 +546,66 @@ export function transitionChallengeEnabled(challenge: Challenge, enabled: boolea
   if (wasEnabled === enabled) return { ...challenge, enabled };
   const periods = normalizeInactivePeriods(challenge.inactivePeriods);
   if (!enabled) {
-    return { ...challenge, enabled: false, inactivePeriods: periods.some((p) => !p.endDate) ? periods : [...periods, { startDate: dateISO }] };
+    return {
+      ...challenge,
+      enabled: false,
+      inactivePeriods: periods.some((p) => !p.endDate && p.reason !== "planLock")
+        ? periods
+        : [...periods, { startDate: dateISO, reason: "disabled" }],
+    };
   }
-  return {
+  const enabledChallenge: Challenge = {
     ...challenge,
     enabled: true,
     inactivePeriods: periods
-      .map((period) => !period.endDate ? { ...period, endDate: dateISO } : period)
+      .map((period) => !period.endDate && period.reason !== "planLock" ? { ...period, endDate: dateISO } : period)
       .filter((period) => !period.endDate || period.endDate > period.startDate),
   };
+  const hasOpenInactivePeriod = (enabledChallenge.inactivePeriods ?? []).some((period) => !period.endDate);
+  return enabledChallenge.period === FLEXIBLE_WEEKLY_PERIOD && !hasOpenInactivePeriod
+    ? resumeFlexibleWeeklyChallenge(enabledChallenge, dateISO)
+    : enabledChallenge;
+}
+
+export function applyPlanAccessToFlexibleWeeklyState(
+  state: AppState,
+  premium: boolean,
+  todayISO = getTodayISO(),
+): { next: AppState; changed: boolean; accessibleIds: Set<string> } {
+  const accessibleIds = getPlanAccessibleChallengeIds(state.challenges ?? [], premium);
+  let changed = false;
+  const challenges = (state.challenges ?? []).map((raw) => {
+    if (raw.period !== FLEXIBLE_WEEKLY_PERIOD) return raw;
+    const periods = normalizeInactivePeriods(raw.inactivePeriods);
+    const hasOpenPlanLock = periods.some((period) => !period.endDate && period.reason === "planLock");
+    const accessible = accessibleIds.has(String(raw.id));
+    if (!accessible && !hasOpenPlanLock) {
+      changed = true;
+      return {
+        ...raw,
+        inactivePeriods: [...periods, {
+          startDate: isLocalDateKey(state.lastOpenDate) ? state.lastOpenDate : todayISO,
+          reason: "planLock" as const,
+        }],
+      };
+    }
+    if (accessible && hasOpenPlanLock) {
+      changed = true;
+      const unlocked: Challenge = {
+        ...raw,
+        inactivePeriods: periods
+          .map((period) => !period.endDate && period.reason === "planLock"
+            ? { ...period, endDate: todayISO }
+            : period)
+          .filter((period) => !period.endDate || period.endDate > period.startDate),
+      };
+      const stillUnavailable = unlocked.enabled === false || !!unlocked.deletedAt ||
+        (unlocked.inactivePeriods ?? []).some((period) => !period.endDate);
+      return stillUnavailable ? unlocked : resumeFlexibleWeeklyChallenge(unlocked, todayISO);
+    }
+    return raw;
+  });
+  return { next: changed ? { ...state, challenges } : state, changed, accessibleIds };
 }
 
 // ---------- INTERNAL HELPERS ----------
@@ -580,6 +666,20 @@ function migrateHistory(rawHistory: unknown): HistoryEntry[] {
   status: h.status === "skipped" ? "skipped" : "completed",
   partial: h.partial === true,
   protectedByFreeze: h.protectedByFreeze === true,
+  flexibleWeeklyPeriodStart: isLocalDateKey(h.flexibleWeeklyPeriodStart)
+    ? h.flexibleWeeklyPeriodStart
+    : undefined,
+  eventType: h.eventType === "flexibleWeeklyCompleted"
+    ? "flexibleWeeklyCompleted"
+    : h.eventType === "weeklyGoalMissed" || isLocalDateKey(h.flexibleWeeklyPeriodStart)
+      ? "weeklyGoalMissed"
+      : undefined,
+  flexibleWeeklyDone: Number.isFinite(Number(h.flexibleWeeklyDone))
+    ? Math.max(0, Math.floor(Number(h.flexibleWeeklyDone)))
+    : undefined,
+  flexibleWeeklyTarget: Number.isFinite(Number(h.flexibleWeeklyTarget))
+    ? Math.max(1, Math.floor(Number(h.flexibleWeeklyTarget)))
+    : undefined,
 }))
       .filter((h: HistoryEntry) => !!h.date);
   }
@@ -704,14 +804,14 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
 
   merged.reminderNotifIds = normalizeReminderNotifIds(merged.reminderNotifIds);
 
-  merged.challenges = (merged.challenges ?? []).map((c: any) => ({
+  merged.challenges = (merged.challenges ?? []).map((c: any) => normalizeFlexibleWeeklyFields({
     id: String(c.id),
     text: String(c.text ?? ""),
     enabled: c.enabled ?? true,
     deletedAt: c.deletedAt ? String(c.deletedAt) : undefined,
 
     // ✅ perioda
-    period: c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily",
+    period: c.period === FLEXIBLE_WEEKLY_PERIOD || c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily",
     customDays: Array.isArray(c.customDays)
           ? (Array.from(
               new Set(
@@ -726,6 +826,12 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
       typeof c.periodAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.periodAnchor)
         ? String(c.periodAnchor)
         : undefined,
+    createdDate: isLocalDateKey(c.createdDate) ? String(c.createdDate) : undefined,
+    flexibleWeeklyTarget: c.flexibleWeeklyTarget,
+    flexibleWeeklyStartDay: c.flexibleWeeklyStartDay,
+    flexibleWeeklyFirstPeriodStart: c.flexibleWeeklyFirstPeriodStart,
+    flexibleWeeklyLastEvaluatedPeriodStart: c.flexibleWeeklyLastEvaluatedPeriodStart,
+    flexibleWeeklyPending: c.flexibleWeeklyPending,
 
     // ✅ defaults
     targetPerDay:
@@ -743,7 +849,7 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
     inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
       ? normalizeInactivePeriods(c.inactivePeriods)
       : c.enabled === false ? [{ startDate: "0001-01-01" }] : [],
-  }));
+  }, getTodayISO()));
 
   merged.easyModeChallengeIds = Array.from(
     new Set([
@@ -769,14 +875,14 @@ function parseAndMerge(raw: string): AppState {
     if (c?.easyMode === true) parsedEasyIds.add(String(c.id));
   }
 
-  const challenges: Challenge[] = parsedChallenges.map((c: any) => ({
+  const challenges: Challenge[] = parsedChallenges.map((c: any) => normalizeFlexibleWeeklyFields({
     id: String(c.id),
     text: String(c.text ?? ""),
     enabled: c.enabled ?? true,
     deletedAt: c.deletedAt ? String(c.deletedAt) : undefined,
 
     // ✅ perioda
-    period: c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily",
+    period: c.period === FLEXIBLE_WEEKLY_PERIOD || c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily",
     customDays: Array.isArray(c.customDays)
       ? (Array.from(
           new Set<number>(
@@ -791,6 +897,12 @@ function parseAndMerge(raw: string): AppState {
       typeof c.periodAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.periodAnchor)
         ? c.periodAnchor
         : undefined,
+    createdDate: isLocalDateKey(c.createdDate) ? c.createdDate : undefined,
+    flexibleWeeklyTarget: c.flexibleWeeklyTarget,
+    flexibleWeeklyStartDay: c.flexibleWeeklyStartDay,
+    flexibleWeeklyFirstPeriodStart: c.flexibleWeeklyFirstPeriodStart,
+    flexibleWeeklyLastEvaluatedPeriodStart: c.flexibleWeeklyLastEvaluatedPeriodStart,
+    flexibleWeeklyPending: c.flexibleWeeklyPending,
 
     // ✅ defaults
 targetPerDay: typeof c.targetPerDay === "number" && Number.isFinite(c.targetPerDay) && c.targetPerDay > 0
@@ -808,7 +920,7 @@ inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
   ? normalizeInactivePeriods(c.inactivePeriods)
   : c.enabled === false ? [{ startDate: "0001-01-01" }] : [],
 
-  }));
+  }, getTodayISO())) as Challenge[];
 
   const history: HistoryEntry[] = migrateHistory((parsed as any).history);
   const archivedChallenges = normalizeArchived(parsedArchivedChallenges).map((c: any) => ({
@@ -830,9 +942,11 @@ inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
     reminderNotifIds: normalizeReminderNotifIds((parsed as any).reminderNotifIds),
   };
 
-  merged.easyModeChallengeIds = Array.from(easyModeChallengeIdSet(merged));
+  merged.flexibleWeeklyDefinitions = normalizeFlexibleWeeklyDefinitions((parsed as any).flexibleWeeklyDefinitions);
+  const restored = restoreFlexibleWeeklyDefinitions(merged, getTodayISO());
+  restored.easyModeChallengeIds = Array.from(easyModeChallengeIdSet(restored));
 
-  return merged;
+  return restored;
 }
 
 export function normalizeAppStateSnapshot(
@@ -955,6 +1069,10 @@ function migrateBestStreakFromCurrent(state: AppState): { next: AppState; change
     const currentStreak = safeNonNegativeStreak(value?.currentStreak);
     const bestStreak = safeNonNegativeStreak(value?.bestStreak);
     const challenge = (state.challenges ?? []).find((item) => String(item.id) === id);
+    // flexibleWeekly streaks are completion-based and period failures are
+    // explicit history events. The daily active-day algorithm must never
+    // reinterpret gaps between valid weekly completions as missed days.
+    if (challenge?.period === FLEXIBLE_WEEKLY_PERIOD) continue;
     const calculated = calculateStreaksFromHistoryForChallenge(state.history ?? [], id, challenge);
     const hasHistory = calculated.sortedDateKeys.length > 0;
     const repairedCurrent = hasHistory ? calculated.currentStreak : currentStreak;
@@ -1019,28 +1137,33 @@ function migrateBestStreakFromCurrent(state: AppState): { next: AppState; change
  */
 export function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppState; changed: boolean } {
   const today = getTodayISO();
+  const flexible = reconcileFlexibleWeeklyPeriods(state, today, {
+    isActiveOnDate: (challenge, date) => isChallengeActiveOnDate(challenge, date),
+    isEasyMode: (challenge) => isChallengeEasyMode(challenge),
+  });
+  state = flexible.next;
   const lastOpen = state.lastOpenDate ?? state.lastPickDate ?? state.lastCompletedDate;
 
   if (!lastOpen) {
     const next = { ...state, lastOpenDate: today };
-    return { next, changed: next.lastOpenDate !== state.lastOpenDate };
+    return { next, changed: flexible.changed || next.lastOpenDate !== state.lastOpenDate };
   }
 
   if (lastOpen === today) {
-    return { next: state, changed: false };
+    return { next: state, changed: flexible.changed };
   }
 
   const y = addDaysISO(today, -1);
 
   const activeIds = new Set(
     (state.challenges ?? [])
-      .filter((c) => c.enabled && !c.deletedAt)
+      .filter((c) => c.enabled && !c.deletedAt && c.period !== FLEXIBLE_WEEKLY_PERIOD)
       .map((c) => String(c.id))
   );
 
   if (activeIds.size === 0) {
     const next = { ...state, lastOpenDate: today };
-    return { next, changed: next.lastOpenDate !== state.lastOpenDate };
+    return { next, changed: flexible.changed || next.lastOpenDate !== state.lastOpenDate };
   }
 
   // existuje už záznam pro včerejšek + danou výzvu?
@@ -1080,7 +1203,7 @@ export function backfillSkippedDaysAndBreakStreak(state: AppState): { next: AppS
 
   if (additions.length === 0) {
     const next = { ...state, lastOpenDate: today };
-    return { next, changed: next.lastOpenDate !== state.lastOpenDate };
+    return { next, changed: flexible.changed || next.lastOpenDate !== state.lastOpenDate };
   }
 
   const nextStats = additions.reduce((map, e) => {
@@ -1158,12 +1281,12 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        const parsed = arr.map((c: any) => ({
+        const parsed = arr.map((c: any) => normalizeFlexibleWeeklyFields({
           id: String(c.id),
           text: String(c.text ?? ""),
           enabled: c.enabled ?? true,
           deletedAt: c.deletedAt ? String(c.deletedAt) : undefined,
-          period: c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily",
+          period: c.period === FLEXIBLE_WEEKLY_PERIOD || c.period === "every2" || c.period === "custom" || c.period === "daily" ? c.period : "daily",
           customDays: Array.isArray(c.customDays)
                 ? (Array.from(
                     new Set(
@@ -1178,6 +1301,12 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
             typeof c.periodAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.periodAnchor)
               ? c.periodAnchor
               : undefined,
+          createdDate: isLocalDateKey(c.createdDate) ? c.createdDate : undefined,
+          flexibleWeeklyTarget: c.flexibleWeeklyTarget,
+          flexibleWeeklyStartDay: c.flexibleWeeklyStartDay,
+          flexibleWeeklyFirstPeriodStart: c.flexibleWeeklyFirstPeriodStart,
+          flexibleWeeklyLastEvaluatedPeriodStart: c.flexibleWeeklyLastEvaluatedPeriodStart,
+          flexibleWeeklyPending: c.flexibleWeeklyPending,
 
           targetPerDay: typeof c.targetPerDay === "number" && Number.isFinite(c.targetPerDay) && c.targetPerDay > 0 ? Math.floor(c.targetPerDay) : 1,
           reminderEnabled: typeof c.reminderEnabled === "boolean" ? c.reminderEnabled : false,
@@ -1190,7 +1319,7 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
           inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
             ? normalizeInactivePeriods(c.inactivePeriods)
             : c.enabled === false ? [{ startDate: "0001-01-01" }] : [],
-        })) as Challenge[];
+        }, getTodayISO())) as Challenge[];
 
         if (auth.currentUser?.uid === uid) {
           _fastChallengesCacheUid = uid;
@@ -1374,9 +1503,40 @@ export async function ensureFastKeys(): Promise<void> {
     // ignore
   }
 }
+
+async function prepareFlexibleStateForUid(
+  state: AppState,
+  uid: string,
+  todayISO = getTodayISO(),
+): Promise<{ next: AppState; changed: boolean }> {
+  const premium = await import("./premium")
+    .then(({ isPremiumConfirmedForUid }) => isPremiumConfirmedForUid(uid))
+    .catch(() => false);
+  const access = applyPlanAccessToFlexibleWeeklyState(state, premium, todayISO);
+  const evaluated = reconcileFlexibleWeeklyPeriods(access.next, todayISO, {
+    challengeIds: access.accessibleIds,
+    isActiveOnDate: (challenge, date) => isChallengeActiveOnDate(challenge, date),
+    isEasyMode: (challenge) => isChallengeEasyMode(challenge),
+  });
+  const synchronized = synchronizeFlexibleWeeklyDefinitions(evaluated.next);
+  return {
+    next: synchronized,
+    changed: access.changed || evaluated.changed || synchronized !== evaluated.next,
+  };
+}
+
 export async function loadStateForUid(uid: string): Promise<AppState> {
   if (!uid) return createDefaultState();
-  if (_cacheUid === uid && _cache) return _cache;
+  if (_cacheUid === uid && _cache) {
+    const evaluated = await prepareFlexibleStateForUid(_cache, uid);
+    if (evaluated.changed) {
+      const normalized = tagStateForUid(evaluated.next, uid);
+      _cache = normalized;
+      await writeStateSnapshotForUid(uid, normalized);
+      _notify(normalized);
+    }
+    return _cache;
+  }
 
   await ensureUidStorageReady(uid);
 
@@ -1407,13 +1567,14 @@ export async function loadStateForUid(uid: string): Promise<AppState> {
     const merged = parseAndMerge(raw);
     const { next: migrated, changed: bestStreakMigrated } =
       migrateBestStreakFromCurrent(merged);
-    const normalized = tagStateForUid(migrated, uid);
+    const flexible = await prepareFlexibleStateForUid(migrated, uid);
+    const normalized = tagStateForUid(flexible.next, uid);
     if (auth.currentUser?.uid === uid) {
       _cache = normalized;
       _cacheUid = uid;
     }
 
-    if ((usedKey && usedKey !== storageKey) || bestStreakMigrated) {
+    if ((usedKey && usedKey !== storageKey) || bestStreakMigrated || flexible.changed) {
       try {
         await writeStateSnapshotForUid(uid, normalized);
       } catch (error) {
@@ -1430,7 +1591,7 @@ export async function loadStateForUid(uid: string): Promise<AppState> {
       if (backupRaw) {
         const merged = parseAndMerge(backupRaw);
         const { next: migrated } = migrateBestStreakFromCurrent(merged);
-        const normalized = tagStateForUid(migrated, uid);
+        const normalized = tagStateForUid((await prepareFlexibleStateForUid(migrated, uid)).next, uid);
         if (auth.currentUser?.uid === uid) {
           _cache = normalized;
           _cacheUid = uid;
@@ -1481,7 +1642,8 @@ export async function saveStateForUid(state: AppState, uid: string): Promise<voi
   const existing = await loadStateForUid(uid);
   const merged = tagStateForUid(mergeWithExisting(existing, state as any), uid);
   const { next: repaired } = migrateBestStreakFromCurrent(merged);
-  const safe = tagStateForUid(repaired, uid);
+  const prepared = await prepareFlexibleStateForUid(repaired, uid);
+  const safe = tagStateForUid(prepared.next, uid);
   const backupKey = backupKeyForUid(uid);
 
   const existingCount = Array.isArray(existing?.challenges) ? existing.challenges.length : 0;
@@ -1591,7 +1753,9 @@ export async function restoreChallenge(challengeId: string): Promise<AppState> {
   return updateState((s) => ({
     ...s,
     challenges: (s.challenges ?? []).map((c) =>
-      c.id === challengeId ? { ...c, enabled: true, deletedAt: undefined } : c
+      c.id === challengeId
+        ? transitionChallengeEnabled({ ...c, deletedAt: undefined }, true, getTodayISO())
+        : c
     ),
     // ✅ když obnovíš, už to není „archivní“
     archivedChallenges: (s.archivedChallenges ?? []).filter((a) => a.id !== challengeId),

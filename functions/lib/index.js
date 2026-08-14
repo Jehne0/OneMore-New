@@ -42,6 +42,7 @@ const auth_1 = require("firebase-admin/auth");
 const firestore_2 = require("firebase-admin/firestore");
 const sharedChallengePermissions_1 = require("./sharedChallengePermissions");
 const node_crypto_1 = require("node:crypto");
+const flexibleWeeklyCore_1 = require("./flexibleWeeklyCore");
 //
 // Podpora (z aplikace)
 // - vždy uloží ticket do Firestore (admin)
@@ -279,10 +280,145 @@ function addIsoDays(dateISO, days) {
     value.setUTCDate(value.getUTCDate() + days);
     return value.toISOString().slice(0, 10);
 }
+function flexibleWeeklyWindow(challenge, dateISO) {
+    return (0, flexibleWeeklyCore_1.flexibleWeeklyWindowForServer)(challenge, dateISO);
+}
 function personalDateIsActive(challenge, dateISO) {
     if (challenge.enabled === false || challenge.deletedAt)
         return false;
+    const inactive = Array.isArray(challenge.inactivePeriods) ? challenge.inactivePeriods : [];
+    if (inactive.some((period) => String(period?.startDate ?? "") <= dateISO
+        && (!period?.endDate || dateISO < String(period.endDate))))
+        return false;
+    if (challenge.period === "flexibleWeekly")
+        return flexibleWeeklyWindow(challenge, dateISO) !== null;
     return widgetDateIsActive({ ...challenge, status: "active" }, dateISO);
+}
+function serverEasyMode(state, challenge, challengeId) {
+    return challenge.easyMode === true || (Array.isArray(state.easyModeChallengeIds)
+        && state.easyModeChallengeIds.map(String).includes(challengeId));
+}
+function serverFlexiblePeriodFullyActive(challenge, start) {
+    for (let offset = 0; offset < 7; offset += 1) {
+        if (!personalDateIsActive(challenge, addIsoDays(start, offset)))
+            return false;
+    }
+    return true;
+}
+function reconcileServerFlexibleWeekly(state, challengeId, dateISO) {
+    let challenge = (Array.isArray(state.challenges) ? state.challenges : [])
+        .find((item) => String(item?.id ?? "") === challengeId);
+    if (!challenge || challenge.period !== "flexibleWeekly") {
+        return { state, challenge, history: Array.isArray(state.history) ? state.history : [] };
+    }
+    let history = Array.isArray(state.history) ? [...state.history] : [];
+    const statsMap = { ...(state.challengeStats ?? {}) };
+    const easy = serverEasyMode(state, challenge, challengeId);
+    const evaluate = (limit) => {
+        const first = String(challenge.flexibleWeeklyFirstPeriodStart ?? "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(first))
+            return;
+        let cursor = first;
+        let marker = /^\d{4}-\d{2}-\d{2}$/.test(String(challenge.flexibleWeeklyLastEvaluatedPeriodStart ?? ""))
+            ? String(challenge.flexibleWeeklyLastEvaluatedPeriodStart) : "";
+        while (addIsoDays(cursor, 6) < limit) {
+            if (!marker || cursor > marker) {
+                const end = addIsoDays(cursor, 6);
+                if (serverFlexiblePeriodFullyActive(challenge, cursor)) {
+                    const target = Math.max(1, Math.min(7, Math.floor(Number(challenge.flexibleWeeklyTarget ?? 1))));
+                    const completedDates = new Set(history.filter((entry) => entry.status === "completed"
+                        && String(entry.challengeId ?? "") === challengeId && entry.date >= cursor && entry.date <= end)
+                        .map((entry) => String(entry.date)));
+                    if (completedDates.size < target) {
+                        const exists = history.some((entry) => entry.eventType === "weeklyGoalMissed"
+                            && entry.flexibleWeeklyPeriodStart === cursor && String(entry.challengeId ?? "") === challengeId);
+                        if (!exists)
+                            history.unshift({
+                                date: end, time: "23:59", atISO: `${end}T23:59:59.000Z`, challengeId,
+                                challengeText: safeStr(challenge.text, 500), status: "skipped",
+                                eventType: "weeklyGoalMissed", flexibleWeeklyPeriodStart: cursor,
+                                flexibleWeeklyDone: completedDates.size, flexibleWeeklyTarget: target,
+                            });
+                        if (!easy) {
+                            const previous = statsMap[challengeId] ?? {};
+                            statsMap[challengeId] = { ...previous, currentStreak: 0 };
+                        }
+                    }
+                }
+                marker = cursor;
+            }
+            cursor = addIsoDays(cursor, 7);
+        }
+        challenge = { ...challenge, flexibleWeeklyLastEvaluatedPeriodStart: marker || undefined };
+    };
+    const pending = challenge.flexibleWeeklyPending;
+    const effective = String(pending?.effectiveFrom ?? "");
+    if (pending && /^\d{4}-\d{2}-\d{2}$/.test(effective) && effective <= dateISO) {
+        evaluate(effective);
+        challenge = {
+            ...challenge,
+            flexibleWeeklyTarget: Math.max(1, Math.min(7, Math.floor(Number(pending.target ?? 1)))),
+            flexibleWeeklyStartDay: Math.max(0, Math.min(6, Math.floor(Number(pending.startDay ?? 0)))),
+            flexibleWeeklyFirstPeriodStart: effective,
+            flexibleWeeklyLastEvaluatedPeriodStart: undefined,
+            flexibleWeeklyPending: undefined,
+        };
+        evaluate(dateISO);
+    }
+    else {
+        evaluate(dateISO);
+    }
+    if (!easy) {
+        const previous = statsMap[challengeId] ?? {};
+        const events = history.filter((entry) => String(entry.challengeId ?? "") === challengeId
+            && (entry.eventType === "flexibleWeeklyCompleted" || entry.eventType === "weeklyGoalMissed"))
+            .sort((left, right) => String(left.date).localeCompare(String(right.date))
+            || String(left.time ?? "").localeCompare(String(right.time ?? ""))
+            || String(left.atISO ?? "").localeCompare(String(right.atISO ?? "")));
+        if (events.length) {
+            let current = 0;
+            let rebuiltBest = 0;
+            for (const entry of events) {
+                if (entry.eventType === "flexibleWeeklyCompleted") {
+                    current += 1;
+                    rebuiltBest = Math.max(rebuiltBest, current);
+                }
+                else {
+                    current = 0;
+                }
+            }
+            statsMap[challengeId] = {
+                ...previous,
+                currentStreak: current,
+                bestStreak: Math.max(Math.max(0, Math.floor(Number(previous.bestStreak ?? 0))), rebuiltBest),
+            };
+        }
+    }
+    const challenges = (Array.isArray(state.challenges) ? state.challenges : [])
+        .map((item) => String(item?.id ?? "") === challengeId ? challenge : item);
+    const definitions = { ...(state.flexibleWeeklyDefinitions ?? {}) };
+    definitions[challengeId] = {
+        target: Math.max(1, Math.min(7, Math.floor(Number(challenge.flexibleWeeklyTarget ?? 1)))),
+        startDay: Math.max(0, Math.min(6, Math.floor(Number(challenge.flexibleWeeklyStartDay ?? 0)))),
+        firstPeriodStart: challenge.flexibleWeeklyFirstPeriodStart,
+        ...(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(challenge.flexibleWeeklyLastEvaluatedPeriodStart ?? ""))
+            ? { lastEvaluatedPeriodStart: challenge.flexibleWeeklyLastEvaluatedPeriodStart }
+            : {}),
+        ...(challenge.flexibleWeeklyPending ? { pending: challenge.flexibleWeeklyPending } : {}),
+        updatedAtISO: new Date().toISOString(),
+    };
+    return {
+        state: {
+            ...state,
+            challenges,
+            history,
+            challengeStats: statsMap,
+            flexibleWeeklyDefinitions: definitions,
+            flexibleWeeklyWriterVersion: 2,
+        },
+        challenge,
+        history,
+    };
 }
 function previousPersonalActiveDate(challenge, dateISO) {
     for (let offset = 1; offset <= 14; offset += 1) {
@@ -299,31 +435,45 @@ async function completePersonalChallengeForWidget(uid, challengeId, dateISO, mut
         if (!snapshot.exists)
             throw new https_1.HttpsError("not-found", "Personal challenge state not found.");
         const document = snapshot.data();
-        const state = document.state;
+        let state = document.state;
         if (!state)
             throw new https_1.HttpsError("not-found", "Personal challenge state not found.");
-        const challenge = (Array.isArray(state.challenges) ? state.challenges : [])
+        let challenge = (Array.isArray(state.challenges) ? state.challenges : [])
             .find((item) => String(item?.id ?? "") === challengeId);
         if (!challenge)
             throw new https_1.HttpsError("not-found", "Personal challenge not found.");
         if (!personalDateIsActive(challenge, dateISO)) {
             throw new https_1.HttpsError("failed-precondition", "Personal challenge is not active on this date.");
         }
-        const history = Array.isArray(state.history) ? state.history : [];
+        let history = Array.isArray(state.history) ? state.history : [];
         if (history.some((entry) => entry.widgetMutationId === mutationId)) {
-            const count = history.filter((entry) => entry.date === dateISO && entry.status === "completed"
-                && String(entry.challengeId ?? "") === challengeId).length;
+            const window = flexibleWeeklyWindow(challenge, dateISO);
+            const matching = history.filter((entry) => entry.status === "completed" && String(entry.challengeId ?? "") === challengeId);
+            const count = window
+                ? new Set(matching.filter((entry) => entry.date >= window.start && entry.date <= dateISO).map((entry) => entry.date)).size
+                : matching.filter((entry) => entry.date === dateISO).length;
             return { status: "already-completed", count };
         }
-        const count = history.filter((entry) => entry.date === dateISO && entry.status === "completed"
-            && String(entry.challengeId ?? "") === challengeId).length;
+        if (challenge.period === "flexibleWeekly") {
+            const reconciled = reconcileServerFlexibleWeekly(state, challengeId, dateISO);
+            state = reconciled.state;
+            challenge = reconciled.challenge;
+            history = reconciled.history;
+        }
+        const flexibleWindow = flexibleWeeklyWindow(challenge, dateISO);
+        const completedForChallenge = history.filter((entry) => entry.status === "completed"
+            && String(entry.challengeId ?? "") === challengeId);
+        const completedToday = completedForChallenge.filter((entry) => entry.date === dateISO).length;
+        const count = flexibleWindow
+            ? new Set(completedForChallenge.filter((entry) => entry.date >= flexibleWindow.start && entry.date <= dateISO).map((entry) => entry.date)).size
+            : completedToday;
         if (count !== expectedDoneBefore)
             throw new https_1.HttpsError("failed-precondition", "Personal challenge progress changed.");
-        const target = Math.max(1, Math.min(20, Math.floor(Number(challenge.targetPerDay ?? 1))));
-        if (count >= target)
+        const target = flexibleWindow?.target ?? Math.max(1, Math.min(20, Math.floor(Number(challenge.targetPerDay ?? 1))));
+        if (count >= target || (flexibleWindow && completedToday > 0))
             return { status: "already-completed", count };
         const nextCount = count + 1;
-        const completedDay = nextCount >= target;
+        const completedDay = !!flexibleWindow || nextCount >= target;
         const now = new Date();
         const withoutSkip = history.filter((entry) => !(entry.date === dateISO && entry.status === "skipped"
             && String(entry.challengeId ?? "") === challengeId));
@@ -334,7 +484,8 @@ async function completePersonalChallengeForWidget(uid, challengeId, dateISO, mut
             challengeId,
             challengeText: safeStr(challenge.text, 500),
             status: "completed",
-            partial: !completedDay,
+            ...(flexibleWindow ? { eventType: "flexibleWeeklyCompleted" } : {}),
+            partial: flexibleWindow ? false : !completedDay,
             widgetMutationId: mutationId,
         };
         const nextState = { ...state, history: [nextEntry, ...withoutSkip] };
@@ -342,10 +493,25 @@ async function completePersonalChallengeForWidget(uid, challengeId, dateISO, mut
             const statsMap = { ...(state.challengeStats ?? {}) };
             const previous = statsMap[challengeId] ?? {};
             const completedCount = Math.max(0, Math.floor(Number(previous.completedCount ?? 0))) + 1;
-            const easy = challenge.easyMode === true || (Array.isArray(state.easyModeChallengeIds)
-                && state.easyModeChallengeIds.map(String).includes(challengeId));
+            const easy = serverEasyMode(state, challenge, challengeId);
             if (easy) {
                 statsMap[challengeId] = { ...previous, completedCount, lastCompletedDay: dateISO };
+            }
+            else if (flexibleWindow) {
+                const current = Math.max(0, Math.floor(Number(previous.currentStreak ?? 0)));
+                const nextStreak = current + 1;
+                statsMap[challengeId] = {
+                    ...previous,
+                    completedCount,
+                    skippedCount: Math.max(0, Math.floor(Number(previous.skippedCount ?? 0))),
+                    lastCompletedDay: dateISO,
+                    lastStreakDay: dateISO,
+                    currentStreak: nextStreak,
+                    bestStreak: Math.max(Math.max(0, Math.floor(Number(previous.bestStreak ?? 0))), nextStreak),
+                    skipCredits: nextStreak > 0 && nextStreak % 10 === 0
+                        ? 1 : Math.min(1, Math.max(0, Math.floor(Number(previous.skipCredits ?? 0)))),
+                };
+                nextState.lastCompletedDate = dateISO;
             }
             else {
                 const dayAlreadyCounted = previous.lastCompletedDay === dateISO;
@@ -373,7 +539,8 @@ async function completePersonalChallengeForWidget(uid, challengeId, dateISO, mut
         }
         tx.set(stateRef, {
             ...document,
-            schemaVersion: Number(document.schemaVersion ?? 1),
+            schemaVersion: Math.max(2, Number(document.schemaVersion ?? 1)),
+            writerVersion: 2,
             clientUpdatedAtISO: now.toISOString(),
             updatedAt: firestore_2.FieldValue.serverTimestamp(),
             state: nextState,

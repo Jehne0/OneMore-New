@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "./firebase";
+import { assertCloudAccessVerified } from "./cloudAccessGate";
 
 export type SharedChallengePeriod = "daily" | "every2" | "custom";
 export type SharedChallengeStatus = "pending" | "active" | "declined";
@@ -94,6 +95,7 @@ export type SharedChallengesQueryDebug = {
 };
 
 function myUid() {
+  assertCloudAccessVerified();
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Nejsi přihlášený.");
   return uid;
@@ -495,6 +497,7 @@ export function subscribeSharedChallengeDay(
   onData: (data: SharedChallengeDayProgress | null) => void,
   onError?: (e: any) => void
 ): Unsubscribe {
+  assertCloudAccessVerified();
   const ref = doc(db, "sharedChallenges", String(challengeId), "progress", String(dateISO));
 
   return onSnapshot(
@@ -528,6 +531,7 @@ export function subscribeSharedChallengeDay(
 }
 
 export async function getSharedChallenge(challengeId: string): Promise<SharedChallenge | null> {
+  assertCloudAccessVerified();
   const ref = doc(db, "sharedChallenges", String(challengeId));
   const snap = await getDoc(ref);
 
@@ -679,6 +683,7 @@ export async function completeSharedChallengeFromWidgetBackend(
   dateISO: string,
   mutationId: string,
 ): Promise<number> {
+  assertCloudAccessVerified();
   if (auth.currentUser?.uid == null) throw new Error("shared/unauthenticated");
   const complete = httpsCallable(functions, "completeSharedChallengeFromWidget");
   const response = await complete({ challengeId, date: dateISO, mutationId });
@@ -704,6 +709,7 @@ export function subscribeSharedChallengeProgress(
   onItems: (items: SharedChallengeDayProgress[]) => void,
   onError?: (e: any) => void
 ): Unsubscribe {
+  assertCloudAccessVerified();
   const col = collection(db, "sharedChallenges", String(challengeId), "progress");
 
   return onSnapshot(

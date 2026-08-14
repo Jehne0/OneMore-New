@@ -2,19 +2,23 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppState, easyModeChallengeIdSet, getCachedState, isChallengeEasyMode, loadState, subscribeState } from "../lib/storage";
+import { AppState, easyModeChallengeIdSet, getCachedState, isChallengeActiveOnDate, isChallengeEasyMode, loadState, subscribeState } from "../lib/storage";
 import { isPremiumActive, subscribePremium } from "../lib/premium";
 import { useTheme } from "../lib/theme";
-import { useTodayISO } from "../lib/clock";
+import { useTodayISO } from "../lib/useTodayISO";
 import { useI18n, type Lang } from "../lib/i18n";
+import { countDailySkippedHistory } from "../lib/statisticsHistory";
+import { MEDAL_HISTORY_THRESHOLDS } from "../lib/medalCollectionFromHistory";
+import { medalDisplaySummaryFromHistory } from "../lib/statisticsMedalSummary";
+import type { EarnedMedalTier } from "../lib/medals";
 
 const ROOT_PROFILE_STRINGS: Record<Lang, Record<string, string>> = {
-  cs: { title: "Statistika", currentStreak: "Aktuální série (dny)", longestStreak: "Nejdelší série v aplikaci", activeChallenges: "Aktivní výzvy", completed: "Celkem splněných výzev", medals: "Medaile", noMedals: "Zatím žádná. Medaile získáš po 5 / 10 / 20 / 30 / 90 / 180 dnech série.", history: "Otevřít historii výzev", days: "{count} dní" },
-  en: { title: "Statistics", currentStreak: "Current streak (days)", longestStreak: "Longest app streak", activeChallenges: "Active challenges", completed: "Challenges completed", medals: "Medals", noMedals: "None yet. You earn medals after streaks of 5 / 10 / 20 / 30 / 90 / 180 days.", history: "Open challenge history", days: "{count} days" },
-  pl: { title: "Statystyki", currentStreak: "Aktualna seria (dni)", longestStreak: "Najdłuższa seria w aplikacji", activeChallenges: "Aktywne wyzwania", completed: "Ukończone wyzwania", medals: "Medale", noMedals: "Jeszcze brak. Medale zdobędziesz za serie trwające 5 / 10 / 20 / 30 / 90 / 180 dni.", history: "Otwórz historię wyzwań", days: "{count} dni" },
-  de: { title: "Statistik", currentStreak: "Aktuelle Serie (Tage)", longestStreak: "Längste Serie in der App", activeChallenges: "Aktive Challenges", completed: "Abgeschlossene Challenges", medals: "Medaillen", noMedals: "Noch keine. Medaillen erhältst du für Serien von 5 / 10 / 20 / 30 / 90 / 180 Tagen.", history: "Challenge-Verlauf öffnen", days: "{count} Tage" },
+  cs: { title: "Statistika", currentStreak: "Aktuální série (dny)", longestStreak: "Nejdelší série v aplikaci", activeChallenges: "Aktivní výzvy", completed: "Celkem splněných výzev", medals: "Medaile", noMedals: "Zatím žádná. Medaile získáš po 5 / 10 / 20 / 30 / 60 / 90 dnech série.", history: "Otevřít historii výzev", days: "{count} dní" },
+  en: { title: "Statistics", currentStreak: "Current streak (days)", longestStreak: "Longest app streak", activeChallenges: "Active challenges", completed: "Challenges completed", medals: "Medals", noMedals: "None yet. You earn medals after streaks of 5 / 10 / 20 / 30 / 60 / 90 days.", history: "Open challenge history", days: "{count} days" },
+  pl: { title: "Statystyki", currentStreak: "Aktualna seria (dni)", longestStreak: "Najdłuższa seria w aplikacji", activeChallenges: "Aktywne wyzwania", completed: "Ukończone wyzwania", medals: "Medale", noMedals: "Jeszcze brak. Medale zdobędziesz za serie trwające 5 / 10 / 20 / 30 / 60 / 90 dni.", history: "Otwórz historię wyzwań", days: "{count} dni" },
+  de: { title: "Statistik", currentStreak: "Aktuelle Serie (Tage)", longestStreak: "Längste Serie in der App", activeChallenges: "Aktive Challenges", completed: "Abgeschlossene Challenges", medals: "Medaillen", noMedals: "Noch keine. Medaillen erhältst du für Serien von 5 / 10 / 20 / 30 / 60 / 90 Tagen.", history: "Challenge-Verlauf öffnen", days: "{count} Tage" },
 };
 
 type HistoryEntry = {
@@ -22,55 +26,17 @@ type HistoryEntry = {
   status: "completed" | "skipped";
   challengeId?: string;
   challengeText?: string;
+  eventType?: string;
 };
 
-// ---------- DATE HELPERS ----------
-function prevDayISO(iso: string) {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  dt.setDate(dt.getDate() - 1);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-function nextDayISO(iso: string) {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  dt.setDate(dt.getDate() + 1);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
-function computeLongestStreakDays(completedDays: Set<string>) {
-  if (completedDays.size === 0) return 0;
-  const dates = Array.from(completedDays).sort();
-  let best = 1;
-  let run = 1;
-  for (let i = 1; i < dates.length; i++) {
-    const prev = dates[i - 1];
-    const cur = dates[i];
-    if (cur === nextDayISO(prev)) {
-      run++;
-      if (run > best) best = run;
-    } else {
-      run = 1;
-    }
-  }
-  return best;
-}
-
-function computeCurrentStreakDays(completedDays: Set<string>, todayISO: string) {
-  let streak = 0;
-  let cursor = todayISO;
-  while (completedDays.has(cursor)) {
-    streak++;
-    cursor = prevDayISO(cursor);
-  }
-  return streak;
-}
+const STAT_MEDAL_IMAGES: Record<EarnedMedalTier, any> = {
+  brambora: require("../assets/medals/potato_medal.png"),
+  steel: require("../assets/medals/steel_medal.png"),
+  bronze: require("../assets/medals/bronze_medal.png"),
+  silver: require("../assets/medals/silver_medal.png"),
+  gold: require("../assets/medals/gold_medal.png"),
+  diamond: require("../assets/medals/diamond_medal.png"),
+};
 
 function hasEverCompleted(state: AppState | null, challengeId: string, challengeText: string) {
   const keys = (state as any)?.everCompletedKeys ?? [];
@@ -111,6 +77,11 @@ export default function ProfileScreen() {
     }, [refresh])
   );
 
+  const medalSummary = useMemo(
+    () => medalDisplaySummaryFromHistory(state, isChallengeActiveOnDate, todayISO),
+    [state, todayISO],
+  );
+
   const stats = useMemo(() => {
     const history: HistoryEntry[] = ((state as any)?.history ?? []) as HistoryEntry[];
     const archived = ((state as any)?.archivedChallenges ?? []) as any[];
@@ -120,11 +91,9 @@ export default function ProfileScreen() {
     const normalHistory = history.filter((h: any) => !easyIds.has(String(h?.challengeId ?? "")));
 
     const totalCompleted = normalHistory.filter((h) => h.status === "completed").length;
-    const totalSkipped = history.filter((h) => h.status === "skipped").length;
+    const totalSkipped = countDailySkippedHistory(history);
 
     const daysWithCompleted = new Set(normalHistory.filter((h) => h.status === "completed").map((h) => h.date));
-    const longestStreak = computeLongestStreakDays(daysWithCompleted);
-    const currentStreak = computeCurrentStreakDays(daysWithCompleted, todayISO);
 
     const activeChallengesCount = challenges.filter((c) => !c?.deletedAt && c?.enabled !== false && !isChallengeEasyMode(c)).length;
 
@@ -140,8 +109,8 @@ export default function ProfileScreen() {
       totalCompleted,
       daysWithCompleted: daysWithCompleted.size,
       totalSkipped,
-      longestStreak,
-      currentStreak,
+      longestStreak: medalSummary.longestStreak,
+      currentStreak: medalSummary.currentStreak,
       activeChallengesCount,
       everTotal,
       everActive,
@@ -149,39 +118,19 @@ export default function ProfileScreen() {
       archivedCount: archived.length,
       uniqueHistoryChallenges: uniqueHistoryChallengeIds.size,
     };
-  }, [state, todayISO]);
+  }, [medalSummary.currentStreak, medalSummary.longestStreak, state]);
 
   const earnedMedals = useMemo(() => {
-    let remaining = stats.longestStreak;
-    const medals: { icon: string; label: string }[] = [];
-
-    // Medailové prahy: 5 / 10 / 20 / 30 / 90 / 180 dní
-    while (remaining >= 180) {
-      medals.push({ icon: "🥇", label: tx.days.replace("{count}", "180") });
-      remaining -= 180;
-    }
-    while (remaining >= 90) {
-      medals.push({ icon: "🥈", label: tx.days.replace("{count}", "90") });
-      remaining -= 90;
-    }
-    while (remaining >= 30) {
-      medals.push({ icon: "🥈", label: tx.days.replace("{count}", "30") });
-      remaining -= 30;
-    }
-    while (remaining >= 20) {
-      medals.push({ icon: "🥉", label: tx.days.replace("{count}", "20") });
-      remaining -= 20;
-    }
-    while (remaining >= 10) {
-      medals.push({ icon: "🥉", label: tx.days.replace("{count}", "10") });
-      remaining -= 10;
-    }
-    while (remaining >= 5) {
-      medals.push({ icon: "🥉", label: tx.days.replace("{count}", "5") });
-      remaining -= 5;
-    }
-    return medals;
-  }, [stats.longestStreak, tx.days]);
+    return MEDAL_HISTORY_THRESHOLDS.flatMap(({ tier, days }) => {
+      const count = medalSummary.collection.state.counts[tier];
+      if (count < 1) return [];
+      return [{
+        tier,
+        image: STAT_MEDAL_IMAGES[tier],
+        label: `${tx.days.replace("{count}", String(days))}${count > 1 ? ` ×${count}` : ""}`,
+      }];
+    });
+  }, [medalSummary.collection.state.counts, tx.days]);
 
   return (
     <View style={styles.screen}>
@@ -229,9 +178,9 @@ export default function ProfileScreen() {
             <Text style={[styles.medalsSub, { color: UI.sub }]}>{tx.noMedals}</Text>
           ) : (
             <View style={styles.medalsRow}>
-              {earnedMedals.map((m, idx) => (
-                <View key={`${m.label}-${idx}`} style={styles.medalItem}>
-                  <Text style={styles.medalIcon}>{m.icon}</Text>
+              {earnedMedals.map((m) => (
+                <View key={m.tier} style={styles.medalItem}>
+                  <Image source={m.image} style={styles.medalIcon} resizeMode="contain" />
                   <Text style={[styles.medalLabel, { color: UI.sub }]}>{m.label}</Text>
                 </View>
               ))}
@@ -314,6 +263,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   medalItem: { alignItems: "center", minWidth: 64 },
-  medalIcon: { fontSize: 28, lineHeight: 32 },
+  medalIcon: { width: 42, height: 42 },
   medalLabel: { fontSize: 12, fontWeight: "900", marginTop: 2 },
 });

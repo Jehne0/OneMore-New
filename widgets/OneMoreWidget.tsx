@@ -32,7 +32,7 @@ function actionData(item: WidgetChallenge, widgetId: number) {
 
 function CompleteButton({ item, language, widgetId, width, height }: { item: WidgetChallenge; language: WidgetLanguage; widgetId: number; width: number; height: number }) {
   const completed = item.dayState === "activeCompleted";
-  const actionable = item.dayState === "activePending" && !item.lockedByPremiumExpiration;
+  const actionable = item.dayState === "activePending" && item.canCompleteToday !== false && !item.lockedByPremiumExpiration;
   const restDay = item.dayState === "restDay";
   return <FlexWidget
     accessibilityLabel={item.lockedByPremiumExpiration ? widgetCopy[language].premiumExpired : widgetDayStateLabel(language, item.dayState)}

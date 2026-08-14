@@ -222,6 +222,9 @@ struct OneMoreWidgetView: View {
     } else if challenge.dayState == "activeCompleted" {
       Label(text("Splněno", "Done", "Erledigt", "Gotowe"), systemImage: "checkmark.circle.fill")
         .font(.caption2.weight(.semibold)).foregroundStyle(accent).labelStyle(.titleAndIcon)
+    } else if challenge.allowsMultipleCompletionsToday == false && challenge.completedOnCurrentDate == true {
+      Text("\(challenge.todayDone)/\(challenge.todayTarget)")
+        .font(.caption2.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
     } else if #available(iOS 17.0, *), entry.selection?.premiumActive == true {
       Button(intent: CompleteChallengeIntent(
         challengeId: challenge.challengeId,

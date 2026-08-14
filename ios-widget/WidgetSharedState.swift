@@ -21,6 +21,9 @@ struct WidgetDailyState: Codable, Hashable {
   var completed: Bool
   var active: Bool
   var dayState: String
+  var completedOnCurrentDate: Bool?
+  var currentStreak: Int?
+  var bestStreak: Int?
   var week: [WidgetWeekDay]
 }
 
@@ -37,6 +40,9 @@ struct WidgetChallengeSnapshot: Codable, Identifiable, Hashable {
   var isActiveToday: Bool
   var dayState: String
   var lockedByPremiumExpiration: Bool
+  var allowsMultipleCompletionsToday: Bool?
+  var completedOnCurrentDate: Bool?
+  var competitiveStreakEnabled: Bool?
   var week: [WidgetWeekDay]
   var timelineDays: [WidgetDailyState]
 
@@ -49,6 +55,9 @@ struct WidgetChallengeSnapshot: Codable, Identifiable, Hashable {
     copy.todayCompleted = day.completed
     copy.isActiveToday = day.active
     copy.dayState = day.dayState
+    copy.completedOnCurrentDate = day.completedOnCurrentDate
+    copy.currentStreak = day.currentStreak ?? copy.currentStreak
+    copy.bestStreak = day.bestStreak ?? copy.bestStreak
     copy.week = day.week
     return copy
   }
@@ -480,15 +489,18 @@ enum OneMoreWidgetStateStore {
       var updated = snapshot
       var challenge = updated.challenges[challengeIndex].projected(to: date)
       guard challenge.dayState == "activePending", challenge.isActiveToday,
+            !(challenge.allowsMultipleCompletionsToday == false && challenge.completedOnCurrentDate == true),
             challenge.todayDone == expectedDoneBefore, challenge.todayDone < challenge.todayTarget else { return nil }
       let mutationId = "ios:\(uid):\(challengeType):\(challengeId):\(date):\(expectedDoneBefore)"
       if let existing = envelope.outbox.first(where: { $0.mutationId == mutationId }) { return existing }
       let nextDone = min(challenge.todayTarget, challenge.todayDone + 1)
       let completedDayNow = nextDone >= challenge.todayTarget && !challenge.todayCompleted
+      let earnedFireNow = challenge.allowsMultipleCompletionsToday == false || completedDayNow
       challenge.todayDone = nextDone
       challenge.todayCompleted = completedDayNow || challenge.todayCompleted
       challenge.dayState = challenge.todayCompleted ? "activeCompleted" : "activePending"
-      if completedDayNow {
+      challenge.completedOnCurrentDate = true
+      if earnedFireNow && challenge.competitiveStreakEnabled != false {
         challenge.currentStreak += 1
         challenge.bestStreak = max(challenge.bestStreak, challenge.currentStreak)
       }

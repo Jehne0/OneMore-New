@@ -21,6 +21,9 @@ export type IosWidgetDailyState = {
   completed: boolean;
   active: boolean;
   dayState: WidgetDayState;
+  completedOnCurrentDate?: boolean;
+  currentStreak?: number;
+  bestStreak?: number;
   week: { date: string; kind: "completed" | "partial" | "missed" | "inactive" | "future"; done: number; target: number }[];
 };
 
@@ -36,6 +39,9 @@ export type IosWidgetChallengeSnapshot = {
   isActiveToday: boolean;
   dayState: WidgetDayState;
   lockedByPremiumExpiration: boolean;
+  allowsMultipleCompletionsToday?: boolean;
+  completedOnCurrentDate?: boolean;
+  competitiveStreakEnabled?: boolean;
   week: { date: string; kind: "completed" | "partial" | "missed" | "inactive" | "future"; done: number; target: number }[];
   /** Precomputed canonical states let WidgetKit cross midnight without React Native. */
   timelineDays: IosWidgetDailyState[];
@@ -108,6 +114,9 @@ function dailyStateFor(model: WidgetModel, challengeId: string, date: string): I
     completed: item.dayState === "activeCompleted",
     active: item.isActiveToday,
     dayState: item.dayState,
+    completedOnCurrentDate: item.completedOnCurrentDate === true,
+    currentStreak: Math.max(0, item.streak),
+    bestStreak: Math.max(0, item.bestStreak),
     week: item.week.map((day) => ({ ...day })),
   };
 }
@@ -135,6 +144,9 @@ export function createIosWidgetSnapshot(
     isActiveToday: item.isActiveToday,
     dayState: item.dayState,
     lockedByPremiumExpiration: item.lockedByPremiumExpiration === true,
+    allowsMultipleCompletionsToday: item.allowsMultipleCompletionsToday !== false,
+    completedOnCurrentDate: item.completedOnCurrentDate === true,
+    competitiveStreakEnabled: item.competitiveStreakEnabled !== false,
     week: item.week.map((day) => ({ ...day })),
     timelineDays: timelineModels
       .map((frame) => dailyStateFor(frame.model, item.id, frame.date))

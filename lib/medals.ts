@@ -3,15 +3,15 @@ import { ChallengeStats } from "./storage";
 export type MedalTier = "none" | "brambora" | "steel" | "bronze" | "silver" | "gold" | "diamond";
 
 export const MEDAL_THRESHOLDS: Array<{ tier: Exclude<MedalTier, "none">; days: number }> = [
-  { tier: "diamond", days: 180 },
-  { tier: "gold", days: 90 },
+  { tier: "diamond", days: 90 },
+  { tier: "gold", days: 60 },
   { tier: "silver", days: 30 },
   { tier: "bronze", days: 20 },
   { tier: "steel", days: 10 },
   { tier: "brambora", days: 5 },
 ];
 
-export const MEDAL_CYCLE_DAYS = 180;
+export const MEDAL_CYCLE_DAYS = 90;
 
 function safeStreak(streak: number): number {
   return Math.max(0, Math.floor(Number.isFinite(streak) ? streak : 0));

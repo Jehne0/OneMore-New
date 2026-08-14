@@ -22,8 +22,9 @@ import { updateAllOneMoreWidgets } from "../widgets/widgetService";
 import { clearWidgetSessionForExplicitSignOut, setWidgetActiveUid } from "./widgetSession";
 import { updateAccountDisplayName } from "./accountSnapshot";
 import { replaySharedCompletionsForCurrentUser } from "./sharedCompletion";
-import { shouldUploadLocalState } from "./cloudMergePolicy";
+import { preserveUnknownFlexibleWeeklyFields, shouldUploadLocalState } from "./cloudMergePolicy";
 import { revokeIosWidgetAccessGrant } from "./iosWidgetAccess";
+import { isCloudAccessVerified } from "./cloudAccessGate";
 
 const REVIEW_ACCOUNT_EMAIL = "review@desigame.eu";
 
@@ -373,6 +374,7 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function syncNow(expectedUid?: string): Promise<void> {
+  if (!isCloudAccessVerified()) return;
   const user = auth.currentUser;
   if (!user) return;
 
@@ -409,7 +411,11 @@ export async function syncNow(expectedUid?: string): Promise<void> {
   if (cloud?.state && hasMeaningfulState(cloud.state)) {
     const repaired = isReviewAccount() ? ensureReviewDemoState(cloud.state) : null;
     const iso = repaired?.changed ? new Date().toISOString() : cloudISO || new Date().toISOString();
-    const state = repaired?.state ?? cloud.state;
+    const state = preserveUnknownFlexibleWeeklyFields(
+      local,
+      repaired?.state ?? cloud.state,
+      Number(cloud.writerVersion ?? cloud.schemaVersion ?? 1),
+    );
     await replaceStateForUid(state, uid, iso);
     if (repaired?.changed) {
       await writeCloudState(uid, state, iso);
@@ -442,6 +448,7 @@ export async function syncNow(expectedUid?: string): Promise<void> {
 }
 
 function scheduleUpload(uid: string, state: AppState) {
+  if (!isCloudAccessVerified()) return;
   const iso = new Date().toISOString();
   _pending = { uid, state, iso };
 
@@ -451,7 +458,7 @@ function scheduleUpload(uid: string, state: AppState) {
     const p = _pending;
     _pending = null;
     _timer = null;
-    if (!user || !p || user.uid !== p.uid) return;
+    if (!isCloudAccessVerified() || !user || !p || user.uid !== p.uid) return;
 
     try {
       await writeCloudState(p.uid, p.state, p.iso);
@@ -465,7 +472,7 @@ function scheduleUpload(uid: string, state: AppState) {
 }
 
 export function startCloudAutoSync() {
-  if (_unsubState) return;
+  if (!isCloudAccessVerified() || _unsubState) return;
 
   _unsubState = subscribeState((state) => {
     const uid = auth.currentUser?.uid;
@@ -498,7 +505,7 @@ export async function clearSessionAfterExplicitLogout(): Promise<void> {
 }
 
 export function initCloudSync() {
-  if (_unsubAuth) return;
+  if (!isCloudAccessVerified() || _unsubAuth) return;
 
   _unsubAuth = onAuthStateChanged(auth, (user) => {
     const generation = ++_authGeneration;
@@ -510,6 +517,7 @@ export function initCloudSync() {
     // not proof of an explicit logout, so preserve the durable widget UID and
     // the last UID-scoped state. Explicit account actions clear them directly.
     if (!user) {
+      stopCloudAutoSync();
       _bootstrapPromise = Promise.resolve();
       return;
     }
@@ -574,10 +582,19 @@ export function initCloudSync() {
   });
 }
 
+export function stopCloudSync(): void {
+  ++_authGeneration;
+  stopCloudAutoSync();
+  _unsubAuth?.();
+  _unsubAuth = null;
+  _bootstrapUid = null;
+  _bootstrapPromise = Promise.resolve();
+}
+
 export async function waitForCloudSyncReady(
   expectedUid: string
 ): Promise<void> {
-  if (!expectedUid) return;
+  if (!expectedUid || !isCloudAccessVerified()) return;
   initCloudSync();
 
   while (

@@ -11,6 +11,15 @@ export async function readStoredLanguage(): Promise<Lang> {
 
 export type Dictionary = {
   appSubtitle: string;
+  flexibleWeekly: {
+    label: string;
+    weeklyCount: string;
+    firstPeriodDay: string;
+    chooseFirstDayHint: string;
+    weeklyProgress: string;
+    weeklyGoalMissed: string;
+    changeAppliesFrom: string;
+  };
   tabs: {
     today: string;
     challenges: string;
@@ -105,6 +114,15 @@ export type Dictionary = {
 export const STRINGS: Record<Lang, Dictionary> = {
   cs: {
     appSubtitle: "Jeden krok dnes. Velká změna zítra.",
+    flexibleWeekly: {
+      label: "Xkrát za týden",
+      weeklyCount: "Splnění za týden",
+      firstPeriodDay: "První den sedmidenního období",
+      chooseFirstDayHint: "Vyber den, kdy každé sedmidenní období začíná.",
+      weeklyProgress: "{done}/{target} tento týden",
+      weeklyGoalMissed: "Týdenní cíl nesplněn ({start}–{end}): {done}/{target}",
+      changeAppliesFrom: "Změna začne platit od {date}.",
+    },
     tabs: {
       today: "OneMore",
       challenges: "Výzvy",
@@ -198,6 +216,15 @@ export const STRINGS: Record<Lang, Dictionary> = {
 
   en: {
     appSubtitle: "One step today. A big change tomorrow.",
+    flexibleWeekly: {
+      label: "X times per week",
+      weeklyCount: "Completions per week",
+      firstPeriodDay: "First day of the 7-day period",
+      chooseFirstDayHint: "Choose when each seven-day period starts.",
+      weeklyProgress: "{done}/{target} this week",
+      weeklyGoalMissed: "Weekly goal missed ({start}–{end}): {done}/{target}",
+      changeAppliesFrom: "The change will apply from {date}.",
+    },
     tabs: {
       today: "OneMore",
       challenges: "Challenges",
@@ -291,6 +318,15 @@ export const STRINGS: Record<Lang, Dictionary> = {
 
   pl: {
     appSubtitle: "Jeden krok dziś. Wielka zmiana jutro.",
+    flexibleWeekly: {
+      label: "X razy w tygodniu",
+      weeklyCount: "Wykonania w tygodniu",
+      firstPeriodDay: "Pierwszy dzień okresu 7-dniowego",
+      chooseFirstDayHint: "Wybierz dzień rozpoczęcia każdego okresu.",
+      weeklyProgress: "{done}/{target} w tym tygodniu",
+      weeklyGoalMissed: "Cel tygodniowy niewykonany ({start}–{end}): {done}/{target}",
+      changeAppliesFrom: "Zmiana zacznie obowiązywać od {date}.",
+    },
     tabs: {
       today: "OneMore",
       challenges: "Wyzwania",
@@ -384,6 +420,15 @@ export const STRINGS: Record<Lang, Dictionary> = {
 
   de: {
     appSubtitle: "Ein Schritt heute. Eine große Veränderung morgen.",
+    flexibleWeekly: {
+      label: "X-mal pro Woche",
+      weeklyCount: "Erfüllungen pro Woche",
+      firstPeriodDay: "Erster Tag des 7-Tage-Zeitraums",
+      chooseFirstDayHint: "Wähle den Beginn jedes siebentägigen Zeitraums.",
+      weeklyProgress: "{done}/{target} diese Woche",
+      weeklyGoalMissed: "Wochenziel nicht erreicht ({start}–{end}): {done}/{target}",
+      changeAppliesFrom: "Die Änderung gilt ab {date}.",
+    },
     tabs: {
       today: "OneMore",
       challenges: "Challenges",

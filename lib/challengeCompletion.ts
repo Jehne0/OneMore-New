@@ -9,6 +9,13 @@ import {
   saveStateForUid,
   updateStatsOnCompleted,
 } from "./storage";
+import {
+  FLEXIBLE_WEEKLY_PERIOD,
+  canCompleteFlexibleWeekly,
+  flexibleWeeklyProgress,
+  reconcileFlexibleWeeklyPeriods,
+  updateFlexibleWeeklyStatsOnCompletion,
+} from "./flexibleWeekly";
 
 export type CompletionMutation = {
   id: string;
@@ -61,6 +68,9 @@ export async function acknowledgeCompletionOutbox(uid: string): Promise<void> {
 }
 
 function targetFor(challenge: Challenge): number {
+  if (challenge.period === FLEXIBLE_WEEKLY_PERIOD) {
+    return flexibleWeeklyProgress(challenge, [], getTodayISO()).target;
+  }
   const raw = Math.floor(Number(challenge.targetPerDay ?? 1));
   return Number.isFinite(raw) && raw > 0 ? raw : 1;
 }
@@ -72,17 +82,28 @@ export function applyChallengeCompletion(
   now = new Date()
 ): CompletionResult {
   const id = String(challengeId);
+  state = reconcileFlexibleWeeklyPeriods(state, date, {
+    challengeIds: [id],
+    isActiveOnDate: (challenge, day) => isChallengeActiveOnDate(challenge, day),
+    isEasyMode: (challenge) => isChallengeEasyMode(challenge),
+  }).next;
   const challenge = (state.challenges ?? []).find((item) => String(item.id) === id);
   if (!challenge) return { status: "not-found", state };
   if (!isChallengeActiveOnDate(challenge, date)) return { status: "inactive", state };
 
-  const completed = (state.history ?? []).filter(
+  const completedToday = (state.history ?? []).filter(
     (entry) => entry.date === date && entry.status === "completed" && String(entry.challengeId) === id
   ).length;
-  const target = targetFor(challenge);
-  if (completed >= target) return { status: "already-completed", state };
+  const flexible = challenge.period === FLEXIBLE_WEEKLY_PERIOD;
+  const flexibleProgress = flexible ? flexibleWeeklyProgress(challenge, state.history ?? [], date) : null;
+  const completed = flexibleProgress?.done ?? completedToday;
+  const target = flexibleProgress?.target ?? targetFor(challenge);
+  if ((flexible && !canCompleteFlexibleWeekly(challenge, state.history ?? [], date)) || (!flexible && completed >= target)) {
+    return { status: "already-completed", state };
+  }
 
-  const completedDay = completed + 1 >= target;
+  const completedDay = flexible || completed + 1 >= target;
+  const completedPeriod = completed + 1 >= target;
   const history = (state.history ?? []).filter(
     (entry) => !(entry.date === date && entry.status === "skipped" && String(entry.challengeId) === id)
   );
@@ -92,7 +113,9 @@ export function applyChallengeCompletion(
 
   const next: AppState = {
     ...state,
-    challengeStats: completedDay ? updateStatsOnCompleted(state, id, date) : state.challengeStats,
+    challengeStats: flexible
+      ? updateFlexibleWeeklyStatsOnCompletion(state, id, date, isChallengeEasyMode(challenge))
+      : completedDay ? updateStatsOnCompleted(state, id, date) : state.challengeStats,
     history: [{
       date,
       time,
@@ -100,12 +123,13 @@ export function applyChallengeCompletion(
       challengeId: id,
       challengeText: challenge.text,
       status: "completed",
-      partial: !completedDay,
+      eventType: flexible ? "flexibleWeeklyCompleted" : undefined,
+      partial: flexible ? false : !completedDay,
     }, ...history],
     lastCompletedDate: completedDay && !isChallengeEasyMode(challenge) ? date : state.lastCompletedDate,
     everCompletedKeys: Array.from(ever),
   };
-  return { status: "completed", state: next, completedDay };
+  return { status: "completed", state: next, completedDay: flexible ? completedPeriod : completedDay };
 }
 
 export async function completeChallengeForUid(

@@ -3,8 +3,10 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { isCloudAccessVerified } from "./cloudAccessGate";
 
 export async function registerPushTokenForCurrentUser() {
+  if (!isCloudAccessVerified()) return null;
   const uid = auth.currentUser?.uid;
   if (!uid) return null;
 

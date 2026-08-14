@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { Platform } from "react-native";
 import { auth, functions } from "./firebase";
+import { isCloudAccessVerified } from "./cloudAccessGate";
 import {
   clearIosWidgetAccessGrant,
   prepareIosWidgetAccessKey,
@@ -20,7 +21,7 @@ function parseJson<T>(value: string | null): T | null {
 }
 
 export async function ensureIosWidgetAccessGrant(uid: string): Promise<void> {
-  if (Platform.OS !== "ios" || !uid || auth.currentUser?.uid !== uid) return;
+  if (!isCloudAccessVerified() || Platform.OS !== "ios" || !uid || auth.currentUser?.uid !== uid) return;
   const current = parseJson<WidgetGrant>(await readIosWidgetAccessGrant());
   const prepared = parseJson<PreparedKey>(await prepareIosWidgetAccessKey());
   if (!prepared?.keyId || !prepared.publicKeyBase64) throw new Error("iOS widget signing key is unavailable");
@@ -38,7 +39,7 @@ export async function ensureIosWidgetAccessGrant(uid: string): Promise<void> {
 export async function revokeIosWidgetAccessGrant(): Promise<void> {
   if (Platform.OS !== "ios") return;
   try {
-    if (auth.currentUser?.uid) {
+    if (isCloudAccessVerified() && auth.currentUser?.uid) {
       const revoke = httpsCallable(functions, "revokeIosWidgetAccessGrants");
       await revoke({});
     }

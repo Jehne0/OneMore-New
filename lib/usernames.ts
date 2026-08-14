@@ -1,5 +1,10 @@
 import { doc, getDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import {
+  assertCloudAccessVerified,
+  assertVerifiedCloudAccessLease,
+  captureVerifiedCloudAccessLease,
+} from "./cloudAccessGate";
 
 export type UserProfile = {
   uid: string;
@@ -18,6 +23,7 @@ function norm(username: string) {
 }
 
 export async function claimUsername(uid: string, username: string) {
+  assertCloudAccessVerified();
   const usernameTrim = username.trim();
   const usernameLower = norm(usernameTrim);
 
@@ -81,6 +87,7 @@ export async function claimUsername(uid: string, username: string) {
 }
 
 export async function resolveUidByUsername(username: string): Promise<string | null> {
+  assertCloudAccessVerified();
   const usernameLower = norm(username);
   if (!usernameLower) return null;
 
@@ -92,6 +99,7 @@ export async function resolveUidByUsername(username: string): Promise<string | n
 }
 
 export async function getProfile(uid: string): Promise<UserProfile | null> {
+  assertCloudAccessVerified();
   const publicSnap = await getDoc(doc(db, "publicProfiles", uid));
 
   if (publicSnap.exists()) {
@@ -131,7 +139,15 @@ export function getMyUid(): string {
   return uid;
 }
 
-export async function changeUsername(uid: string, newUsername: string) {
+export type ChangeUsernameRuntime = {
+  runTransaction(update: (transaction: any) => Promise<void>): Promise<void>;
+};
+
+export async function changeUsername(
+  uid: string,
+  newUsername: string,
+  runtime?: ChangeUsernameRuntime,
+) {
   const newTrim = newUsername.trim();
   const newLower = norm(newTrim);
 
@@ -143,22 +159,29 @@ export async function changeUsername(uid: string, newUsername: string) {
     throw new Error("Username může obsahovat písmena/čísla, tečku, podtržítko a pomlčku.");
   }
 
+  const cloudLease = captureVerifiedCloudAccessLease();
   const userRef = doc(db, "users", uid);
   const newUnameRef = doc(db, "usernames", newLower);
   const publicProfileRef = doc(db, "publicProfiles", uid);
+  const executeTransaction: ChangeUsernameRuntime["runTransaction"] = runtime?.runTransaction
+    ?? ((update) => runTransaction(db, update));
 
-  await runTransaction(db, async (tx) => {
+  assertVerifiedCloudAccessLease(cloudLease);
+  await executeTransaction(async (tx) => {
     const userSnap = await tx.get(userRef);
+    assertVerifiedCloudAccessLease(cloudLease);
     if (!userSnap.exists()) throw new Error("Profil neexistuje.");
 
     const profile = userSnap.data()?.profile;
     const oldLower = profile?.usernameLower;
 
     const newSnap = await tx.get(newUnameRef);
+    assertVerifiedCloudAccessLease(cloudLease);
     if (newSnap.exists() && newSnap.data()?.uid !== uid) {
       throw new Error("Tohle uživatelské jméno je už obsazené.");
     }
 
+    assertVerifiedCloudAccessLease(cloudLease);
     if (oldLower && oldLower !== newLower) {
       const oldUnameRef = doc(db, "usernames", oldLower);
       tx.delete(oldUnameRef);

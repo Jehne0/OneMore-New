@@ -1,12 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, AppState, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useI18n } from "./i18n";
 import { useTheme } from "./theme";
-import { checkRemoteAppVersion, type VersionCheckResult } from "./versionCheck";
+import { checkRemoteAppVersion, type VersionCheckDecision, type VersionCheckResult } from "./versionCheck";
 import { getSafeModalMetrics } from "./safeModalLayout";
 import { getResponsiveLayout } from "./responsiveLayout";
+import { createVersionGateController, type VersionGateController } from "./updateStartupPolicy";
+import type { CloudAccessStatus } from "./cloudAccessGate";
+
+const UNVERIFIED_RETRY_MS = 15_000;
 
 function getUpdateOpenError(lang: string): string {
   switch (lang) {
@@ -21,7 +25,13 @@ function getUpdateOpenError(lang: string): string {
   }
 }
 
-export function UpdateGate() {
+export function UpdateGate({
+  onCloudAccessChange,
+  onCloudSyncAllowed,
+}: {
+  onCloudAccessChange: (status: CloudAccessStatus) => void;
+  onCloudSyncAllowed: () => void;
+}) {
   const { lang, t } = useI18n();
   const { UI, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -34,21 +44,52 @@ export function UpdateGate() {
     heightRatio: 0.86,
   });
   const [update, setUpdate] = useState<VersionCheckResult | null>(null);
+  const checkRef = useRef(() => checkRemoteAppVersion(lang));
+  const accessChangeRef = useRef(onCloudAccessChange);
+  const cloudAllowedRef = useRef(onCloudSyncAllowed);
+  const cancelledRef = useRef(false);
+  const controllerRef = useRef<VersionGateController | null>(null);
+
+  checkRef.current = () => checkRemoteAppVersion(lang);
+  accessChangeRef.current = onCloudAccessChange;
+  cloudAllowedRef.current = onCloudSyncAllowed;
+
+  if (!controllerRef.current) {
+    controllerRef.current = createVersionGateController({
+      check: () => checkRef.current(),
+      isCancelled: () => cancelledRef.current,
+      onDecision: (decision: VersionCheckDecision) => {
+        accessChangeRef.current(decision.status);
+        setUpdate(decision.status === "unverified" ? null : decision.update ?? null);
+      },
+      startCloudSync: () => cloudAllowedRef.current(),
+    });
+  }
+
+  const verifyVersion = useCallback(() => {
+    void controllerRef.current?.verify();
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void (async () => {
-        const result = await checkRemoteAppVersion(lang);
-        if (!cancelled) setUpdate(result);
-      })();
-    }, 1500);
+    cancelledRef.current = false;
+    verifyVersion();
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && controllerRef.current?.currentStatus() === "unverified") {
+        verifyVersion();
+      }
+    });
+    const retry = setInterval(() => {
+      if (AppState.currentState === "active" && controllerRef.current?.currentStatus() === "unverified") {
+        verifyVersion();
+      }
+    }, UNVERIFIED_RETRY_MS);
 
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      cancelledRef.current = true;
+      appStateSubscription.remove();
+      clearInterval(retry);
     };
-  }, [lang]);
+  }, [verifyVersion]);
 
   const styles = useMemo(() => {
     const sheetBg = isDark ? "rgba(60, 44, 33, 0.96)" : "#FFF3E8";

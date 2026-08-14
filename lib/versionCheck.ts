@@ -13,6 +13,11 @@ export type VersionCheckResult = {
   updateUrl?: string;
 };
 
+export type VersionCheckDecision =
+  | { status: "verified"; update?: VersionCheckResult }
+  | { status: "updateRequired"; update: VersionCheckResult }
+  | { status: "unverified" };
+
 type VersionConfig = {
   // Původní společné hodnoty necháváme jako fallback,
   // aby se nerozbila aktuální Android produkce.
@@ -103,10 +108,10 @@ function getPlatformVersionConfig(data: VersionConfig) {
   };
 }
 
-export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckResult | null> {
+export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckDecision> {
   try {
     const snap = await getDoc(doc(db, "appConfig", "versionCheck"));
-    if (!snap.exists()) return null;
+    if (!snap.exists()) return { status: "verified" };
 
     const data = snap.data() as VersionConfig;
     const currentVersionCode = getCurrentVersionCode();
@@ -128,7 +133,7 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
           updateType: "none",
         });
       }
-      return null;
+      return { status: "unverified" };
     }
 
     const messageValue = data.message?.[lang];
@@ -145,7 +150,10 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
           updateType: "required",
         });
       }
-      return { level: "required", latestVersionName, message, updateUrl };
+      return {
+        status: "updateRequired",
+        update: { level: "required", latestVersionName, message, updateUrl },
+      };
     }
 
     if (latestVersionCode > currentVersionCode) {
@@ -159,7 +167,10 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
           updateType: "recommended",
         });
       }
-      return { level: "recommended", latestVersionName, message, updateUrl };
+      return {
+        status: "verified",
+        update: { level: "recommended", latestVersionName, message, updateUrl },
+      };
     }
 
     if (__DEV__) {
@@ -173,8 +184,8 @@ export async function checkRemoteAppVersion(lang: Lang): Promise<VersionCheckRes
       });
     }
 
-    return null;
+    return { status: "verified" };
   } catch {
-    return null;
+    return { status: "unverified" };
   }
 }

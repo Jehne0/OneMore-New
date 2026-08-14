@@ -44,7 +44,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert } from "../../lib/appAlert";
 import { getSafeModalMetrics } from "../../lib/safeModalLayout";
-import { useTodayISO } from "../../lib/clock";
+import { useTodayISO } from "../../lib/useTodayISO";
 import { auth, db } from "../../lib/firebase";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import { FREE_MAX_CHALLENGES } from "../../lib/plan";
@@ -59,6 +59,7 @@ import {
 import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
+  prepareChallengeReminders,
   refreshScheduledChallengeReminders,
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
@@ -91,8 +92,20 @@ import {
 import * as Haptics from "expo-haptics";
 import { useI18n } from "../../lib/i18n";
 import { completeChallengeForUid } from "../../lib/challengeCompletion";
+import {
+  FLEXIBLE_WEEKLY_PERIOD,
+  clampFlexibleWeeklyTarget,
+  flexibleWeeklyProgress,
+  localDayMon0,
+  scheduleFlexibleWeeklySettings,
+} from "../../lib/flexibleWeekly";
 import { newestChallengeTimelineFirst } from "../../lib/challengeHistoryTimeline";
+import { formatFlexibleWeeklyMissedLabel } from "../../lib/flexibleWeeklyPresentation";
+import { MAX_MEDAL_COUNT_PER_CHALLENGE } from "../../lib/medalCollectionFromHistory";
+import { medalDisplaySummaryFromHistory } from "../../lib/statisticsMedalSummary";
 import { updateAllOneMoreWidgets } from "../../widgets/widgetService";
+import { useCloudAccess } from "../../lib/cloudAccessGate";
+import { commitPreparedNotificationChange, createEditorConfirmationController, createEditorDraft } from "../../lib/notificationSaveFlow";
 import {
   cacheSharedChallenges,
   cacheSharedProgress,
@@ -210,38 +223,11 @@ function getUserChallengesForPlan(state?: AppState | null): any[] {
   );
 }
 
-type DayStatus = "completed" | "skipped" | "free" | "none";
-
-type MedalState = {
-  active: {
-    brambora: boolean;
-    steel: boolean;
-    bronze: boolean;
-    silver: boolean;
-    gold: boolean;
-    diamond: boolean;
-  };
-  counts: {
-    brambora: number;
-    steel: number;
-    bronze: number;
-    silver: number;
-    gold: number;
-    diamond: number;
-  };
-};
-
-const MEDAL_CYCLE_DAYS = 90;
-const MAX_MEDAL_COUNT_PER_CHALLENGE = 10;
+type DayStatus = "completed" | "skipped" | "weeklyGoalMissed" | "free" | "none";
 
 function safeBestStreak(value: unknown): number {
   const streak = Number(value);
   return Math.max(0, Math.floor(Number.isFinite(streak) ? streak : 0));
-}
-
-function earnedMedalCount(bestStreak: number, threshold: number): number {
-  if (bestStreak < threshold) return 0;
-  return 1 + Math.floor((bestStreak - threshold) / MEDAL_CYCLE_DAYS);
 }
 
 function highestEarnedMedalForBestStreak(value: unknown): MedalTier {
@@ -255,171 +241,11 @@ function highestEarnedMedalForBestStreak(value: unknown): MedalTier {
   return "none";
 }
 
-function emptyMedalCounts(): MedalState["counts"] {
-  return {
-    brambora: 0,
-    steel: 0,
-    bronze: 0,
-    silver: 0,
-    gold: 0,
-    diamond: 0,
-  };
-}
-
-function addRunMedals(counts: MedalState["counts"], runLength: number) {
-  for (const medal of MEDAL_OVERVIEW_TIERS) {
-    counts[medal.tier] = Math.min(
-      counts[medal.tier] + earnedMedalCount(runLength, medal.days),
-      MAX_MEDAL_COUNT_PER_CHALLENGE
-    );
-  }
-}
-
 function medalBadgeCount(count: number): number {
   return Math.min(
     Math.max(0, count),
     MAX_MEDAL_COUNT_PER_CHALLENGE
   );
-}
-
-function medalCollectionFromHistory(
-  state: AppState | null | undefined,
-  isActiveOnDate: (challenge: any, dateISO: string) => boolean,
-  todayISO: string
-) {
-  const stats = state?.challengeStats ?? {};
-  const history = state?.history ?? [];
-  const challengeIds = new Set<string>(Object.keys(stats).map(String));
-  const easyModeChallengeIds = new Set(
-    (state?.easyModeChallengeIds ?? []).map(String)
-  );
-  const definitions = new Map<string, any>();
-  const eventsByChallenge = new Map<
-    string,
-    Map<string, { completed: boolean; skipped: boolean; protectedByFreeze: boolean }>
-  >();
-
-  for (const challenge of [
-    ...(state?.archivedChallenges ?? []),
-    ...(state?.challenges ?? []),
-  ]) {
-    const id = String((challenge as any)?.id ?? "");
-    if (id) definitions.set(id, challenge);
-  }
-
-  for (const entry of history as any[]) {
-    const challengeId = String(entry?.challengeId ?? "");
-    const date = String(entry?.date ?? "");
-    if (!challengeId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-
-    challengeIds.add(challengeId);
-    let eventsByDate = eventsByChallenge.get(challengeId);
-    if (!eventsByDate) {
-      eventsByDate = new Map();
-      eventsByChallenge.set(challengeId, eventsByDate);
-    }
-
-    const event = eventsByDate.get(date) ?? {
-      completed: false,
-      skipped: false,
-      protectedByFreeze: false,
-    };
-    if (entry?.status === "completed" && entry?.partial !== true) {
-      event.completed = true;
-    }
-    if (entry?.status === "skipped") {
-      event.skipped = true;
-      event.protectedByFreeze ||= entry?.protectedByFreeze === true;
-    }
-    eventsByDate.set(date, event);
-  }
-
-  const counts = emptyMedalCounts();
-  const earnedByChallenge = new Map<string, MedalState["counts"]>();
-
-  for (const challengeId of challengeIds) {
-    const earned = emptyMedalCounts();
-    const definition = definitions.get(challengeId);
-    const schedule = definition
-      ? { ...definition, enabled: true, deletedAt: undefined }
-      : null;
-    const easyMode =
-      easyModeChallengeIds.has(challengeId) ||
-      isChallengeEasyMode(definition);
-    const events = Array.from(eventsByChallenge.get(challengeId)?.entries() ?? [])
-      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
-    let runLength = 0;
-    let previousDate: string | null = null;
-    let hasUsableHistoryRun = false;
-
-    const commitRun = () => {
-      if (runLength < 1) return;
-      hasUsableHistoryRun = true;
-      addRunMedals(earned, runLength);
-      runLength = 0;
-    };
-
-    if (!easyMode) {
-      for (const [date, event] of events) {
-        if (previousDate) {
-          for (
-            let missingDate = addDaysISO(previousDate, 1);
-            missingDate < date && missingDate < todayISO;
-            missingDate = addDaysISO(missingDate, 1)
-          ) {
-            if (!schedule || isActiveOnDate(schedule, missingDate)) {
-              commitRun();
-              break;
-            }
-          }
-        }
-
-        const activeOnEventDate =
-          !schedule || isActiveOnDate(schedule, date);
-        if (event.completed) {
-          runLength += 1;
-        } else if (event.skipped) {
-          if (!event.protectedByFreeze && activeOnEventDate) {
-            commitRun();
-          }
-        } else if (activeOnEventDate && date < todayISO) {
-          commitRun();
-        }
-
-        previousDate = date;
-      }
-      commitRun();
-    }
-
-    if (!hasUsableHistoryRun) {
-      const bestStreak = safeBestStreak((stats as any)?.[challengeId]?.bestStreak);
-      for (const medal of MEDAL_OVERVIEW_TIERS) {
-        earned[medal.tier] = Math.min(
-          earnedMedalCount(bestStreak, medal.days),
-          MAX_MEDAL_COUNT_PER_CHALLENGE
-        );
-      }
-    }
-
-    for (const medal of MEDAL_OVERVIEW_TIERS) {
-      counts[medal.tier] += earned[medal.tier];
-    }
-    earnedByChallenge.set(challengeId, earned);
-  }
-
-  const active = {
-    brambora: counts.brambora > 0,
-    steel: counts.steel > 0,
-    bronze: counts.bronze > 0,
-    silver: counts.silver > 0,
-    gold: counts.gold > 0,
-    diamond: counts.diamond > 0,
-  };
-
-  return {
-    state: { active, counts } satisfies MedalState,
-    earnedByChallenge,
-  };
 }
 
 function SparkleBurst({ progress }: { progress: Animated.Value }) {
@@ -811,6 +637,22 @@ function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight
       padding: 14,
       maxHeight: safeModal.maxHeight,
     },
+    keyboardBackdrop: {
+      flex: 1,
+      justifyContent: "flex-end",
+      paddingHorizontal: 12,
+      paddingBottom: safeModal.bottom,
+      backgroundColor: UI.backdrop,
+    },
+    keyboardSheet: {
+      position: "relative",
+      left: undefined,
+      right: undefined,
+      bottom: undefined,
+      width: "100%",
+      minHeight: 0,
+      flexShrink: 1,
+    },
     sheetHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -905,6 +747,17 @@ pickerRow: {
       backgroundColor: UI.accent,
     },
     primaryBtnText: { color: "#0B1220", fontWeight: "900", fontSize: 15 },
+    saveConfirmation: {
+      marginTop: 10,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      textAlign: "center",
+      overflow: "hidden",
+      color: "#0B1220",
+      backgroundColor: "#86EFAC",
+      fontWeight: "900",
+    },
 
     secondaryBtn: {
       flexDirection: "row",
@@ -1253,9 +1106,10 @@ sharedMemberCount: {
 
 export default function Index() {
   const router = useRouter();
+  const { allowed: cloudAllowed, sessionEpoch: cloudSessionEpoch } = useCloudAccess();
 
   const { UI, mode } = useTheme();
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
 const TXT = useMemo(() => {
   if (lang === "en") {
     return {
@@ -1349,7 +1203,8 @@ notificationCount: "Number of notifications",
       notificationFreeLimit: "In the free version, you can only have notifications for one challenge. Turn them off on another challenge first.",
       expoGoNotifications: "Notifications do not work in Expo Go. Since Expo SDK 53, notifications are disabled in Expo Go. A development build (EAS) is required.",
       notificationsFailed: "Could not set notifications.",
-      notificationsSaved: "Notifications were saved.",
+      notificationsSaved: "Notification saved.",
+      saving: "Saving…",
       notificationsDisabled: "Notifications were turned off.",
       doneAction: "Done",
       chooseHistoryChallenge: "Choose a challenge to view its history.",
@@ -1456,7 +1311,8 @@ notificationCount: "Liczba powiadomień",
       notificationFreeLimit: "W wersji Free możesz mieć powiadomienia tylko dla jednego wyzwania. Najpierw wyłącz je przy innym wyzwaniu.",
       expoGoNotifications: "Powiadomienia nie działają w Expo Go. Od Expo SDK 53 powiadomienia w Expo Go są wyłączone. Wymagany jest development build (EAS).",
       notificationsFailed: "Nie udało się ustawić powiadomień.",
-      notificationsSaved: "Powiadomienia zostały zapisane.",
+      notificationsSaved: "Powiadomienie zostało zapisane.",
+      saving: "Zapisywanie…",
       notificationsDisabled: "Powiadomienia zostały wyłączone.",
       doneAction: "Gotowe",
       chooseHistoryChallenge: "Wybierz wyzwanie, aby wyświetlić jego historię.",
@@ -1564,7 +1420,8 @@ notificationCount: "Anzahl der Benachrichtigungen",
       notificationFreeLimit: "In der Free-Version kannst du Benachrichtigungen nur für eine Challenge haben. Schalte sie zuerst bei einer anderen Challenge aus.",
       expoGoNotifications: "Benachrichtigungen funktionieren in Expo Go nicht. Seit Expo SDK 53 sind Benachrichtigungen in Expo Go deaktiviert. Ein Development Build (EAS) ist erforderlich.",
       notificationsFailed: "Benachrichtigungen konnten nicht eingestellt werden.",
-      notificationsSaved: "Benachrichtigungen wurden gespeichert.",
+      notificationsSaved: "Benachrichtigung gespeichert.",
+      saving: "Wird gespeichert…",
       notificationsDisabled: "Benachrichtigungen wurden deaktiviert.",
       doneAction: "Fertig",
       chooseHistoryChallenge: "Wähle eine Challenge aus, um ihren Verlauf anzuzeigen.",
@@ -1670,7 +1527,8 @@ notificationCount: "Počet notifikací",
     notificationFreeLimit: "Ve Free verzi můžeš mít notifikace jen u jedné výzvy. Vypni je nejdřív u jiné výzvy.",
     expoGoNotifications: "Notifikace v Expo Go nefungují. Od Expo SDK 53 byly notifikace v Expo Go vypnuté. Je potřeba development build (EAS).",
     notificationsFailed: "Nepodařilo se nastavit notifikace.",
-    notificationsSaved: "Notifikace byly uloženy.",
+    notificationsSaved: "Notifikace byla uložena.",
+    saving: "Ukládám…",
     notificationsDisabled: "Notifikace byly vypnuty.",
     doneAction: "Hotovo",
     chooseHistoryChallenge: "Vyber výzvu pro zobrazení historie.",
@@ -1733,6 +1591,10 @@ notificationCount: "Počet notifikací",
   }, []);
 
   useEffect(() => {
+    if (!cloudAllowed) {
+      setFriendEdges([]);
+      return;
+    }
     if (!auth.currentUser?.uid) {
       setFriendEdges([]);
       return;
@@ -1742,9 +1604,10 @@ notificationCount: "Počet notifikací",
       (edges) => setFriendEdges(edges),
       () => setFriendEdges([])
     );
-  }, []);
+  }, [cloudAllowed, cloudSessionEpoch]);
 
   useEffect(() => {
+    if (!cloudAllowed) return;
     let mounted = true;
     const acceptedFriendUids = Array.from(
       new Set(
@@ -1783,7 +1646,7 @@ notificationCount: "Počet notifikací",
     return () => {
       mounted = false;
     };
-  }, [friendEdges, sharedFriendNames, TXT.unknownUser]);
+  }, [cloudAllowed, cloudSessionEpoch, friendEdges, sharedFriendNames, TXT.unknownUser]);
 
   
 
@@ -1793,7 +1656,7 @@ notificationCount: "Počet notifikací",
     let unsubDays: Array<() => void> = [];
     let unsubProgress: Array<() => void> = [];
 
-    if (!auth.currentUser?.uid) {
+    if (!cloudAllowed || !auth.currentUser?.uid) {
       setSharedChallenges([]);
       setSharedChallengesLoaded(true);
       setSharedTodayMap({});
@@ -1951,7 +1814,7 @@ notificationCount: "Počet notifikací",
       unsubDays.forEach((u) => u());
       unsubProgress.forEach((u) => u());
     };
-  }, [TXT.unknownUser, sharedRefreshEpoch]);
+  }, [TXT.unknownUser, cloudAllowed, cloudSessionEpoch, sharedRefreshEpoch]);
 
   
 
@@ -1997,6 +1860,8 @@ notificationCount: "Počet notifikací",
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [medalsOverviewOpen, setMedalsOverviewOpen] = useState(false);
   const [addModalText, setAddModalText] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
+  const addSaveLock = useRef(false);
   const [manageId, setManageId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -2039,14 +1904,25 @@ async function openSharedNotificationSettings() {
   const [manageEnabled, setManageEnabled] = useState(true);
   const [manageEasyMode, setManageEasyMode] = useState(false);
   const [manageTarget, setManageTarget] = useState(1);
-  const [managePeriod, setManagePeriod] = useState<"daily" | "every2" | "custom">("daily");
+  const [managePeriod, setManagePeriod] = useState<"daily" | "every2" | "custom" | "flexibleWeekly">("daily");
   const [manageCustomDays, setManageCustomDays] = useState<number[]>([]);
   const [managePeriodAnchor, setManagePeriodAnchor] = useState<string | null>(null);
+  const [manageFlexibleStartDay, setManageFlexibleStartDay] = useState(0);
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
   const [manageRemEnabled, setManageRemEnabled] = useState(false);
   const [manageRemCount, setManageRemCount] = useState(1);
   const [manageRemTimes, setManageRemTimes] = useState<string[]>([]);
   const [manageRename, setManageRename] = useState("");
+  const [manageSaving, setManageSaving] = useState(false);
+  const [manageSaveConfirmation, setManageSaveConfirmation] = useState("");
+  const manageSaveLock = useRef(false);
+  const manageRenameDraft = useRef(createEditorDraft());
+  const manageEditorSession = useRef(0);
+  const manageConfirmation = useRef(createEditorConfirmationController());
+  const manageScrollRef = useRef<ScrollView>(null);
+  const addScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => () => manageConfirmation.current.cancelSession(), []);
 
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [timePickerIndex, setTimePickerIndex] = useState(0);
@@ -2065,7 +1941,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       const target = clamp(Number((c as any).targetPerDay ?? 1) || 1, 1, 20);
 
       const rawPeriod = String((c as any).period ?? "daily");
-      const period: "daily" | "every2" | "custom" = rawPeriod === "every2" || rawPeriod === "custom" ? (rawPeriod as any) : "daily";
+      const period: "daily" | "every2" | "custom" | "flexibleWeekly" = rawPeriod === FLEXIBLE_WEEKLY_PERIOD || rawPeriod === "every2" || rawPeriod === "custom" ? (rawPeriod as any) : "daily";
       const customDays: number[] = Array.isArray((c as any).customDays)
         ? (c as any).customDays
             .map((n: any) => Number(n))
@@ -2082,24 +1958,35 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       setManageId(String(id));
       setManageEnabled(enabled);
       setManageEasyMode(isChallengeEasyMode(c));
-      setManageTarget(target);
+      setManageTarget(period === FLEXIBLE_WEEKLY_PERIOD ? clampFlexibleWeeklyTarget((c as any).flexibleWeeklyPending?.target ?? (c as any).flexibleWeeklyTarget ?? target) : target);
       setManagePeriod(period);
       setManageCustomDays(uniqueDays);
       setManagePeriodAnchor(anchor);
+      setManageFlexibleStartDay(Number((c as any).flexibleWeeklyPending?.startDay ?? (c as any).flexibleWeeklyStartDay ?? localDayMon0(todayISO)));
       setManageRemEnabled(remEnabled);
       setManageRemTimes(remEnabled ? safeTimes : []);
       setManageRemCount(clamp((remEnabled ? safeTimes.length : 1) || 1, 1, Math.min(10, target)));
-      setManageRename(String((c as any).text ?? ""));
+      const currentName = String((c as any).text ?? "");
+      manageRenameDraft.current.set(currentName);
+      setManageRename(currentName);
+      setManageSaveConfirmation("");
+      manageSaveLock.current = false;
+      setManageSaving(false);
+      manageEditorSession.current = manageConfirmation.current.beginSession();
       setManageOpen(true);
     },
-    [appState?.challenges]
+    [appState?.challenges, todayISO]
   );
 
   const closeManage = useCallback(() => {
+    manageConfirmation.current.cancelSession();
     Keyboard.dismiss();
     setManageOpen(false);
     setManageId(null);
     setManageEasyMode(false);
+    setManageSaveConfirmation("");
+    manageSaveLock.current = false;
+    setManageSaving(false);
   }, []);
 
   const persist = useCallback(async (updater: (latest: AppState) => AppState) => {
@@ -2109,8 +1996,12 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   }, []);
 
   const addChallengeFromHero = useCallback(async () => {
+    if (addSaveLock.current) return;
     const trimmed = addModalText.trim();
     if (!trimmed) return;
+    addSaveLock.current = true;
+    setAddSaving(true);
+    try {
     if (!premium) {
       const latest = await loadState();
       const total = getUserChallengesForPlan(latest).length;
@@ -2139,17 +2030,23 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       const newId = String(Date.now());
       return {
         ...latest2,
-        challenges: [{ id: newId, text: trimmed, enabled: true }, ...(latest2.challenges ?? [])],
+        challenges: [{ id: newId, text: trimmed, enabled: true, createdDate: todayISO }, ...(latest2.challenges ?? [])],
       };
     });
     setAddModalOpen(false);
-  }, [addModalText, persist, premium, router]);
+    } finally {
+      addSaveLock.current = false;
+      setAddSaving(false);
+    }
+  }, [addModalText, persist, premium, router, todayISO]);
 
   const saveBasicsImmediate = useCallback(
     async (nextEnabled: boolean, nextTarget: number) => {
       if (!manageId) return;
       const id = String(manageId);
-      const target = clamp(Number(nextTarget) || 1, 1, 20);
+      const target = managePeriod === FLEXIBLE_WEEKLY_PERIOD
+        ? clampFlexibleWeeklyTarget(nextTarget)
+        : clamp(Number(nextTarget) || 1, 1, 20);
 
       await persist((latest) => {
         const list = [...(latest.challenges ?? [])];
@@ -2160,10 +2057,13 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         const prevEnabled = prevItem?.enabled !== false;
         const willEnabled = !!nextEnabled;
 
-        const item = {
-          ...transitionChallengeEnabled(prevItem, willEnabled, todayISO),
-          targetPerDay: target,
-        };
+        const transitioned = transitionChallengeEnabled(prevItem, willEnabled, todayISO);
+        const hasFlexibleHistory = (latest.history ?? []).some((entry) => String(entry.challengeId ?? "") === id);
+        const mayConfigureImmediately = prevItem.period === FLEXIBLE_WEEKLY_PERIOD && !hasFlexibleHistory &&
+          !prevItem.flexibleWeeklyLastEvaluatedPeriodStart && String(prevItem.flexibleWeeklyFirstPeriodStart ?? todayISO) >= todayISO;
+        const item = managePeriod === FLEXIBLE_WEEKLY_PERIOD
+          ? scheduleFlexibleWeeklySettings(transitioned, target, manageFlexibleStartDay, todayISO, mayConfigureImmediately)
+          : { ...transitioned, targetPerDay: target };
 
         if (prevEnabled === willEnabled) {
           list[idx] = item;
@@ -2201,7 +2101,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         setManageRemTimes((arr) => (Array.isArray(arr) ? arr.slice(0, clamp(manageRemCount, 1, maxN)) : []));
       }
     },
-    [manageId, manageRemCount, manageRemEnabled, persist, todayISO]
+    [manageFlexibleStartDay, manageId, managePeriod, manageRemCount, manageRemEnabled, persist, todayISO]
   );
 
   const enableEasyMode = useCallback(async () => {
@@ -2236,7 +2136,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   }, [enableEasyMode, manageEasyMode, TXT.easyModeCancel, TXT.easyModeConfirm, TXT.easyModeConfirmMessage, TXT.easyModeConfirmTitle]);
 
   const savePeriodImmediate = useCallback(
-    async (nextPeriod: "daily" | "every2" | "custom", nextCustomDays?: number[]) => {
+    async (nextPeriod: "daily" | "every2" | "custom" | "flexibleWeekly", nextCustomDays?: number[]) => {
       if (!manageId) return;
       const id = String(manageId);
 
@@ -2260,12 +2160,14 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         if (idx === -1) return latest as any;
 
         const prevItem = list[idx] as any;
-        list[idx] = {
-          ...prevItem,
-          period: nextPeriod,
-          customDays: nextPeriod === "custom" ? uniqueDays : [],
-          periodAnchor: nextPeriod === "every2" ? String(anchor) : undefined,
-        };
+        list[idx] = nextPeriod === FLEXIBLE_WEEKLY_PERIOD
+          ? scheduleFlexibleWeeklySettings(prevItem, manageTarget, manageFlexibleStartDay, todayISO)
+          : {
+              ...prevItem,
+              period: nextPeriod,
+              customDays: nextPeriod === "custom" ? uniqueDays : [],
+              periodAnchor: nextPeriod === "every2" ? String(anchor) : undefined,
+            };
         return { ...(latest as any), challenges: list } as any;
       });
 
@@ -2285,37 +2187,60 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       setManageCustomDays(nextPeriod === "custom" ? uniqueDays : []);
       setManagePeriodAnchor(nextPeriod === "every2" ? String(anchor) : null);
     },
-    [manageId, manageCustomDays, managePeriodAnchor, persist, todayISO]
+    [manageFlexibleStartDay, manageId, manageCustomDays, managePeriodAnchor, manageTarget, persist, todayISO]
   );
+
+  const saveFlexibleStartDayImmediate = useCallback(async (startDay: number) => {
+    if (!manageId) return;
+    const id = String(manageId);
+    const normalizedDay = Math.min(6, Math.max(0, Math.floor(startDay)));
+    setManageFlexibleStartDay(normalizedDay);
+    await persist((latest) => ({
+      ...latest,
+      challenges: (latest.challenges ?? []).map((challenge) => {
+        if (String(challenge.id) !== id) return challenge;
+        const hasFlexibleHistory = (latest.history ?? []).some((entry) => String(entry.challengeId ?? "") === id);
+        const mayConfigureImmediately = !hasFlexibleHistory && !challenge.flexibleWeeklyLastEvaluatedPeriodStart &&
+          String(challenge.flexibleWeeklyFirstPeriodStart ?? todayISO) >= todayISO;
+        return scheduleFlexibleWeeklySettings(challenge, manageTarget, normalizedDay, todayISO, mayConfigureImmediately);
+      }),
+    }));
+  }, [manageId, manageTarget, persist, todayISO]);
 
   const saveRenameImmediate = useCallback(async () => {
     if (!manageId) return;
-    const v = manageRename.trim();
+    const v = manageRenameDraft.current.readTrimmed();
     if (!v) return;
     const next = await renameChallenge(String(manageId), v);
     await saveState(next);
-  }, [manageId, manageRename]);
+  }, [manageId]);
 
   const renameTimer = useRef<any>(null);
+  const renameInFlight = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
-    if (!manageOpen) return;
+    if (!manageOpen || manageSaving) return;
     if (!manageId) return;
     if ((managed?.text ?? "") === manageRename) return;
 
     if (renameTimer.current) clearTimeout(renameTimer.current);
     renameTimer.current = setTimeout(() => {
-      void saveRenameImmediate();
+      renameTimer.current = null;
+      renameInFlight.current = saveRenameImmediate();
     }, 600);
 
     return () => {
       if (renameTimer.current) clearTimeout(renameTimer.current);
     };
-  }, [manageOpen, manageId, managed?.text, manageRename, saveRenameImmediate]);
+  }, [manageOpen, manageSaving, manageId, managed?.text, manageRename, saveRenameImmediate]);
 
  const applyManageReminders = useCallback(async () => {
-  if (!manageId) return;
+  if (!manageId || manageSaveLock.current) return;
+  manageSaveLock.current = true;
+  setManageSaving(true);
+  setManageSaveConfirmation("");
 
   const id = String(manageId);
+  const editorSession = manageEditorSession.current;
   const wantsEnabled = !!manageRemEnabled;
 
   const target = clamp(Number(manageTarget) || 1, 1, 20);
@@ -2332,50 +2257,80 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     times = [nowHM()];
   }
 
-  if (!premium && wantsEnabled) {
-    const activeId = getFreeActiveReminderChallengeId(appState as any);
-    const anySharedActive = await hasAnyActiveSharedNotification();
-
-    if ((activeId && String(activeId) !== id) || anySharedActive) {
-      Alert.alert(TXT.notifications, TXT.notificationFreeLimit);
+  try {
+    const name = manageRenameDraft.current.readTrimmed();
+    if (!name) {
+      Alert.alert(TXT.manageTitle, TXT.namePlaceholder);
       return;
     }
-  }
+    if (!premium && wantsEnabled) {
+      const activeId = getFreeActiveReminderChallengeId(appState as any);
+      const anySharedActive = await hasAnyActiveSharedNotification();
+      if ((activeId && String(activeId) !== id) || anySharedActive) {
+        Alert.alert(TXT.notifications, TXT.notificationFreeLimit);
+        return;
+      }
+    }
 
-  try {
+    if (renameTimer.current) clearTimeout(renameTimer.current);
+    renameTimer.current = null;
+    await renameInFlight.current.catch(() => undefined);
+
+    const configureChallenge = (challenge: any) => {
+      const enabledChallenge = transitionChallengeEnabled(challenge, manageEnabled, todayISO);
+      const configured = managePeriod === FLEXIBLE_WEEKLY_PERIOD
+        ? scheduleFlexibleWeeklySettings(enabledChallenge, manageTarget, manageFlexibleStartDay, todayISO)
+        : {
+            ...enabledChallenge,
+            targetPerDay: clamp(manageTarget, 1, 20),
+            period: managePeriod,
+            customDays: managePeriod === "custom" ? manageCustomDays : [],
+            periodAnchor: managePeriod === "every2" ? (managePeriodAnchor ?? todayISO) : undefined,
+          };
+      return { ...configured, text: name };
+    };
+    const preview = configureChallenge(managed);
+    const prepared = await prepareChallengeReminders(
+      id,
+      name,
+      times,
+      wantsEnabled,
+      {
+        period: preview.period,
+        enabled: preview.enabled !== false && !preview.deletedAt,
+        isActiveOnDate: (dateISO) => isStoredChallengeActiveOnDate(preview, dateISO),
+      }
+    );
+
+    await commitPreparedNotificationChange({
+      persist: () => persist((latest) =>
+        prepared.applyToState(latest, (challenge) => configureChallenge(challenge))
+      ),
+      restore: prepared.restoreOriginalState,
+      rollback: prepared.rollback,
+      finalize: prepared.finalize,
+    });
+
     if (wantsEnabled) {
-      const latest = await loadState();
-      const c = (latest.challenges ?? []).find(
-        (x: any) => String(x.id) === id
-      ) as any;
-
-      await setDailyRemindersForChallenge(
-        id,
-        String(c?.text ?? "OneMore"),
-        times
-      );
-
+      times = prepared.times;
       setManageRemTimes(times);
       setManageRemCount(times.length);
-
-      Alert.alert(TXT.notifications, TXT.notificationsSaved);
     } else {
-      await clearDailyRemindersForChallenge(id);
-
       setManageRemTimes([]);
       setManageRemCount(1);
-
-      Alert.alert(TXT.notifications, TXT.notificationsDisabled);
     }
+    await manageConfirmation.current.confirm({
+      session: editorSession,
+      message: TXT.notificationsSaved,
+      showConfirmation: setManageSaveConfirmation,
+      closeEditor: closeManage,
+    });
   } catch (e: any) {
     const msg = String(e?.message ?? "");
 
     if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
       Alert.alert(TXT.notifications, TXT.expoGoNotifications);
     } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
-      try {
-        await clearDailyRemindersForChallenge(id);
-      } catch {}
       setManageRemEnabled(false);
       setManageRemTimes([]);
       setManageRemCount(1);
@@ -2383,6 +2338,9 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     } else {
       Alert.alert(TXT.notifications, TXT.notificationsFailed);
     }
+  } finally {
+    manageSaveLock.current = false;
+    setManageSaving(false);
   }
 }, [
   manageId,
@@ -2390,15 +2348,25 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   manageRemTimes,
   manageRemCount,
   manageRemEnabled,
+  manageEnabled,
+  managePeriod,
+  manageCustomDays,
+  managePeriodAnchor,
+  manageFlexibleStartDay,
+  managed,
   premium,
   appState,
+  persist,
+  todayISO,
+  closeManage,
+  TXT.manageTitle,
+  TXT.namePlaceholder,
   TXT.notifications,
   TXT.notificationFreeLimit,
   TXT.expoGoNotifications,
   TXT.notificationPermissionDenied,
   TXT.notificationsFailed,
   TXT.notificationsSaved,
-  TXT.notificationsDisabled,
 ]);
 
   const deleteManagedChallenge = useCallback(async () => {
@@ -2488,6 +2456,16 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     setAppState(s);
   }, [todayISO]);
 
+  useEffect(() => {
+    const subscription = RNAppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        void reload();
+        void updateAllOneMoreWidgets();
+      }
+    });
+    return () => subscription.remove();
+  }, [reload]);
+
   useFocusEffect(
     useCallback(() => {
       void reload();
@@ -2495,7 +2473,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   );
 
   const tdy = todayISO;
-  const historyEntries = appState?.history ?? [];
+  const historyEntries = useMemo(() => appState?.history ?? [], [appState?.history]);
 
 const visibleChallenges = useMemo(() => {
   return appState?.challenges ?? [];
@@ -2518,7 +2496,7 @@ const count = visibleChallenges.length;
 const sidePadding = 18;
 
   const dayIndex = useMemo(() => {
-    const byChallenge = new Map<string, Map<string, { completed: number; skipped: boolean; protectedByFreeze?: boolean; lastTime?: string }>>();
+    const byChallenge = new Map<string, Map<string, { completed: number; skipped: boolean; weeklyGoalMissed?: boolean; weeklyDone?: number; weeklyTarget?: number; weeklyPeriodStart?: string; weeklyPeriodEnd?: string; protectedByFreeze?: boolean; lastTime?: string }>>();
     const startDate = new Map<string, string>();
 
     for (const h of historyEntries as any[]) {
@@ -2539,7 +2517,15 @@ const sidePadding = 18;
         const t = String(h?.time ?? "");
         if (t && (!cur.lastTime || t > cur.lastTime)) cur.lastTime = t;
       } else if (h?.status === "skipped") {
-        cur.skipped = true;
+        if (h?.eventType === "weeklyGoalMissed") {
+          cur.weeklyGoalMissed = true;
+          cur.weeklyDone = Math.max(0, Number(h?.flexibleWeeklyDone ?? 0));
+          cur.weeklyTarget = Math.max(1, Number(h?.flexibleWeeklyTarget ?? 1));
+          cur.weeklyPeriodStart = String(h?.flexibleWeeklyPeriodStart ?? date);
+          cur.weeklyPeriodEnd = date;
+        } else {
+          cur.skipped = true;
+        }
         if (h?.protectedByFreeze === true) cur.protectedByFreeze = true;
       }
 
@@ -2562,6 +2548,9 @@ const sidePadding = 18;
 
   function targetForChallenge(challengeId: string): number {
     const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId));
+    if (c?.period === FLEXIBLE_WEEKLY_PERIOD) {
+      return flexibleWeeklyProgress(c, historyEntries, tdy).target;
+    }
     const t = Number((c as any)?.targetPerDay ?? 1);
     return Number.isFinite(t) && t > 0 ? Math.floor(t) : 1;
   }
@@ -2570,26 +2559,11 @@ const sidePadding = 18;
     return (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
   }
 
-  function isEasyChallengeId(challengeId: string): boolean {
-    return isChallengeEasyMode(getChallengeById(challengeId));
-  }
-
-  function easyHistoryStreakForChallenge(challengeId: string): number {
-    const completedDates = new Set<string>();
-
-    for (const [date, summary] of dayIndex.byChallenge.get(String(challengeId)) ?? new Map()) {
-      const target = targetForChallenge(challengeId);
-      if ((summary.completed ?? 0) >= Math.max(1, target)) {
-        completedDates.add(String(date));
-      }
-    }
-
-    const stats = appState?.challengeStats?.[String(challengeId)];
-    const stored = Number((stats as any)?.currentStreak ?? 0);
-    return Math.max(Number.isFinite(stored) ? Math.floor(stored) : 0, completedDates.size);
-  }
-
   function completedTodayCount(challengeId: string): number {
+    const challenge = getChallengeById(challengeId);
+    if (challenge?.period === FLEXIBLE_WEEKLY_PERIOD) {
+      return flexibleWeeklyProgress(challenge, historyEntries, tdy).done;
+    }
     const raw = getDaySummary(challengeId, tdy)?.completed ?? 0;
     const target = Math.max(1, targetForChallenge(challengeId));
     return Math.min(raw, target);
@@ -3002,99 +2976,38 @@ const sidePadding = 18;
 
   function dayStatus(challengeId: string, date: string): DayStatus {
     const s = getDaySummary(challengeId, date);
+    const challenge = getChallengeById(challengeId);
     if (s) {
+      if (challenge?.period === FLEXIBLE_WEEKLY_PERIOD) {
+        if (s.weeklyGoalMissed) return "weeklyGoalMissed";
+        if ((s.completed ?? 0) > 0) return "completed";
+        if (s.skipped) return "skipped";
+        return "none";
+      }
       const target = targetForChallenge(challengeId);
       if ((s.completed ?? 0) >= Math.max(1, target)) return "completed";
       if (s.skipped) return "skipped";
       return "none";
     }
 
-    const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
+    const c = challenge;
     if (c?.enabled === false || c?.deletedAt) return "none";
     if (c && !isChallengeActiveOnDate(c, date)) return "free";
 
     return "none";
   }
 
-  function isTodayIncompleteForStreak(challengeId: string) {
-    const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
-    if (c && !isChallengeActiveOnDate(c, tdy)) return false;
-
-    const st = dayStatus(challengeId, tdy);
-    if (st === "completed" || st === "free") return false;
-    if (st === "none") return false;
-
-    const stats = appState?.challengeStats?.[String(challengeId)];
-    const current = Number((stats as any)?.currentStreak ?? 0);
-    const todaySum = getDaySummary(challengeId, tdy);
-    const hasEligibleFreeze = todaySum?.skipped === true && todaySum?.protectedByFreeze === true && current >= 10;
-
-    return st === "skipped" && !hasEligibleFreeze;
-  }
-
-  function previousActiveDateForChallenge(challengeId: string): string | null {
-    const c = (visibleChallenges as any[]).find((x) => String(x.id) === String(challengeId)) as any;
-    if (!c) return addDaysISO(tdy, -1);
-
-    for (let i = 1; i <= 14; i++) {
-      const d = addDaysISO(tdy, -i);
-      if (isChallengeActiveOnDate(c, d)) return d;
-    }
-
-    return null;
-  }
-
-  function hasMissedPreviousActiveDayForStreak(challengeId: string) {
-    const prevDate = previousActiveDateForChallenge(challengeId);
-    if (!prevDate) return false;
-    if (prevDate < getStartDateForChallenge(challengeId)) return false;
-
-    const prevStatus = dayStatus(challengeId, prevDate);
-    if (prevStatus === "completed" || prevStatus === "free") return false;
-
-    const stats = appState?.challengeStats?.[String(challengeId)];
-    const current = Number((stats as any)?.currentStreak ?? 0);
-    const prevSum = getDaySummary(challengeId, prevDate);
-    const hasEligibleFreeze = prevSum?.skipped === true && prevSum?.protectedByFreeze === true && current >= 10;
-
-    return !hasEligibleFreeze;
-  }
-
-  function streakForChallenge(challengeId: string) {
-    if (isEasyChallengeId(challengeId)) return easyHistoryStreakForChallenge(challengeId);
-
-    const stats = appState?.challengeStats?.[String(challengeId)];
-    const s = Number((stats as any)?.currentStreak ?? 0);
-    if ((stats as any)?.lastCompletedDay === tdy && Number.isFinite(s) && s > 0) return s;
-    if (isTodayIncompleteForStreak(challengeId)) return 0;
-    if (hasMissedPreviousActiveDayForStreak(challengeId)) return 0;
-    return Number.isFinite(s) ? s : 0;
-  }
-
-const bestStreak = useMemo(() => {
-  const challenges = getUserChallengesForPlan(appState);
-  let max = 0;
-
-  for (const ch of challenges) {
-    if (!ch) continue;
-    if (isChallengeEasyMode(ch as any)) continue;
-
-    const id = String(ch.id);
-    const v = streakForChallenge(id);
-
-    if (Number.isFinite(v)) {
-      max = Math.max(max, Math.floor(v));
-    }
-  }
-
-  return max;
-}, [appState?.challenges, appState?.challengeStats, dayIndex, tdy]);
-
-  const medalCollection = useMemo(
-    () => medalCollectionFromHistory(appState, isChallengeActiveOnDate, tdy),
+  const medalSummary = useMemo(
+    () => medalDisplaySummaryFromHistory(appState, isChallengeActiveOnDate, tdy),
     [appState, isChallengeActiveOnDate, tdy]
   );
+  const medalCollection = medalSummary.collection;
   const medalState = medalCollection.state;
+  const bestStreak = medalSummary.currentStreak;
+
+  function streakForChallenge(challengeId: string): number {
+    return medalCollection.streaksByChallenge.get(String(challengeId))?.currentStreak ?? 0;
+  }
 
   const medalOverview = useMemo(() => {
     const names = new Map<string, string>();
@@ -3122,9 +3035,7 @@ const bestStreak = useMemo(() => {
     }[]>();
 
     for (const [challengeId, earned] of medalCollection.earnedByChallenge) {
-      const bestStreak = safeBestStreak(
-        appState?.challengeStats?.[challengeId]?.bestStreak
-      );
+      const bestStreak = medalCollection.streaksByChallenge.get(challengeId)?.bestStreak ?? 0;
 
       for (const medal of MEDAL_OVERVIEW_TIERS) {
         const earnedCount = earned[medal.tier];
@@ -3148,10 +3059,10 @@ const bestStreak = useMemo(() => {
     return grouped;
   }, [
     appState?.archivedChallenges,
-    appState?.challengeStats,
     appState?.challenges,
     appState?.history,
     medalCollection.earnedByChallenge,
+    medalCollection.streaksByChallenge,
     TXT.medalChallengeFallback,
   ]);
 
@@ -3166,31 +3077,10 @@ const highestMedalForFriends = useMemo(() => {
 }, [medalState]);
 
 const totalMedalsForFriends = useMemo(() => {
-  let total = 0;
+  return Object.values(medalState.counts).reduce((total, count) => total + count, 0);
+}, [medalState.counts]);
 
-  for (const stats of Object.values(appState?.challengeStats ?? {})) {
-    if (safeBestStreak(stats?.bestStreak) >= MEDAL_OVERVIEW_TIERS[0].days) {
-      total += 1;
-    }
-  }
-
-  return total;
-}, [appState?.challengeStats]);
-
-const bestStreakForFriends = useMemo(() => {
-  const stats = appState?.challengeStats ?? {};
-  let best = 0;
-
-  for (const [id, value] of Object.entries(stats as Record<string, any>)) {
-    const challenge = (appState?.challenges ?? []).find((c: any) => String(c.id) === String(id));
-    if (isChallengeEasyMode(challenge as any)) continue;
-
-    const n = Number((value as any)?.bestStreak ?? 0);
-    if (Number.isFinite(n)) best = Math.max(best, Math.floor(n));
-  }
-
-  return best;
-}, [appState?.challengeStats, appState?.challenges]);
+const bestStreakForFriends = medalSummary.bestStreak;
 
 const activeChallengesForFriends = useMemo(() => {
   const list = (appState?.challenges ?? []) as any[];
@@ -3199,7 +3089,7 @@ const activeChallengesForFriends = useMemo(() => {
 
 useEffect(() => {
   const uid = auth.currentUser?.uid;
-  if (!uid) return;
+  if (!cloudAllowed || !uid) return;
   if (!appState) return;
 
   void updateDoc(doc(db, "users", uid), {
@@ -3217,6 +3107,8 @@ useEffect(() => {
   totalMedalsForFriends,
   highestMedalForFriends,
   activeChallengesForFriends,
+  cloudAllowed,
+  cloudSessionEpoch,
 ]);
 
   function medalLabel(tier: MedalTier): string {
@@ -3264,15 +3156,14 @@ useEffect(() => {
 
   const selectedChallengeMedal: MedalTier = selectedId
     ? highestEarnedMedalForBestStreak(
-        Number(appState?.challengeStats?.[String(selectedId)]?.bestStreak ?? 0)
+        medalCollection.streaksByChallenge.get(String(selectedId))?.bestStreak ?? 0
       )
     : "none";
 
   const selectedChallengeBestStreak = useMemo(() => {
     if (!selectedId) return 0;
-    const stats = appState?.challengeStats?.[String(selectedId)];
-    return Number(stats?.bestStreak ?? 0);
-  }, [appState?.challengeStats, selectedId]);
+    return medalCollection.streaksByChallenge.get(String(selectedId))?.bestStreak ?? 0;
+  }, [medalCollection.streaksByChallenge, selectedId]);
 
   const timeline = useMemo(() => {
     if (!selectedId) return [];
@@ -3280,7 +3171,7 @@ useEffect(() => {
     const start = getStartDateForChallenge(selectedId);
     const totalDays = Math.max(0, daysBetween(start, tdy));
 
-    const days: { date: string; status: DayStatus; time?: string; done?: number; target?: number }[] = [];
+    const days: { date: string; status: DayStatus; time?: string; done?: number; target?: number; periodStart?: string; periodEnd?: string }[] = [];
     const target = targetForChallenge(selectedId);
 
     for (let i = 0; i <= totalDays; i++) {
@@ -3291,8 +3182,18 @@ useEffect(() => {
         date: d,
         status: st,
         time: sum?.lastTime,
-        done: sum?.completed ?? 0,
-        target,
+        done: sum?.weeklyGoalMissed
+          ? sum.weeklyDone
+          : getChallengeById(selectedId)?.period === FLEXIBLE_WEEKLY_PERIOD
+          ? flexibleWeeklyProgress(getChallengeById(selectedId), historyEntries, d).done
+          : sum?.completed ?? 0,
+        target: sum?.weeklyGoalMissed
+          ? sum.weeklyTarget
+          : getChallengeById(selectedId)?.period === FLEXIBLE_WEEKLY_PERIOD
+          ? flexibleWeeklyProgress(getChallengeById(selectedId), historyEntries, d).target
+          : target,
+        periodStart: sum?.weeklyPeriodStart,
+        periodEnd: sum?.weeklyPeriodEnd,
       });
     }
 
@@ -3825,11 +3726,11 @@ useEffect(() => {
 >
   <KeyboardAvoidingView
     style={{ flex: 1 }}
-    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    behavior="height"
     keyboardVerticalOffset={0}
   >
-    <Pressable style={styles.backdrop}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+    <Pressable style={styles.keyboardBackdrop}>
+          <Pressable style={[styles.sheet, styles.keyboardSheet]} onPress={() => {}}>
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.addTitle}</Text>
               <Pressable
@@ -3844,8 +3745,9 @@ useEffect(() => {
             </View>
 
             <ScrollView
+              ref={addScrollRef}
               keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              automaticallyAdjustKeyboardInsets={false}
             >
               <TextInput
                 value={addModalText}
@@ -3853,19 +3755,20 @@ useEffect(() => {
                 placeholder={TXT.namePlaceholder}
                 placeholderTextColor={UI.sub}
                 style={[styles.input, { color: UI.text, borderColor: UI.stroke }]}
+                onFocus={() => requestAnimationFrame(() => addScrollRef.current?.scrollTo({ y: 0, animated: true }))}
                 autoCapitalize="sentences"
                 returnKeyType="done"
                 onSubmitEditing={() => {
-                  if (addModalText.trim()) void addChallengeFromHero();
+                  if (addModalText.trim() && !addSaving) void addChallengeFromHero();
                 }}
               />
 
               <Pressable
                 onPress={() => void addChallengeFromHero()}
-                disabled={!addModalText.trim()}
+                disabled={!addModalText.trim() || addSaving}
                 style={({ pressed }) => [
                   styles.primaryBtn,
-                  !addModalText.trim() && { opacity: 0.5 },
+                  (!addModalText.trim() || addSaving) && { opacity: 0.5 },
                   pressed && { opacity: 0.9 },
                 ]}
               >
@@ -3877,31 +3780,38 @@ useEffect(() => {
   </KeyboardAvoidingView>
 </Modal>
 
-      <Modal visible={manageOpen} transparent animationType="fade" onRequestClose={closeManage}>
+      <Modal visible={manageOpen} transparent animationType="fade" onRequestClose={manageSaving ? () => {} : closeManage}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="height"
           keyboardVerticalOffset={0}
         >
-        <Pressable style={styles.backdrop} onPress={closeManage}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+        <Pressable style={styles.keyboardBackdrop} onPress={manageSaving ? () => {} : closeManage}>
+          <Pressable style={[styles.sheet, styles.keyboardSheet]} onPress={() => {}}>
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.manageTitle}</Text>
-              <Pressable onPress={closeManage} style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}>
+              <Pressable disabled={manageSaving} onPress={closeManage} style={({ pressed }) => [styles.closeBtn, manageSaving && { opacity: 0.5 }, pressed && { opacity: 0.88 }]}>
                 <Text style={styles.closeText}>{TXT.close}</Text>
               </Pressable>
             </View>
 
             <ScrollView
+              ref={manageScrollRef}
+              pointerEvents={manageSaving ? "none" : "auto"}
               keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              automaticallyAdjustKeyboardInsets={false}
             >
               <TextInput
                 value={manageRename}
-                onChangeText={setManageRename}
+                onChangeText={(value) => {
+                  manageRenameDraft.current.set(value);
+                  setManageRename(value);
+                }}
+                editable={!manageSaving}
                 placeholder={TXT.namePlaceholder}
                 placeholderTextColor={UI.sub}
                 style={[styles.input, { color: UI.text, borderColor: UI.stroke }]}
+                onFocus={() => requestAnimationFrame(() => manageScrollRef.current?.scrollTo({ y: 0, animated: true }))}
               />
 
               <View style={styles.modalRow}>
@@ -3939,11 +3849,15 @@ useEffect(() => {
               </View>
 
               <View style={styles.modalRow}>
-                <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.perDayCount}</Text>
+                <Text style={[styles.modalLabel, { color: UI.text }]}>
+                  {managePeriod === FLEXIBLE_WEEKLY_PERIOD ? t.flexibleWeekly.weeklyCount : TXT.perDayCount}
+                </Text>
                 <View style={styles.countRow}>
                   <Pressable
                     onPress={() => {
-                      const next = clamp(manageTarget - 1, 1, 20);
+                      const next = managePeriod === FLEXIBLE_WEEKLY_PERIOD
+                        ? clampFlexibleWeeklyTarget(manageTarget - 1)
+                        : clamp(manageTarget - 1, 1, 20);
                       setManageTarget(next);
                       void saveBasicsImmediate(manageEnabled, next);
                     }}
@@ -3954,7 +3868,9 @@ useEffect(() => {
                   <Text style={[styles.countValue, { color: UI.text }]}>{manageTarget}×</Text>
                   <Pressable
                     onPress={() => {
-                      const next = clamp(manageTarget + 1, 1, 20);
+                      const next = managePeriod === FLEXIBLE_WEEKLY_PERIOD
+                        ? Math.min(7, manageTarget + 1)
+                        : clamp(manageTarget + 1, 1, 20);
                       setManageTarget(next);
                       void saveBasicsImmediate(manageEnabled, next);
                     }}
@@ -3972,7 +3888,7 @@ useEffect(() => {
                   style={({ pressed }) => [styles.pickerBox, { borderColor: UI.stroke, backgroundColor: UI.card2 }, pressed && { opacity: 0.9 }]}
                 >
                   <Text style={[styles.pickerBoxText, { color: UI.text }]}>
-                    {managePeriod === "daily" ? TXT.daily : managePeriod === "every2" ? TXT.every2 : TXT.customDays}
+                    {managePeriod === "daily" ? TXT.daily : managePeriod === "every2" ? TXT.every2 : managePeriod === FLEXIBLE_WEEKLY_PERIOD ? t.flexibleWeekly.label : TXT.customDays}
                   </Text>
                   <Ionicons name="chevron-down" size={18} color={UI.text} />
                 </Pressable>
@@ -4061,6 +3977,40 @@ useEffect(() => {
                 </View>
               )}
 
+              {managePeriod === FLEXIBLE_WEEKLY_PERIOD && (
+                <View style={{ marginTop: 8, marginBottom: 2 }}>
+                  <Text style={[styles.modalLabel, { color: UI.text }]}>{t.flexibleWeekly.firstPeriodDay}</Text>
+                  <Text style={styles.modalHint}>{t.flexibleWeekly.chooseFirstDayHint}</Text>
+                  <View style={styles.pills}>
+                    {[
+                      lang === "en" ? "Mon" : lang === "pl" ? "Pn" : lang === "de" ? "Mo" : "Po",
+                      lang === "en" ? "Tue" : lang === "pl" ? "Wt" : lang === "de" ? "Di" : "Út",
+                      lang === "en" ? "Wed" : lang === "pl" ? "Śr" : lang === "de" ? "Mi" : "St",
+                      lang === "en" ? "Thu" : lang === "pl" ? "Cz" : lang === "de" ? "Do" : "Čt",
+                      lang === "en" ? "Fri" : lang === "pl" ? "Pt" : lang === "de" ? "Fr" : "Pá",
+                      lang === "en" ? "Sat" : lang === "pl" ? "So" : lang === "de" ? "Sa" : "So",
+                      lang === "en" ? "Sun" : lang === "pl" ? "Nd" : lang === "de" ? "So" : "Ne",
+                    ].map((label, day) => {
+                      const active = manageFlexibleStartDay === day;
+                      return (
+                        <Pressable
+                          key={day}
+                          onPress={() => void saveFlexibleStartDayImmediate(day)}
+                          style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.9 }]}
+                        >
+                          <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {!!managed?.flexibleWeeklyPending?.effectiveFrom && (
+                    <Text style={styles.modalHint}>
+                      {t.flexibleWeekly.changeAppliesFrom.replace("{date}", String(managed.flexibleWeeklyPending.effectiveFrom))}
+                    </Text>
+                  )}
+                </View>
+              )}
+
               <View style={styles.modalRow}>
                 <Text style={[styles.modalLabel, { color: UI.text }]}>{TXT.notifications}</Text>
               <Switch
@@ -4140,8 +4090,8 @@ useEffect(() => {
                     );
                   })}
 
-                         <Pressable onPress={() => void applyManageReminders()} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}>
-                    <Text style={styles.primaryBtnText}>{TXT.saveNotifications}</Text>
+                         <Pressable disabled={manageSaving} onPress={() => void applyManageReminders()} style={({ pressed }) => [styles.primaryBtn, manageSaving && { opacity: 0.55 }, pressed && { opacity: 0.9 }]}>
+                    <Text style={styles.primaryBtnText}>{manageSaving ? TXT.saving : TXT.saveNotifications}</Text>
                   </Pressable>
                 </>
               )}
@@ -4149,13 +4099,19 @@ useEffect(() => {
               {!manageRemEnabled && (
                 <Pressable
                   onPress={() => void applyManageReminders()}
+                  disabled={manageSaving}
                   style={({ pressed }) => [
                     styles.primaryBtn,
+                    manageSaving && { opacity: 0.55 },
                     pressed && { opacity: 0.9 },
                   ]}
                 >
-                  <Text style={styles.primaryBtnText}>{TXT.saveNotifications}</Text>
+                  <Text style={styles.primaryBtnText}>{manageSaving ? TXT.saving : TXT.saveNotifications}</Text>
                 </Pressable>
+              )}
+
+              {!!manageSaveConfirmation && (
+                <Text style={styles.saveConfirmation}>{manageSaveConfirmation}</Text>
               )}
 
               {premium && (
@@ -4202,6 +4158,7 @@ useEffect(() => {
   { k: "daily" as const, t: TXT.daily },
   { k: "every2" as const, t: TXT.every2 },
   { k: "custom" as const, t: TXT.customDays },
+  { k: FLEXIBLE_WEEKLY_PERIOD, t: t.flexibleWeekly.label },
 ]
                 .map((opt) => {
                   const active = managePeriod === opt.k;
@@ -4213,6 +4170,12 @@ useEffect(() => {
                         if (opt.k === "custom") {
                           const fallback = manageCustomDays.length ? manageCustomDays : [dowMon0(todayISO)];
                           void savePeriodImmediate("custom", fallback);
+                          return;
+                        }
+                        if (opt.k === FLEXIBLE_WEEKLY_PERIOD) {
+                          const nextTarget = clampFlexibleWeeklyTarget(manageTarget);
+                          setManageTarget(nextTarget);
+                          void savePeriodImmediate(FLEXIBLE_WEEKLY_PERIOD);
                           return;
                         }
                         void savePeriodImmediate(opt.k);
@@ -4382,6 +4345,15 @@ useEffect(() => {
                       <Text style={styles.historyStatus}>
                         {d.status === "completed"
                           ? `${TXT.completed} ${d.done ?? 0}/${d.target ?? 1}${d.time ? ` • ${d.time}` : ""}`
+                          : d.status === "weeklyGoalMissed"
+                            ? formatFlexibleWeeklyMissedLabel({
+                                template: t.flexibleWeekly.weeklyGoalMissed,
+                                lang,
+                                start: String(d.periodStart ?? d.date),
+                                end: String(d.periodEnd ?? d.date),
+                                done: Number(d.done ?? 0),
+                                target: Number(d.target ?? 1),
+                              })
                           : d.status === "skipped"
                             ? TXT.skipped
                             : d.status === "free"
@@ -5160,7 +5132,9 @@ try {
     : isDisabled
       ? TXT.challengeOff
     : activeToday
-      ? `${TXT.addTodayCount} ${done}/${Math.max(1, target)}`
+      ? item.period === FLEXIBLE_WEEKLY_PERIOD
+        ? t.flexibleWeekly.weeklyProgress.replace("{done}", String(done)).replace("{target}", String(Math.max(1, target)))
+        : `${TXT.addTodayCount} ${done}/${Math.max(1, target)}`
       : TXT.freeRelax}
 </Text>
                           </View>

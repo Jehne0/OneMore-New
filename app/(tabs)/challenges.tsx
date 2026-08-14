@@ -22,7 +22,8 @@ import DraggableFlatList, { type RenderItemParams } from "react-native-draggable
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getSafeModalMetrics } from "../../lib/safeModalLayout";
 import { Alert } from "../../lib/appAlert";
-import { getTodayISO, useTodayISO } from "../../lib/clock";
+import { getTodayISO } from "../../lib/clock";
+import { useTodayISO } from "../../lib/useTodayISO";
 import { ensureDaily } from "../../lib/logic";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import { FREE_MAX_CHALLENGES } from "../../lib/plan";
@@ -33,9 +34,11 @@ import {
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
-import { AppState, challengeDisplayText, loadState, renameChallenge, saveState, transitionChallengeEnabled } from "../../lib/storage";
+import { AppState, challengeDisplayText, ensureDailyPick, loadState, renameChallenge, saveState, transitionChallengeEnabled } from "../../lib/storage";
+import { FLEXIBLE_WEEKLY_PERIOD, clampFlexibleWeeklyTarget, scheduleFlexibleWeeklySettings } from "../../lib/flexibleWeekly";
 import { useTheme } from "../../lib/theme";
 import { useI18n, type Lang } from "../../lib/i18n";
+import { finishSuccessfulNotificationSave } from "../../lib/notificationSaveFlow";
 
 const FREE_MAX = FREE_MAX_CHALLENGES;
 
@@ -44,6 +47,13 @@ const CHALLENGES_STRINGS: Record<Lang, Record<string, string>> = {
   en: { loading: "Loading…", freeLimitTitle: "Free version limit", freeLimit: "The Free version allows up to {count} challenges.", missingTimeTitle: "Missing time", missingTime: "Set at least one time or turn notifications off.", freeNotificationsTitle: "Notifications in the Free version", freeNotifications: "The Free version allows notifications for only one challenge. Turn them off for another challenge first.", expoGoTitle: "Notifications do not work in Expo Go", expoGoText: "Notifications have been disabled in Expo Go since Expo SDK 53. Reminders require a development build.", notifications: "Notifications", notificationsFailed: "Notifications could not be configured.", renameTitle: "Rename challenge", renameMissing: "Enter a challenge name.", rename: "Rename", delete: "Delete", targetTitle: "How many times per day? (1–20)", cancel: "Cancel", save: "Save", challengeNamePlaceholder: "Challenge name…", enabled: "On", disabled: "Off", freeNotificationHint: "Free: notifications can be enabled for one challenge only (up to 3 times a day).", notificationCount: "How many notifications per day?", notificationFrequencyHint: "The number of notifications cannot exceed the challenge frequency.", times: "Times", set: "Set", back: "Back", newChallenge: "New challenge… (e.g. 20 push-ups)", freeMaxPlaceholder: "Up to {count} challenges in the Free version", add: "Add", limit: "Limit {count}", deletedHistory: "Deleted challenge history", deletedAt: "Deleted: {date}", restoreImpossibleTitle: "Cannot restore", restoreImpossible: "An active item with the same ID already exists for this challenge. To preserve history, a copy with a different ID cannot be created. Delete or archive the active item first, then restore this challenge from history.", restore: "Restore", restoreHint: "Return to active challenges", deleteForeverTitle: "Delete permanently?", deleteForeverText: "{name}\n\nThis action cannot be undone.", deleteForever: "Delete permanently", locked: "Locked" },
   pl: { loading: "Wczytywanie…", freeLimitTitle: "Limit wersji Free", freeLimit: "W wersji Free możesz mieć maksymalnie {count} wyzwania.", missingTimeTitle: "Brak godziny", missingTime: "Ustaw co najmniej jedną godzinę albo wyłącz powiadomienia.", freeNotificationsTitle: "Powiadomienia w wersji Free", freeNotifications: "W wersji Free możesz mieć powiadomienia tylko dla jednego wyzwania. Najpierw wyłącz je przy innym wyzwaniu.", expoGoTitle: "Powiadomienia nie działają w Expo Go", expoGoText: "Od Expo SDK 53 powiadomienia są wyłączone w Expo Go. Przypomnienia wymagają development buildu.", notifications: "Powiadomienia", notificationsFailed: "Nie udało się skonfigurować powiadomień.", renameTitle: "Zmień nazwę wyzwania", renameMissing: "Wpisz nazwę wyzwania.", rename: "Zmień nazwę", delete: "Usuń", targetTitle: "Ile razy dziennie? (1–20)", cancel: "Anuluj", save: "Zapisz", challengeNamePlaceholder: "Nazwa wyzwania…", enabled: "Włączone", disabled: "Wyłączone", freeNotificationHint: "Free: powiadomienia można włączyć tylko dla jednego wyzwania (maks. 3 razy dziennie).", notificationCount: "Ile powiadomień dziennie?", notificationFrequencyHint: "Liczba powiadomień nie może przekraczać częstotliwości wyzwania.", times: "Godziny", set: "Ustaw", back: "Wstecz", newChallenge: "Nowe wyzwanie… (np. 20 pompek)", freeMaxPlaceholder: "Maksymalnie {count} wyzwania w wersji Free", add: "Dodaj", limit: "Limit {count}", deletedHistory: "Historia usuniętych wyzwań", deletedAt: "Usunięto: {date}", restoreImpossibleTitle: "Nie można przywrócić", restoreImpossible: "Dla tego wyzwania istnieje już aktywna pozycja z tym samym ID. Aby zachować historię, nie można utworzyć kopii z innym ID. Najpierw usuń lub zarchiwizuj aktywną pozycję, a potem przywróć wyzwanie z historii.", restore: "Przywróć", restoreHint: "Przenieś do aktywnych", deleteForeverTitle: "Usunąć na stałe?", deleteForeverText: "{name}\n\nTej operacji nie można cofnąć.", deleteForever: "Usuń na stałe", locked: "Zablokowane" },
   de: { loading: "Wird geladen…", freeLimitTitle: "Limit der Free-Version", freeLimit: "In der Free-Version kannst du höchstens {count} Challenges haben.", missingTimeTitle: "Uhrzeit fehlt", missingTime: "Lege mindestens eine Uhrzeit fest oder deaktiviere die Benachrichtigungen.", freeNotificationsTitle: "Benachrichtigungen in der Free-Version", freeNotifications: "In der Free-Version sind Benachrichtigungen nur für eine Challenge möglich. Deaktiviere sie zuerst bei einer anderen Challenge.", expoGoTitle: "Benachrichtigungen funktionieren nicht in Expo Go", expoGoText: "Seit Expo SDK 53 sind Benachrichtigungen in Expo Go deaktiviert. Erinnerungen benötigen einen Development-Build.", notifications: "Benachrichtigungen", notificationsFailed: "Benachrichtigungen konnten nicht eingerichtet werden.", renameTitle: "Challenge umbenennen", renameMissing: "Gib einen Namen für die Challenge ein.", rename: "Umbenennen", delete: "Löschen", targetTitle: "Wie oft pro Tag? (1–20)", cancel: "Abbrechen", save: "Speichern", challengeNamePlaceholder: "Name der Challenge…", enabled: "Ein", disabled: "Aus", freeNotificationHint: "Free: Benachrichtigungen sind nur für eine Challenge möglich (max. 3-mal täglich).", notificationCount: "Wie viele Benachrichtigungen pro Tag?", notificationFrequencyHint: "Die Anzahl der Benachrichtigungen darf die Häufigkeit der Challenge nicht überschreiten.", times: "Uhrzeiten", set: "Festlegen", back: "Zurück", newChallenge: "Neue Challenge… (z. B. 20 Liegestütze)", freeMaxPlaceholder: "Höchstens {count} Challenges in der Free-Version", add: "Hinzufügen", limit: "Limit {count}", deletedHistory: "Verlauf gelöschter Challenges", deletedAt: "Gelöscht: {date}", restoreImpossibleTitle: "Wiederherstellen nicht möglich", restoreImpossible: "Für diese Challenge gibt es bereits einen aktiven Eintrag mit derselben ID. Damit der Verlauf erhalten bleibt, kann keine Kopie mit einer anderen ID erstellt werden. Lösche oder archiviere zuerst den aktiven Eintrag und stelle die Challenge dann aus dem Verlauf wieder her.", restore: "Wiederherstellen", restoreHint: "Zu den aktiven Challenges zurückholen", deleteForeverTitle: "Endgültig löschen?", deleteForeverText: "{name}\n\nDiese Aktion kann nicht rückgängig gemacht werden.", deleteForever: "Endgültig löschen", locked: "Gesperrt" },
+};
+
+const NOTIFICATION_SAVED: Record<Lang, string> = {
+  cs: "Notifikace byla uložena.",
+  en: "Notification saved.",
+  de: "Benachrichtigung gespeichert.",
+  pl: "Powiadomienie zostało zapisane.",
 };
 
 const formatChallengeText = (value: string, params: Record<string, string | number>) =>
@@ -485,6 +495,9 @@ export default function ChallengesScreen() {
   const [tempTimes, setTempTimes] = useState<string[]>([]);
   const [premium, setPremium] = useState(false);
   const [remStep, setRemStep] = useState<1 | 2>(1);
+  const [remSaving, setRemSaving] = useState(false);
+  const [remConfirmation, setRemConfirmation] = useState("");
+  const remSaveLock = useRef(false);
 
   // time picker
   const [timePickerOpen, setTimePickerOpen] = useState(false);
@@ -506,7 +519,7 @@ export default function ChallengesScreen() {
 
   // ✅ vždy načti aktuální stav při návratu na screen
   const refresh = useCallback(async () => {
-    const s = await loadState();
+    const s = await ensureDailyPick();
     if (!Array.isArray((s as any).history)) (s as any).history = [];
     if (!Array.isArray((s as any).archivedChallenges)) (s as any).archivedChallenges = [];
     setState(s);
@@ -537,7 +550,7 @@ export default function ChallengesScreen() {
   const reminderMaxAllowed = useMemo(() => {
     if (!state || !reminderId) return 1;
     const c = (state.challenges ?? []).find((x: any) => String(x.id) === String(reminderId)) as any;
-    const freq = Number(c?.targetPerDay ?? 1);
+    const freq = Number(c?.period === FLEXIBLE_WEEKLY_PERIOD ? c?.flexibleWeeklyPending?.target ?? c?.flexibleWeeklyTarget ?? 1 : c?.targetPerDay ?? 1);
     const freqSafe = Number.isFinite(freq) && freq > 0 ? Math.min(20, Math.floor(freq)) : 1;
     return premium ? freqSafe : Math.min(3, freqSafe);
   }, [state, reminderId, premium]);
@@ -638,7 +651,7 @@ export default function ChallengesScreen() {
       const newId = nextNumericId(latest2);
       return {
         ...latest2,
-        challenges: [{ id: newId, text: trimmed, enabled: true }, ...(latest2.challenges ?? [])],
+        challenges: [{ id: newId, text: trimmed, enabled: true, createdDate: getTodayISO() }, ...(latest2.challenges ?? [])],
       };
     });
   }
@@ -648,7 +661,7 @@ export default function ChallengesScreen() {
     if (!c) return;
 
     // Frekvence výzvy (kolikrát denně) – tohle je limit pro počet notifikací.
-    const freq = Number((c as any).targetPerDay ?? 1);
+    const freq = Number((c as any).period === FLEXIBLE_WEEKLY_PERIOD ? (c as any).flexibleWeeklyPending?.target ?? (c as any).flexibleWeeklyTarget ?? 1 : (c as any).targetPerDay ?? 1);
     const freqSafe = Number.isFinite(freq) && freq > 0 ? Math.min(20, Math.floor(freq)) : 1;
 
     const savedTimes = Array.isArray((c as any).reminderTimes)
@@ -680,6 +693,9 @@ export default function ChallengesScreen() {
 
     // už rovnou na časy (počty řešíme přes pillky níže)
     setRemStep(2);
+    setRemConfirmation("");
+    setRemSaving(false);
+    remSaveLock.current = false;
     setReminderOpen(true);
   }
 
@@ -712,13 +728,16 @@ export default function ChallengesScreen() {
   }
 
   async function saveReminderConfig() {
-    if (!state || !reminderId) return;
+    if (!state || !reminderId || remSaveLock.current) return;
+    remSaveLock.current = true;
+    setRemSaving(true);
+    setRemConfirmation("");
 
     const id = String(reminderId);
 
     // Frekvence výzvy = absolutní limit pro počet notifikací.
     const c0 = (state.challenges ?? []).find((x: any) => String(x.id) === id) as any;
-    const freq = Number(c0?.targetPerDay ?? 1);
+    const freq = Number(c0?.period === FLEXIBLE_WEEKLY_PERIOD ? c0?.flexibleWeeklyPending?.target ?? c0?.flexibleWeeklyTarget ?? 1 : c0?.targetPerDay ?? 1);
     const freqSafe = Number.isFinite(freq) && freq > 0 ? Math.min(20, Math.floor(freq)) : 1;
 
     const maxAllowed = premium ? freqSafe : Math.min(3, freqSafe);
@@ -733,6 +752,8 @@ export default function ChallengesScreen() {
     // Jediná podmínka: když jsou notifikace zapnuté, musí být nastavený aspoň 1 čas.
     if (remEnabled && times.length === 0) {
       Alert.alert(tx.missingTimeTitle, tx.missingTime);
+      remSaveLock.current = false;
+      setRemSaving(false);
       return;
     }
 
@@ -745,6 +766,8 @@ export default function ChallengesScreen() {
           tx.freeNotificationsTitle,
           tx.freeNotifications
         );
+        remSaveLock.current = false;
+        setRemSaving(false);
         return;
       }
     }
@@ -767,9 +790,24 @@ export default function ChallengesScreen() {
       } else {
         Alert.alert(tx.notifications, tx.notificationsFailed);
       }
+      remSaveLock.current = false;
+      setRemSaving(false);
+      return;
     }
 
-    setReminderOpen(false);
+    await finishSuccessfulNotificationSave({
+      message: NOTIFICATION_SAVED[lang],
+      showConfirmation: setRemConfirmation,
+      closeEditor: () => {
+        setReminderOpen(false);
+        setActionsOpen(false);
+        setRenameOpen(false);
+        setTargetOpen(false);
+      },
+    });
+    setRemConfirmation("");
+    remSaveLock.current = false;
+    setRemSaving(false);
     await refresh();
   }
 
@@ -802,7 +840,7 @@ export default function ChallengesScreen() {
   function openTargetPicker(id: string) {
     const c = (state?.challenges ?? []).find((x: any) => String((x as any).id) === String(id));
     if (!c) return;
-    const cur = Number((c as any).targetPerDay ?? 1);
+    const cur = Number(c.period === FLEXIBLE_WEEKLY_PERIOD ? c.flexibleWeeklyPending?.target ?? c.flexibleWeeklyTarget ?? 1 : (c as any).targetPerDay ?? 1);
     const safe = Number.isFinite(cur) && cur > 0 ? Math.min(20, Math.floor(cur || 1)) : 1;
     setTargetId(String(id));
     setTargetValue(safe);
@@ -811,7 +849,9 @@ export default function ChallengesScreen() {
 
   async function saveTargetPicker(v: number): Promise<void> {
     if (!targetId) return;
-    const value = Math.min(20, Math.max(1, Math.floor(v || 1)));
+    const currentChallenge = (state?.challenges ?? []).find((challenge) => String(challenge.id) === String(targetId));
+    const flexible = currentChallenge?.period === FLEXIBLE_WEEKLY_PERIOD;
+    const value = flexible ? clampFlexibleWeeklyTarget(v) : Math.min(20, Math.max(1, Math.floor(v || 1)));
     const id = String(targetId);
 
     await persist((latest) => {
@@ -819,7 +859,9 @@ export default function ChallengesScreen() {
         if (String(c.id) !== id) return c;
         const prevTimes = Array.isArray(c.reminderTimes) ? (c.reminderTimes as string[]) : [];
         const trimmed = prevTimes.slice(0, value);
-        return { ...c, targetPerDay: value, reminderTimes: trimmed };
+        return flexible
+          ? { ...scheduleFlexibleWeeklySettings(c, value, c.flexibleWeeklyPending?.startDay ?? c.flexibleWeeklyStartDay ?? 0, getTodayISO()), reminderTimes: trimmed }
+          : { ...c, targetPerDay: value, reminderTimes: trimmed };
       });
       return { ...latest, challenges: nextChallenges };
     });
@@ -992,7 +1034,7 @@ export default function ChallengesScreen() {
               <Text style={styles.modalTitle}>{tx.targetTitle}</Text>
 
               <View style={styles.pills}>
-                {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                {Array.from({ length: ((state?.challenges ?? []).find((c) => String(c.id) === String(targetId))?.period === FLEXIBLE_WEEKLY_PERIOD ? 7 : 20) }, (_, i) => i + 1).map((n) => (
                   <Pressable
                     key={n}
                     onPress={() => setTargetValue(n)}
@@ -1023,7 +1065,7 @@ export default function ChallengesScreen() {
         <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
           <KeyboardAvoidingView
             style={{ flex: 1 }}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            behavior={Platform.OS === "ios" ? "height" : undefined}
           >
             <Pressable style={styles.modalBackdrop} onPress={() => setRenameOpen(false)}>
               <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -1155,10 +1197,14 @@ export default function ChallengesScreen() {
                       <Text style={styles.modalBtnText}>{tx.cancel}</Text>
                     </Pressable>
 
-                    <Pressable style={styles.modalBtnPrimary} onPress={() => void saveReminderConfig()}>
-                      <Text style={styles.modalBtnText}>{tx.save}</Text>
+                    <Pressable disabled={remSaving} style={[styles.modalBtnPrimary, remSaving && { opacity: 0.5 }]} onPress={() => void saveReminderConfig()}>
+                      <Text style={styles.modalBtnText}>{remSaving ? "…" : tx.save}</Text>
                     </Pressable>
                   </View>
+
+                  {!!remConfirmation && (
+                    <Text style={[styles.modalHint, { color: UI.accent, textAlign: "center" }]}>{remConfirmation}</Text>
+                  )}
 
                 </View>
               )}
@@ -1342,7 +1388,9 @@ export default function ChallengesScreen() {
                 String(freeActiveReminderId) !== String(c.id) &&
                 !c.reminderEnabled;
 
-              const target = Math.max(1, Number(c.targetPerDay ?? 1) || 1);
+              const target = c.period === FLEXIBLE_WEEKLY_PERIOD
+                ? clampFlexibleWeeklyTarget(c.flexibleWeeklyPending?.target ?? c.flexibleWeeklyTarget)
+                : Math.max(1, Number(c.targetPerDay ?? 1) || 1);
               const notifLabel = freeLocked ? tx.locked : c.reminderEnabled ? tx.enabled : tx.disabled;
 
               return (

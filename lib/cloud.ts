@@ -1,12 +1,15 @@
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import type { AppState } from "./storage";
+import { assertCloudAccessVerified } from "./cloudAccessGate";
 
-export const APP_STATE_SCHEMA_VERSION = 1;
+export const APP_STATE_SCHEMA_VERSION = 2;
+export const APP_STATE_WRITER_VERSION = 2;
 export const APP_STATE_DOC_ID = "main";
 
 export type CloudUserDoc = {
   schemaVersion: number;
+  writerVersion: number;
   clientUpdatedAtISO: string;
   updatedAt: unknown;
   state: AppState;
@@ -23,6 +26,7 @@ function stateForFirestore(state: AppState): AppState {
 }
 
 export async function fetchCloudState(uid: string): Promise<CloudAppStateDoc | null> {
+  assertCloudAccessVerified();
   const snap = await getDoc(appStateDocRef(uid));
   if (!snap.exists()) return null;
   const data = snap.data() as Partial<CloudAppStateDoc>;
@@ -30,6 +34,7 @@ export async function fetchCloudState(uid: string): Promise<CloudAppStateDoc | n
 
   return {
     schemaVersion: Number(data.schemaVersion ?? APP_STATE_SCHEMA_VERSION),
+    writerVersion: Number(data.writerVersion ?? data.schemaVersion ?? 1),
     clientUpdatedAtISO:
       typeof data.clientUpdatedAtISO === "string" ? data.clientUpdatedAtISO : "",
     updatedAt: data.updatedAt,
@@ -38,8 +43,10 @@ export async function fetchCloudState(uid: string): Promise<CloudAppStateDoc | n
 }
 
 export async function writeCloudState(uid: string, state: AppState, clientUpdatedAtISO: string): Promise<void> {
+  assertCloudAccessVerified();
   const payload: CloudAppStateDoc = {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
+    writerVersion: APP_STATE_WRITER_VERSION,
     clientUpdatedAtISO,
     updatedAt: serverTimestamp(),
     state: stateForFirestore(state),
@@ -48,5 +55,6 @@ export async function writeCloudState(uid: string, state: AppState, clientUpdate
 }
 
 export async function deleteCloudUserDoc(uid: string): Promise<void> {
+  assertCloudAccessVerified();
   await deleteDoc(appStateDocRef(uid));
 }

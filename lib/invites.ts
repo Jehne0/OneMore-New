@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "./firebase";
+import { assertCloudAccessVerified } from "./cloudAccessGate";
 
 export type InviteDoc = {
   id: string;
@@ -11,6 +12,7 @@ export type InviteDoc = {
 };
 
 function myUid() {
+  assertCloudAccessVerified();
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Nejsi přihlášený.");
   return uid;

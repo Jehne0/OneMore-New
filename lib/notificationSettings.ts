@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { isCloudAccessVerified } from "./cloudAccessGate";
 
 export type NotificationSettings = {
   challengeReminders: boolean;
@@ -28,6 +29,7 @@ function normalizeNotificationSettings(raw: any): NotificationSettings {
 }
 
 async function saveNotificationSettingsToCloud(next: NotificationSettings) {
+  if (!isCloudAccessVerified()) return;
   const uid = auth.currentUser?.uid;
   if (!uid) return;
 

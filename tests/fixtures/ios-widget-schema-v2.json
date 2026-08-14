@@ -32,8 +32,11 @@
       "isActiveToday": true,
       "dayState": "activePending",
       "lockedByPremiumExpiration": false,
+      "allowsMultipleCompletionsToday": true,
+      "completedOnCurrentDate": false,
+      "competitiveStreakEnabled": true,
       "week": [{"date":"2026-07-19","kind":"missed","done":0,"target":1}],
-      "timelineDays": [{"date":"2026-07-19","done":0,"target":1,"completed":false,"active":true,"dayState":"activePending","week":[{"date":"2026-07-19","kind":"missed","done":0,"target":1}]}]
+      "timelineDays": [{"date":"2026-07-19","done":0,"target":1,"completed":false,"active":true,"dayState":"activePending","completedOnCurrentDate":false,"currentStreak":4,"bestStreak":8,"week":[{"date":"2026-07-19","kind":"missed","done":0,"target":1}]}]
     },
     {
       "challengeId": "shared",
@@ -47,8 +50,11 @@
       "isActiveToday": true,
       "dayState": "activePending",
       "lockedByPremiumExpiration": false,
+      "allowsMultipleCompletionsToday": true,
+      "completedOnCurrentDate": true,
+      "competitiveStreakEnabled": true,
       "week": [{"date":"2026-07-19","kind":"partial","done":1,"target":2}],
-      "timelineDays": [{"date":"2026-07-19","done":1,"target":2,"completed":false,"active":true,"dayState":"activePending","week":[{"date":"2026-07-19","kind":"partial","done":1,"target":2}]}]
+      "timelineDays": [{"date":"2026-07-19","done":1,"target":2,"completed":false,"active":true,"dayState":"activePending","completedOnCurrentDate":true,"currentStreak":2,"bestStreak":3,"week":[{"date":"2026-07-19","kind":"partial","done":1,"target":2}]}]
     }
   ],
   "completedToday": 0,
