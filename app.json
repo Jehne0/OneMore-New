@@ -44,7 +44,7 @@
       "./plugins/withOneMoreAndroidCompatibility",
       "./plugins/withOneMoreIosWidget"
     ],
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "default",
     "icon": "./assets/icon/icon.png",
     "scheme": "onemore",
