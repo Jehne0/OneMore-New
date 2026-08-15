@@ -273,6 +273,8 @@ export type Challenge = {
   // Připomínky pro danou výzvu
   reminderEnabled?: boolean; // default false
   reminderTimes?: string[]; // ["HH:mm", ...] (např. ["09:00","18:00"])
+  /** Pouze pro notifikace flexibleWeekly: 0=Po … 6=Ne. */
+  reminderDays?: number[];
 
   /** Irreversible fun mode: no streak reset, no new competitive stats/medals. */
   easyMode?: boolean;
@@ -623,6 +625,15 @@ function normalizeTimeHHMM(v: unknown): string | undefined {
   return m ? v : undefined;
 }
 
+function normalizeReminderDays(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value
+    .map(Number)
+    .filter((day) => Number.isFinite(day) && day >= 0 && day <= 6)
+    .map(Math.floor)))
+    .sort((a, b) => a - b);
+}
+
 function normalizeReminderNotifIds(raw: unknown): Record<string, string[]> {
   if (!raw || typeof raw !== "object") return {};
   const out: Record<string, string[]> = {};
@@ -845,6 +856,7 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
       : normalizeTimeHHMM(c.reminderTime)
         ? [normalizeTimeHHMM(c.reminderTime) as string]
         : [],
+    reminderDays: normalizeReminderDays(c.reminderDays),
     easyMode: c.easyMode === true || existingEasyIds.has(String(c.id)),
     inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
       ? normalizeInactivePeriods(c.inactivePeriods)
@@ -915,6 +927,7 @@ reminderTimes: Array.isArray(c.reminderTimes)
   : normalizeTimeHHMM(c.reminderTime)
     ? [normalizeTimeHHMM(c.reminderTime) as string]
     : [],
+reminderDays: normalizeReminderDays(c.reminderDays),
 easyMode: c.easyMode === true || parsedEasyIds.has(String(c.id)),
 inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
   ? normalizeInactivePeriods(c.inactivePeriods)
@@ -1315,6 +1328,7 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
             : normalizeTimeHHMM((c as any).reminderTime)
               ? [normalizeTimeHHMM((c as any).reminderTime) as string]
               : [],
+          reminderDays: normalizeReminderDays(c.reminderDays),
           easyMode: c.easyMode === true,
           inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
             ? normalizeInactivePeriods(c.inactivePeriods)

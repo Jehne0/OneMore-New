@@ -59,8 +59,11 @@ import {
 import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
+  isReminderDaySelectionValid,
+  normalizeReminderDays,
   prepareChallengeReminders,
   refreshScheduledChallengeReminders,
+  reminderScheduleForChallenge,
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
@@ -1912,6 +1915,7 @@ async function openSharedNotificationSettings() {
   const [manageRemEnabled, setManageRemEnabled] = useState(false);
   const [manageRemCount, setManageRemCount] = useState(1);
   const [manageRemTimes, setManageRemTimes] = useState<string[]>([]);
+  const [manageReminderDays, setManageReminderDays] = useState<number[]>([]);
   const [manageRename, setManageRename] = useState("");
   const [manageSaving, setManageSaving] = useState(false);
   const [manageSaveConfirmation, setManageSaveConfirmation] = useState("");
@@ -1965,7 +1969,12 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       setManageFlexibleStartDay(Number((c as any).flexibleWeeklyPending?.startDay ?? (c as any).flexibleWeeklyStartDay ?? localDayMon0(todayISO)));
       setManageRemEnabled(remEnabled);
       setManageRemTimes(remEnabled ? safeTimes : []);
-      setManageRemCount(clamp((remEnabled ? safeTimes.length : 1) || 1, 1, Math.min(10, target)));
+      setManageReminderDays(normalizeReminderDays((c as any).reminderDays));
+      setManageRemCount(clamp(
+        (remEnabled ? safeTimes.length : 1) || 1,
+        1,
+        period === FLEXIBLE_WEEKLY_PERIOD ? 1 : Math.min(10, target),
+      ));
       const currentName = String((c as any).text ?? "");
       manageRenameDraft.current.set(currentName);
       setManageRename(currentName);
@@ -2095,7 +2104,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         }
       } catch {}
 
-      const maxN = Math.min(10, target);
+      const maxN = managePeriod === FLEXIBLE_WEEKLY_PERIOD ? 1 : Math.min(10, target);
       if (manageRemEnabled) {
         setManageRemCount((n) => clamp(n, 1, maxN));
         setManageRemTimes((arr) => (Array.isArray(arr) ? arr.slice(0, clamp(manageRemCount, 1, maxN)) : []));
@@ -2244,8 +2253,9 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   const wantsEnabled = !!manageRemEnabled;
 
   const target = clamp(Number(manageTarget) || 1, 1, 20);
-  const maxN = Math.min(10, target);
+  const maxN = managePeriod === FLEXIBLE_WEEKLY_PERIOD ? 1 : Math.min(10, target);
   const wantedCount = clamp(Number(manageRemCount) || 1, 1, maxN);
+  const reminderDays = normalizeReminderDays(manageReminderDays);
 
   let times = Array.isArray(manageRemTimes)
     ? manageRemTimes
@@ -2261,6 +2271,13 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     const name = manageRenameDraft.current.readTrimmed();
     if (!name) {
       Alert.alert(TXT.manageTitle, TXT.namePlaceholder);
+      return;
+    }
+    if (!isReminderDaySelectionValid(managePeriod, wantsEnabled, reminderDays)) {
+      Alert.alert(
+        t.flexibleWeekly.notificationDayRequiredTitle,
+        t.flexibleWeekly.notificationDayRequired,
+      );
       return;
     }
     if (!premium && wantsEnabled) {
@@ -2290,16 +2307,16 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       return { ...configured, text: name };
     };
     const preview = configureChallenge(managed);
+    const reminderSchedule = reminderScheduleForChallenge(
+      preview,
+      managePeriod === FLEXIBLE_WEEKLY_PERIOD ? reminderDays : undefined,
+    );
     const prepared = await prepareChallengeReminders(
       id,
       name,
       times,
       wantsEnabled,
-      {
-        period: preview.period,
-        enabled: preview.enabled !== false && !preview.deletedAt,
-        isActiveOnDate: (dateISO) => isStoredChallengeActiveOnDate(preview, dateISO),
-      }
+      reminderSchedule,
     );
 
     await commitPreparedNotificationChange({
@@ -2315,9 +2332,13 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       times = prepared.times;
       setManageRemTimes(times);
       setManageRemCount(times.length);
+      if (managePeriod === FLEXIBLE_WEEKLY_PERIOD) {
+        setManageReminderDays(prepared.reminderDays);
+      }
     } else {
       setManageRemTimes([]);
       setManageRemCount(1);
+      setManageReminderDays([]);
     }
     await manageConfirmation.current.confirm({
       session: editorSession,
@@ -2348,6 +2369,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   manageRemTimes,
   manageRemCount,
   manageRemEnabled,
+  manageReminderDays,
   manageEnabled,
   managePeriod,
   manageCustomDays,
@@ -2367,6 +2389,8 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   TXT.notificationPermissionDenied,
   TXT.notificationsFailed,
   TXT.notificationsSaved,
+  t.flexibleWeekly.notificationDayRequired,
+  t.flexibleWeekly.notificationDayRequiredTitle,
 ]);
 
   const deleteManagedChallenge = useCallback(async () => {
@@ -4021,10 +4045,11 @@ useEffect(() => {
     if (!v) {
       setManageRemCount(1);
       setManageRemTimes([]);
+      setManageReminderDays([]);
       return;
     }
 
-    const maxN = Math.min(10, manageTarget);
+    const maxN = managePeriod === FLEXIBLE_WEEKLY_PERIOD ? 1 : Math.min(10, manageTarget);
 
     setManageRemCount((n) => clamp(n || 1, 1, maxN));
 
@@ -4043,29 +4068,69 @@ useEffect(() => {
 
               {manageRemEnabled && (
                 <>
-                  <Text style={styles.modalHint}>{TXT.notificationCount}: max {Math.min(10, manageTarget)}</Text>
+                  {managePeriod === FLEXIBLE_WEEKLY_PERIOD && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={[styles.modalLabel, { color: UI.text }]}>
+                        {t.flexibleWeekly.notificationDays}
+                      </Text>
+                      <Text style={styles.modalHint}>{t.flexibleWeekly.notificationDaysHint}</Text>
+                      <View style={styles.pills}>
+                        {t.flexibleWeekly.weekdays.map((label, day) => {
+                          const active = manageReminderDays.includes(day);
+                          return (
+                            <Pressable
+                              key={day}
+                              onPress={() => setManageReminderDays((current) =>
+                                active
+                                  ? current.filter((value) => value !== day)
+                                  : normalizeReminderDays([...current, day]))}
+                              style={({ pressed }) => [
+                                styles.pill,
+                                active && styles.pillActive,
+                                pressed && { opacity: 0.9 },
+                              ]}
+                            >
+                              <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
 
-                  <View style={styles.pills}>
-                    {Array.from({ length: Math.min(10, manageTarget) }, (_, i) => i + 1).map((n) => {
-                      const active = n === manageRemCount;
-                      return (
-                        <Pressable
-                          key={n}
-                          onPress={() => {
-                            setManageRemCount(n);
-                            setManageRemTimes((prev) => {
-                              const next = Array.isArray(prev) ? [...prev] : [];
-                              while (next.length < n) next.push(nowHM());
-                              return next.slice(0, n);
-                            });
-                          }}
-                          style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.9 }]}
-                        >
-                          <Text style={[styles.pillText, active && styles.pillTextActive]}>#{n}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  {managePeriod !== FLEXIBLE_WEEKLY_PERIOD && (
+                    <>
+                      <Text style={styles.modalHint}>{TXT.notificationCount}: max {Math.min(10, manageTarget)}</Text>
+
+                      <View style={styles.pills}>
+                        {Array.from({ length: Math.min(10, manageTarget) }, (_, i) => i + 1).map((n) => {
+                          const active = n === manageRemCount;
+                          return (
+                            <Pressable
+                              key={n}
+                              onPress={() => {
+                                setManageRemCount(n);
+                                setManageRemTimes((prev) => {
+                                  const next = Array.isArray(prev) ? [...prev] : [];
+                                  while (next.length < n) next.push(nowHM());
+                                  return next.slice(0, n);
+                                });
+                              }}
+                              style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.9 }]}
+                            >
+                              <Text style={[styles.pillText, active && styles.pillTextActive]}>#{n}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </>
+                  )}
+
+                  {managePeriod === FLEXIBLE_WEEKLY_PERIOD && (
+                    <Text style={[styles.modalLabel, { color: UI.text }]}>
+                      {t.flexibleWeekly.notificationTime}
+                    </Text>
+                  )}
 
                   {Array.from({ length: manageRemCount }, (_, i) => i).map((i) => {
                     const value = manageRemTimes?.[i] ?? nowHM();

@@ -19,6 +19,12 @@ export type Dictionary = {
     weeklyProgress: string;
     weeklyGoalMissed: string;
     changeAppliesFrom: string;
+    notificationDays: string;
+    notificationDaysHint: string;
+    notificationTime: string;
+    notificationDayRequiredTitle: string;
+    notificationDayRequired: string;
+    weekdays: string[];
   };
   tabs: {
     today: string;
@@ -122,6 +128,12 @@ export const STRINGS: Record<Lang, Dictionary> = {
       weeklyProgress: "{done}/{target} tento týden",
       weeklyGoalMissed: "Týdenní cíl nesplněn ({start}–{end}): {done}/{target}",
       changeAppliesFrom: "Změna začne platit od {date}.",
+      notificationDays: "Dny upozornění",
+      notificationDaysHint: "Vyber jeden nebo více dnů. Tyto dny neurčují, kdy musíš výzvu splnit.",
+      notificationTime: "Čas pro vybrané dny",
+      notificationDayRequiredTitle: "Chybí den upozornění",
+      notificationDayRequired: "Vyber alespoň jeden den v týdnu, nebo notifikaci vypni.",
+      weekdays: ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota", "Neděle"],
     },
     tabs: {
       today: "OneMore",
@@ -224,6 +236,12 @@ export const STRINGS: Record<Lang, Dictionary> = {
       weeklyProgress: "{done}/{target} this week",
       weeklyGoalMissed: "Weekly goal missed ({start}–{end}): {done}/{target}",
       changeAppliesFrom: "The change will apply from {date}.",
+      notificationDays: "Notification days",
+      notificationDaysHint: "Choose one or more days. These days do not determine when you must complete the challenge.",
+      notificationTime: "Time for selected days",
+      notificationDayRequiredTitle: "Notification day missing",
+      notificationDayRequired: "Choose at least one weekday or turn the notification off.",
+      weekdays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
     },
     tabs: {
       today: "OneMore",
@@ -326,6 +344,12 @@ export const STRINGS: Record<Lang, Dictionary> = {
       weeklyProgress: "{done}/{target} w tym tygodniu",
       weeklyGoalMissed: "Cel tygodniowy niewykonany ({start}–{end}): {done}/{target}",
       changeAppliesFrom: "Zmiana zacznie obowiązywać od {date}.",
+      notificationDays: "Dni powiadomień",
+      notificationDaysHint: "Wybierz jeden lub więcej dni. Nie określają one, kiedy musisz wykonać wyzwanie.",
+      notificationTime: "Godzina dla wybranych dni",
+      notificationDayRequiredTitle: "Brak dnia powiadomienia",
+      notificationDayRequired: "Wybierz co najmniej jeden dzień tygodnia albo wyłącz powiadomienie.",
+      weekdays: ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"],
     },
     tabs: {
       today: "OneMore",
@@ -428,6 +452,12 @@ export const STRINGS: Record<Lang, Dictionary> = {
       weeklyProgress: "{done}/{target} diese Woche",
       weeklyGoalMissed: "Wochenziel nicht erreicht ({start}–{end}): {done}/{target}",
       changeAppliesFrom: "Die Änderung gilt ab {date}.",
+      notificationDays: "Benachrichtigungstage",
+      notificationDaysHint: "Wähle einen oder mehrere Tage. Sie bestimmen nicht, wann du die Challenge erfüllen musst.",
+      notificationTime: "Zeit für ausgewählte Tage",
+      notificationDayRequiredTitle: "Benachrichtigungstag fehlt",
+      notificationDayRequired: "Wähle mindestens einen Wochentag oder deaktiviere die Benachrichtigung.",
+      weekdays: ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
     },
     tabs: {
       today: "OneMore",

@@ -92,6 +92,8 @@ type ReminderKind = "challenge" | "shared";
 export type ReminderSchedule = {
   period?: "daily" | "every2" | "custom" | "flexibleWeekly";
   enabled?: boolean;
+  /** Notification weekdays only (0=Monday … 6=Sunday), independent of challenge cadence. */
+  reminderDays?: number[];
   isActiveOnDate: (dateISO: string) => boolean;
 };
 
@@ -119,21 +121,59 @@ function addDaysISO(iso: string, days: number): string {
   return `${y}-${m}-${day}`;
 }
 
+function localDateISO(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function weekdayMon0(dateISO: string): number {
+  const [year, month, day] = dateISO.split("-").map(Number);
+  const sunday0 = new Date(year, (month ?? 1) - 1, day ?? 1).getDay();
+  return (sunday0 + 6) % 7;
+}
+
+export function normalizeReminderDays(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value
+    .map(Number)
+    .filter((day) => Number.isFinite(day) && day >= 0 && day <= 6)
+    .map(Math.floor)))
+    .sort((a, b) => a - b);
+}
+
+export function isReminderDaySelectionValid(
+  period: ReminderSchedule["period"],
+  enabled: boolean,
+  value: unknown,
+): boolean {
+  return !enabled || period !== "flexibleWeekly" || normalizeReminderDays(value).length > 0;
+}
+
 function dateForISOAndTime(dateISO: string, hour: number, minute: number): Date {
   const [year, month, day] = dateISO.split("-").map(Number);
   return new Date(year, (month ?? 1) - 1, day ?? 1, hour, minute, 0, 0);
 }
 
-function scheduleForChallenge(challenge: Challenge | undefined | null): ReminderSchedule {
+export function reminderScheduleForChallenge(
+  challenge: Challenge | undefined | null,
+  reminderDaysOverride?: number[],
+): ReminderSchedule {
   const period =
     challenge?.period === "flexibleWeekly" || challenge?.period === "every2" || challenge?.period === "custom" || challenge?.period === "daily"
       ? challenge.period
       : "daily";
 
+  const reminderDays = normalizeReminderDays(reminderDaysOverride ?? challenge?.reminderDays);
+
   return {
     period,
     enabled: !!challenge && challenge.enabled !== false && !challenge.deletedAt,
-    isActiveOnDate: (dateISO) => isChallengeActiveOnDate(challenge ?? null, dateISO),
+    reminderDays,
+    isActiveOnDate: period === "flexibleWeekly"
+      ? (dateISO) => reminderDays.includes(weekdayMon0(dateISO))
+      : (dateISO) => isChallengeActiveOnDate(challenge ?? null, dateISO),
   };
 }
 
@@ -143,7 +183,7 @@ async function resolveReminderSchedule(reminderKey: string, override?: ReminderS
   if (reminderKindForId(reminderKey) === "challenge") {
     const latest = getCachedState() ?? (await loadState());
     const challenge = (latest.challenges ?? []).find((c) => String(c.id) === String(reminderKey));
-    return scheduleForChallenge(challenge ?? null);
+    return reminderScheduleForChallenge(challenge ?? null);
   }
 
   return {
@@ -153,21 +193,34 @@ async function resolveReminderSchedule(reminderKey: string, override?: ReminderS
   };
 }
 
-function upcomingActiveDates(schedule: ReminderSchedule, fromISO = getTodayISO()): string[] {
-  if (schedule.enabled === false) return [];
+function shouldUseDailyTrigger(schedule: ReminderSchedule): boolean {
+  const period = schedule.period ?? "daily";
+  return schedule.enabled !== false && period === "daily" && schedule.isActiveOnDate(getTodayISO());
+}
 
-  const dates: string[] = [];
-  for (let i = 0; i < ROLLING_SCHEDULE_DAYS; i++) {
-    const dateISO = addDaysISO(fromISO, i);
-    if (schedule.isActiveOnDate(dateISO)) dates.push(dateISO);
+export function plannedReminderDates(
+  schedule: ReminderSchedule,
+  timesHHMM: string[],
+  now = new Date(),
+  horizonDays = ROLLING_SCHEDULE_DAYS,
+): Date[] {
+  if (schedule.enabled === false) return [];
+  const parsedTimes = Array.from(new Set(timesHHMM))
+    .map(parseHHMM)
+    .filter((value): value is { hour: number; minute: number } => !!value);
+  const fromISO = localDateISO(now);
+  const dates: Date[] = [];
+
+  for (let offset = 0; offset < horizonDays; offset += 1) {
+    const dateISO = addDaysISO(fromISO, offset);
+    if (!schedule.isActiveOnDate(dateISO)) continue;
+    for (const time of parsedTimes) {
+      const date = dateForISOAndTime(dateISO, time.hour, time.minute);
+      if (date.getTime() > now.getTime()) dates.push(date);
+    }
   }
 
   return dates;
-}
-
-function shouldUseDailyTrigger(schedule: ReminderSchedule): boolean {
-  const period = schedule.period ?? "daily";
-  return schedule.enabled !== false && (period === "daily" || period === "flexibleWeekly") && schedule.isActiveOnDate(getTodayISO());
 }
 
 export async function recoverReminderNotificationOperations(
@@ -260,6 +313,7 @@ export async function ensureReminderPermissions(): Promise<boolean> {
 
 export type PreparedChallengeReminders = {
   times: string[];
+  reminderDays: number[];
   applyToState: (
     state: AppState,
     updateChallenge?: (challenge: Challenge) => Challenge
@@ -313,6 +367,10 @@ export async function prepareChallengeReminders(
   }
 
   const latest = runtime.getCachedState() ?? (await runtime.loadState());
+  const schedule = await resolveReminderSchedule(reminderKey, scheduleOverride);
+  const reminderDays = schedule.period === "flexibleWeekly"
+    ? normalizeReminderDays(schedule.reminderDays)
+    : [];
   const oldIds = [...(latest.reminderNotifIds?.[reminderKey] ?? [])];
   if (enabled && !_premiumEnabled && reminderKindForId(reminderKey) === "challenge") {
     const otherActive = (latest.challenges ?? []).some((challenge) =>
@@ -368,22 +426,17 @@ export async function prepareChallengeReminders(
     if (expoGo) throw new Error("NOTIFICATIONS_EXPO_GO_UNSUPPORTED");
 
     Notifications = runtime.Notifications;
-    const schedule = await resolveReminderSchedule(reminderKey, scheduleOverride);
     const ok = await runtime.ensureSchedulingReady();
     if (!ok) throw new Error("NOTIFICATIONS_PERMISSION_DENIED");
 
     const useDailyTrigger = shouldUseDailyTrigger(schedule);
-    const activeDates = useDailyTrigger ? [] : upcomingActiveDates(schedule);
-
-    const triggers = parsed.flatMap(({ p }) => useDailyTrigger
+    const triggers = parsed.flatMap(({ p, t }) => useDailyTrigger
       ? [{
           type: Notifications!.SchedulableTriggerInputTypes.DAILY,
           hour: p.hour,
           minute: p.minute,
         } as any]
-      : activeDates
-          .map((dateISO) => dateForISOAndTime(dateISO, p.hour, p.minute))
-          .filter((date) => date.getTime() > Date.now())
+      : plannedReminderDates(schedule, [t])
           .map((date) => ({
             type: Notifications!.SchedulableTriggerInputTypes.DATE,
             date,
@@ -459,6 +512,7 @@ export async function prepareChallengeReminders(
 
   return {
     times,
+    reminderDays,
     applyToState: (state, updateChallenge) => {
       if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
       const nextMap = { ...(state.reminderNotifIds ?? {}) };
@@ -474,6 +528,9 @@ export async function prepareChallengeReminders(
             ...updated,
             reminderEnabled: enabled,
             reminderTimes: enabled ? times : [],
+            reminderDays: updated.period === "flexibleWeekly"
+              ? (enabled ? reminderDays : [])
+              : updated.reminderDays,
           };
         }),
         reminderNotifIds: nextMap,
@@ -606,7 +663,7 @@ export async function refreshScheduledChallengeReminders(): Promise<void> {
       : [];
 
     if (challenge?.reminderEnabled && challenge.enabled !== false && !challenge.deletedAt && times.length) {
-      await setDailyRemindersForChallenge(id, String(challenge.text ?? "OneMore"), times, scheduleForChallenge(challenge));
+      await setDailyRemindersForChallenge(id, String(challenge.text ?? "OneMore"), times, reminderScheduleForChallenge(challenge));
     } else if (challenge?.reminderEnabled || hasScheduledIds) {
       await clearDailyRemindersForChallenge(id);
     }

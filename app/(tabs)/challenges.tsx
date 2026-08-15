@@ -31,6 +31,9 @@ import { hasAnyActiveSharedNotification } from "../../lib/sharedNotificationSett
 import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
+  isReminderDaySelectionValid,
+  normalizeReminderDays,
+  reminderScheduleForChallenge,
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
@@ -403,7 +406,7 @@ function countFreeChallenges(s: AppState): number {
 }
 
 export default function ChallengesScreen() {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const tx = CHALLENGES_STRINGS[lang];
   const { UI, isDark, mode } = useTheme();
   const insets = useSafeAreaInsets();
@@ -493,6 +496,7 @@ export default function ChallengesScreen() {
   const [remEnabled, setRemEnabled] = useState(false);
   const [tempTarget, setTempTarget] = useState(1);
   const [tempTimes, setTempTimes] = useState<string[]>([]);
+  const [tempReminderDays, setTempReminderDays] = useState<number[]>([]);
   const [premium, setPremium] = useState(false);
   const [remStep, setRemStep] = useState<1 | 2>(1);
   const [remSaving, setRemSaving] = useState(false);
@@ -550,10 +554,17 @@ export default function ChallengesScreen() {
   const reminderMaxAllowed = useMemo(() => {
     if (!state || !reminderId) return 1;
     const c = (state.challenges ?? []).find((x: any) => String(x.id) === String(reminderId)) as any;
+    if (c?.period === FLEXIBLE_WEEKLY_PERIOD) return 1;
     const freq = Number(c?.period === FLEXIBLE_WEEKLY_PERIOD ? c?.flexibleWeeklyPending?.target ?? c?.flexibleWeeklyTarget ?? 1 : c?.targetPerDay ?? 1);
     const freqSafe = Number.isFinite(freq) && freq > 0 ? Math.min(20, Math.floor(freq)) : 1;
     return premium ? freqSafe : Math.min(3, freqSafe);
   }, [state, reminderId, premium]);
+
+  const isFlexibleReminder = useMemo(() => {
+    if (!state || !reminderId) return false;
+    return (state.challenges ?? []).some((challenge) =>
+      String(challenge.id) === String(reminderId) && challenge.period === FLEXIBLE_WEEKLY_PERIOD);
+  }, [state, reminderId]);
 
   // ✅ KRITICKÉ: persist musí pracovat s nejnovějším state ze storage,
   // aby nepřepsal historii starou verzí.
@@ -674,7 +685,9 @@ export default function ChallengesScreen() {
 
     // ✅ PODMÍNKA: notifikací nesmí být víc než frekvence.
     // Free: max 3 notifikace/den a jen u 1 výzvy.
-    const maxAllowed = premium ? freqSafe : Math.min(3, freqSafe);
+    const maxAllowed = (c as any).period === FLEXIBLE_WEEKLY_PERIOD
+      ? 1
+      : premium ? freqSafe : Math.min(3, freqSafe);
 
     // Kolik notifikací chceme v UI zobrazit (preferuj uložené, jinak 1)
     const desiredCount = Math.min(
@@ -683,6 +696,7 @@ export default function ChallengesScreen() {
     );
 
     setTempTarget(desiredCount);
+    setTempReminderDays(normalizeReminderDays((c as any).reminderDays));
     setTempTimes(() => {
       const base = savedTimes.length
         ? savedTimes.slice(0, desiredCount)
@@ -740,18 +754,31 @@ export default function ChallengesScreen() {
     const freq = Number(c0?.period === FLEXIBLE_WEEKLY_PERIOD ? c0?.flexibleWeeklyPending?.target ?? c0?.flexibleWeeklyTarget ?? 1 : c0?.targetPerDay ?? 1);
     const freqSafe = Number.isFinite(freq) && freq > 0 ? Math.min(20, Math.floor(freq)) : 1;
 
-    const maxAllowed = premium ? freqSafe : Math.min(3, freqSafe);
+    const maxAllowed = c0?.period === FLEXIBLE_WEEKLY_PERIOD
+      ? 1
+      : premium ? freqSafe : Math.min(3, freqSafe);
     const desiredCount = Math.min(Math.max(1, Number(tempTarget) || 1), maxAllowed);
 
     const times = (tempTimes ?? [])
       .slice(0, desiredCount)
       .map((t) => String(t ?? ""))
       .filter(Boolean);
+    const reminderDays = normalizeReminderDays(tempReminderDays);
 
     // ✅ Povolené je mít MÍŇ notifikací než je frekvence.
     // Jediná podmínka: když jsou notifikace zapnuté, musí být nastavený aspoň 1 čas.
     if (remEnabled && times.length === 0) {
       Alert.alert(tx.missingTimeTitle, tx.missingTime);
+      remSaveLock.current = false;
+      setRemSaving(false);
+      return;
+    }
+
+    if (!isReminderDaySelectionValid(c0?.period, remEnabled, reminderDays)) {
+      Alert.alert(
+        t.flexibleWeekly.notificationDayRequiredTitle,
+        t.flexibleWeekly.notificationDayRequired,
+      );
       remSaveLock.current = false;
       setRemSaving(false);
       return;
@@ -776,7 +803,15 @@ export default function ChallengesScreen() {
       if (remEnabled && times.length) {
         const latest = await loadState();
         const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
-        await setDailyRemindersForChallenge(id, String(c?.text ?? "OneMore"), times);
+        await setDailyRemindersForChallenge(
+          id,
+          String(c?.text ?? "OneMore"),
+          times,
+          reminderScheduleForChallenge(
+            c,
+            c?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderDays : undefined,
+          ),
+        );
       } else {
         await clearDailyRemindersForChallenge(id);
       }
@@ -1127,6 +1162,34 @@ export default function ChallengesScreen() {
                 </Text>
               )}
 
+              {isFlexibleReminder && remEnabled && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.modalLabel}>{t.flexibleWeekly.notificationDays}</Text>
+                  <Text style={styles.modalHint}>{t.flexibleWeekly.notificationDaysHint}</Text>
+                  <View style={styles.pills}>
+                    {t.flexibleWeekly.weekdays.map((label, day) => {
+                      const active = tempReminderDays.includes(day);
+                      return (
+                        <Pressable
+                          key={day}
+                          onPress={() => setTempReminderDays((current) =>
+                            active
+                              ? current.filter((value) => value !== day)
+                              : normalizeReminderDays([...current, day]))}
+                          style={({ pressed }) => [
+                            styles.pill,
+                            active && styles.pillActive,
+                            pressed && { opacity: 0.85 },
+                          ]}
+                        >
+                          <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               {/* Kolik notifikací denně? (max = frekvence výzvy; free max 3) */}
               {reminderMaxAllowed > 1 && (
                 <View style={styles.premiumRow}>
@@ -1160,7 +1223,9 @@ export default function ChallengesScreen() {
               {/* Step 2: times */}
               {(!premium || remStep === 2) && (
                 <View style={{ marginTop: 12 }}>
-                  <Text style={styles.modalLabel}>{tx.times}</Text>
+                  <Text style={styles.modalLabel}>
+                    {isFlexibleReminder ? t.flexibleWeekly.notificationTime : tx.times}
+                  </Text>
                   <View style={styles.timesWrap}>
                     {Array.from(
                       { length: Math.min(Math.max(1, Number(tempTarget) || 1), reminderMaxAllowed) },
