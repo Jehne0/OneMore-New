@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { createVersionGateController } from "../lib/updateStartupPolicy";
 import type { VersionCheckDecision } from "../lib/versionCheck";
@@ -98,4 +100,14 @@ test("concurrent foreground checks coalesce and never duplicate the listener", a
   await controller.verify().then(() => undefined);
   assert.equal(checks, 2);
   assert.equal(starts, 1);
+});
+
+test("required UpdateGate remains blocking while its scrollable card stays compact", () => {
+  const source = readFileSync(join(process.cwd(), "lib/UpdateGate.tsx"), "utf8");
+  assert.match(source, /maxWidth: 420/);
+  assert.match(source, /alignSelf: "center"/);
+  assert.match(source, /<ScrollView style=\{styles\.card\}/);
+  assert.match(source, /onRequestClose=\{close\}/);
+  assert.match(source, /if \(!required\) setUpdate\(null\)/);
+  assert.doesNotMatch(source, /<Pressable style=\{styles\.backdrop\}/);
 });

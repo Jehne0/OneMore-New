@@ -23,7 +23,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getSafeModalMetrics } from "../../lib/safeModalLayout";
 import { Alert } from "../../lib/appAlert";
 import { getTodayISO } from "../../lib/clock";
-import { useTodayISO } from "../../lib/useTodayISO";
 import { ensureDaily } from "../../lib/logic";
 import { isPremiumActive, subscribePremium } from "../../lib/premium";
 import { FREE_MAX_CHALLENGES } from "../../lib/plan";
@@ -31,12 +30,17 @@ import { hasAnyActiveSharedNotification } from "../../lib/sharedNotificationSett
 import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
-  isReminderDaySelectionValid,
-  normalizeReminderDays,
+  isFlexibleReminderRowSelectionValid,
   reminderScheduleForChallenge,
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
+import {
+  flexibleReminderRowTime,
+  migrateFlexibleWeeklyReminderRows,
+  normalizeFlexibleWeeklyReminderRows,
+  type FlexibleWeeklyReminderRow,
+} from "../../lib/flexibleReminderRows";
 import { AppState, challengeDisplayText, ensureDailyPick, loadState, renameChallenge, saveState, transitionChallengeEnabled } from "../../lib/storage";
 import { FLEXIBLE_WEEKLY_PERIOD, clampFlexibleWeeklyTarget, scheduleFlexibleWeeklySettings } from "../../lib/flexibleWeekly";
 import { useTheme } from "../../lib/theme";
@@ -61,47 +65,6 @@ const NOTIFICATION_SAVED: Record<Lang, string> = {
 
 const formatChallengeText = (value: string, params: Record<string, string | number>) =>
   value.replace(/\{(\w+)\}/g, (_, key: string) => String(params[key] ?? `{${key}}`));
-
-function addDaysISO(iso: string, deltaDays: number) {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  dt.setDate(dt.getDate() + deltaDays);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
-function getEntry(history: any[], challengeId: string, dateISO: string) {
-  const list = (history ?? []).filter(
-    (h) => String((h as any)?.challengeId ?? "") === String(challengeId) && (h as any)?.date === dateISO
-  ) as any[];
-
-  // prefer completed (kvůli multi-complete)
-  return (
-    list.find((h) => (h as any)?.status === "completed") ??
-    list.find((h) => (h as any)?.status === "skipped") ??
-    list[0]
-  ) as any | undefined;
-}
-
-function streakForChallenge(history: any[], challengeId: string, todayISO: string) {
-  const todayEntry = getEntry(history, challengeId, todayISO);
-  if (todayEntry?.status === "skipped") return 0;
-
-  const baseDate = todayEntry?.status === "completed" ? todayISO : addDaysISO(todayISO, -1);
-
-  let streak = 0;
-  let cursor = baseDate;
-
-  while (true) {
-    const e = getEntry(history, challengeId, cursor);
-    if (!e || e.status !== "completed") break;
-    streak += 1;
-    cursor = addDaysISO(cursor, -1);
-  }
-  return streak;
-}
 
 function makeStyles(UI: any, isDark: boolean, topInset: number, bottomInset: number, windowHeight: number) {
   const safeModal = getSafeModalMetrics({ windowHeight, topInset, bottomInset, heightRatio: 0.86 });
@@ -318,6 +281,10 @@ modalBtnPrimary: {
     toggleText: { fontWeight: "900", color: UI.text },
 
     timesWrap: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+    reminderRows: { gap: 10, marginTop: 8 },
+    reminderRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+    reminderDayBtn: { flex: 1, minWidth: 0 },
+    reminderRemoveBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
     timeBtn: {
       borderWidth: 1,
       borderColor: inputBorder,
@@ -438,55 +405,6 @@ export default function ChallengesScreen() {
   const [state, setState] = useState<AppState | null>(null);
   const [text, setText] = useState("");
 
-  const tdy = useTodayISO();
-  const historyEntries = state?.history ?? [];
-
-  const historyIndex = useMemo(() => {
-    // key: "<challengeId>|<YYYY-MM-DD>" -> status ("completed"/"skipped"/...)
-    const map = new Map<string, string>();
-    for (const h of historyEntries as any[]) {
-      const cid = String((h as any)?.challengeId ?? "");
-      const d = String((h as any)?.date ?? "");
-      const st = String((h as any)?.status ?? "");
-      if (!cid || !d) continue;
-      const k = `${cid}|${d}`;
-      const prev = map.get(k);
-      // prefer completed
-      if (prev === "completed") continue;
-      if (st === "completed") {
-        map.set(k, "completed");
-      } else if (!prev && st) {
-        map.set(k, st);
-      }
-    }
-    return map;
-  }, [historyEntries]);
-
-  const streakById = useMemo(() => {
-    const out: Record<string, number> = {};
-    const list = (state?.challenges ?? []) as any[];
-    for (const c of list) {
-      const id = String(c?.id ?? "");
-      if (!id) continue;
-      const todayStatus = historyIndex.get(`${id}|${tdy}`);
-      if (todayStatus === "skipped") {
-        out[id] = 0;
-        continue;
-      }
-      const base = todayStatus === "completed" ? tdy : addDaysISO(tdy, -1);
-      let streak = 0;
-      let cursor = base;
-      while (true) {
-        const st = historyIndex.get(`${id}|${cursor}`);
-        if (st !== "completed") break;
-        streak += 1;
-        cursor = addDaysISO(cursor, -1);
-      }
-      out[id] = streak;
-    }
-    return out;
-  }, [state?.challenges, historyIndex, tdy]);
-
   // rename modal state
   const [renameOpen, setRenameOpen] = useState(false);
 
@@ -496,12 +414,14 @@ export default function ChallengesScreen() {
   const [remEnabled, setRemEnabled] = useState(false);
   const [tempTarget, setTempTarget] = useState(1);
   const [tempTimes, setTempTimes] = useState<string[]>([]);
-  const [tempReminderDays, setTempReminderDays] = useState<number[]>([]);
+  const [tempReminderRows, setTempReminderRows] = useState<FlexibleWeeklyReminderRow[]>([]);
+  const [tempDayPickerIndex, setTempDayPickerIndex] = useState<number | null>(null);
   const [premium, setPremium] = useState(false);
   const [remStep, setRemStep] = useState<1 | 2>(1);
   const [remSaving, setRemSaving] = useState(false);
   const [remConfirmation, setRemConfirmation] = useState("");
   const remSaveLock = useRef(false);
+  const reminderScrollRef = useRef<ScrollView>(null);
 
   // time picker
   const [timePickerOpen, setTimePickerOpen] = useState(false);
@@ -554,7 +474,7 @@ export default function ChallengesScreen() {
   const reminderMaxAllowed = useMemo(() => {
     if (!state || !reminderId) return 1;
     const c = (state.challenges ?? []).find((x: any) => String(x.id) === String(reminderId)) as any;
-    if (c?.period === FLEXIBLE_WEEKLY_PERIOD) return 1;
+    if (c?.period === FLEXIBLE_WEEKLY_PERIOD) return 7;
     const freq = Number(c?.period === FLEXIBLE_WEEKLY_PERIOD ? c?.flexibleWeeklyPending?.target ?? c?.flexibleWeeklyTarget ?? 1 : c?.targetPerDay ?? 1);
     const freqSafe = Number.isFinite(freq) && freq > 0 ? Math.min(20, Math.floor(freq)) : 1;
     return premium ? freqSafe : Math.min(3, freqSafe);
@@ -696,7 +616,12 @@ export default function ChallengesScreen() {
     );
 
     setTempTarget(desiredCount);
-    setTempReminderDays(normalizeReminderDays((c as any).reminderDays));
+    setTempReminderRows(migrateFlexibleWeeklyReminderRows(
+      (c as any).flexibleReminderRows,
+      (c as any).reminderDays,
+      savedTimes,
+    ));
+    setTempDayPickerIndex(null);
     setTempTimes(() => {
       const base = savedTimes.length
         ? savedTimes.slice(0, desiredCount)
@@ -721,6 +646,7 @@ export default function ChallengesScreen() {
     setTimePickerIndex(idx);
     setTimePickerValue(base);
     setTimePickerOpen(true);
+    requestAnimationFrame(() => reminderScrollRef.current?.scrollToEnd({ animated: true }));
   }
 
   function onTimePicked(_event: DateTimePickerEvent, date?: Date) {
@@ -739,6 +665,10 @@ export default function ChallengesScreen() {
       copy[timePickerIndex] = `${hh}:${mm}`;
       return copy;
     });
+    if (isFlexibleReminder) {
+      setTempReminderRows((prev) => prev.map((row, index) =>
+        index === timePickerIndex ? { ...row, hour: Number(hh), minute: Number(mm) } : row));
+    }
   }
 
   async function saveReminderConfig() {
@@ -759,22 +689,23 @@ export default function ChallengesScreen() {
       : premium ? freqSafe : Math.min(3, freqSafe);
     const desiredCount = Math.min(Math.max(1, Number(tempTarget) || 1), maxAllowed);
 
-    const times = (tempTimes ?? [])
+    let times = (tempTimes ?? [])
       .slice(0, desiredCount)
       .map((t) => String(t ?? ""))
       .filter(Boolean);
-    const reminderDays = normalizeReminderDays(tempReminderDays);
+    const reminderRows = normalizeFlexibleWeeklyReminderRows(tempReminderRows);
+    if (c0?.period === FLEXIBLE_WEEKLY_PERIOD) times = reminderRows.map(flexibleReminderRowTime);
 
     // ✅ Povolené je mít MÍŇ notifikací než je frekvence.
     // Jediná podmínka: když jsou notifikace zapnuté, musí být nastavený aspoň 1 čas.
-    if (remEnabled && times.length === 0) {
+    if (remEnabled && c0?.period !== FLEXIBLE_WEEKLY_PERIOD && times.length === 0) {
       Alert.alert(tx.missingTimeTitle, tx.missingTime);
       remSaveLock.current = false;
       setRemSaving(false);
       return;
     }
 
-    if (!isReminderDaySelectionValid(c0?.period, remEnabled, reminderDays)) {
+    if (!isFlexibleReminderRowSelectionValid(c0?.period, remEnabled, reminderRows)) {
       Alert.alert(
         t.flexibleWeekly.notificationDayRequiredTitle,
         t.flexibleWeekly.notificationDayRequired,
@@ -788,7 +719,7 @@ export default function ChallengesScreen() {
     if (!premium && remEnabled) {
       const activeId = getFreeActiveReminderChallengeId(state);
       const anySharedActive = await hasAnyActiveSharedNotification();
-      if ((activeId && String(activeId) != id) || anySharedActive) {
+      if ((activeId && String(activeId) !== id) || anySharedActive) {
         Alert.alert(
           tx.freeNotificationsTitle,
           tx.freeNotifications
@@ -800,7 +731,7 @@ export default function ChallengesScreen() {
     }
 
     try {
-      if (remEnabled && times.length) {
+      if (remEnabled && (c0?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows.length > 0 : times.length > 0)) {
         const latest = await loadState();
         const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
         await setDailyRemindersForChallenge(
@@ -809,7 +740,7 @@ export default function ChallengesScreen() {
           times,
           reminderScheduleForChallenge(
             c,
-            c?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderDays : undefined,
+            c?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows : undefined,
           ),
         );
       } else {
@@ -817,13 +748,14 @@ export default function ChallengesScreen() {
       }
     } catch (e: any) {
       const msg = String(e?.message ?? "");
+      if (__DEV__) console.error("[PersonalReminders] save failed", { code: msg || "unknown", period: c0?.period });
       if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
         Alert.alert(
           tx.expoGoTitle,
           tx.expoGoText
         );
       } else {
-        Alert.alert(tx.notifications, tx.notificationsFailed);
+        Alert.alert(tx.notifications, t.flexibleWeekly.notificationSaveFailed);
       }
       remSaveLock.current = false;
       setRemSaving(false);
@@ -1142,7 +1074,13 @@ export default function ChallengesScreen() {
             <Pressable style={styles.modalCard} onPress={() => {}}>
               <Text style={styles.modalTitle}>{tx.notifications}</Text>
 
-              <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ paddingBottom: 10 }} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                ref={reminderScrollRef}
+                style={{ flexShrink: 1 }}
+                contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 20) }}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={false}
+              >
 
               {/* Enable/Disable */}
               <Pressable
@@ -1165,33 +1103,73 @@ export default function ChallengesScreen() {
               {isFlexibleReminder && remEnabled && (
                 <View style={{ marginTop: 12 }}>
                   <Text style={styles.modalLabel}>{t.flexibleWeekly.notificationDays}</Text>
-                  <Text style={styles.modalHint}>{t.flexibleWeekly.notificationDaysHint}</Text>
-                  <View style={styles.pills}>
-                    {t.flexibleWeekly.weekdays.map((label, day) => {
-                      const active = tempReminderDays.includes(day);
-                      return (
-                        <Pressable
-                          key={day}
-                          onPress={() => setTempReminderDays((current) =>
-                            active
-                              ? current.filter((value) => value !== day)
-                              : normalizeReminderDays([...current, day]))}
-                          style={({ pressed }) => [
-                            styles.pill,
-                            active && styles.pillActive,
-                            pressed && { opacity: 0.85 },
-                          ]}
-                        >
-                          <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
-                        </Pressable>
-                      );
-                    })}
+                  <Text style={styles.modalHint}>{t.flexibleWeekly.notificationRowsHint}</Text>
+                  <View style={styles.reminderRows}>
+                    {tempReminderRows.map((row, index) => (
+                      <View key={`${row.weekday}-${index}`}>
+                        <View style={styles.reminderRow}>
+                          <Pressable
+                            accessibilityLabel={t.flexibleWeekly.notificationDay}
+                            onPress={() => setTempDayPickerIndex((current) => current === index ? null : index)}
+                            style={({ pressed }) => [styles.timeBtn, styles.reminderDayBtn, pressed && { opacity: 0.85 }]}
+                          >
+                            <Text style={styles.timeText}>{t.flexibleWeekly.weekdays[row.weekday - 1]}</Text>
+                          </Pressable>
+                          <Pressable onPress={() => openTimePicker(index)} style={({ pressed }) => [styles.timeBtn, pressed && { opacity: 0.85 }]}>
+                            <Text style={styles.timeText}>{flexibleReminderRowTime(row)}</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityLabel={t.flexibleWeekly.removeNotificationRow}
+                            onPress={() => setTempReminderRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                            style={({ pressed }) => [styles.reminderRemoveBtn, pressed && { opacity: 0.6 }]}
+                          >
+                            <Ionicons name="trash-outline" size={20} color={UI.text} />
+                          </Pressable>
+                        </View>
+                        {tempDayPickerIndex === index && (
+                          <View style={[styles.pills, { marginTop: 8 }]}>
+                            {t.flexibleWeekly.weekdays.map((label, weekdayIndex) => {
+                              const weekday = weekdayIndex + 1;
+                              const used = tempReminderRows.some((candidate, candidateIndex) => candidateIndex !== index && candidate.weekday === weekday);
+                              return (
+                                <Pressable
+                                  key={weekday}
+                                  disabled={used}
+                                  onPress={() => {
+                                    setTempReminderRows((current) => current.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, weekday } : candidate));
+                                    setTempDayPickerIndex(null);
+                                  }}
+                                  style={[styles.pill, row.weekday === weekday && styles.pillActive, used && { opacity: 0.35 }]}
+                                >
+                                  <Text style={[styles.pillText, row.weekday === weekday && styles.pillTextActive]}>{label}</Text>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </View>
+                    ))}
                   </View>
+                  {tempReminderRows.length < 7 && (
+                    <Pressable
+                      onPress={() => {
+                        const now = new Date();
+                        setTempReminderRows((current) => {
+                          const weekday = [1, 2, 3, 4, 5, 6, 7].find((value) => !current.some((row) => row.weekday === value));
+                          return weekday ? [...current, { weekday, hour: now.getHours(), minute: now.getMinutes() }] : current;
+                        });
+                        setTempDayPickerIndex(null);
+                      }}
+                      style={({ pressed }) => [styles.modalBtn, { alignSelf: "flex-start", marginTop: 10 }, pressed && { opacity: 0.85 }]}
+                    >
+                      <Text style={styles.modalBtnText}>{t.flexibleWeekly.addNotificationRow}</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
 
               {/* Kolik notifikací denně? (max = frekvence výzvy; free max 3) */}
-              {reminderMaxAllowed > 1 && (
+              {!isFlexibleReminder && reminderMaxAllowed > 1 && (
                 <View style={styles.premiumRow}>
                   <Text style={styles.modalLabel}>{tx.notificationCount}</Text>
                   <View style={styles.pills}>
@@ -1223,10 +1201,8 @@ export default function ChallengesScreen() {
               {/* Step 2: times */}
               {(!premium || remStep === 2) && (
                 <View style={{ marginTop: 12 }}>
-                  <Text style={styles.modalLabel}>
-                    {isFlexibleReminder ? t.flexibleWeekly.notificationTime : tx.times}
-                  </Text>
-                  <View style={styles.timesWrap}>
+                  {!isFlexibleReminder && <Text style={styles.modalLabel}>{tx.times}</Text>}
+                  {!isFlexibleReminder && <View style={styles.timesWrap}>
                     {Array.from(
                       { length: Math.min(Math.max(1, Number(tempTarget) || 1), reminderMaxAllowed) },
                       (_, idx) => {
@@ -1242,7 +1218,7 @@ export default function ChallengesScreen() {
                         );
                       }
                     )}
-                  </View>
+                  </View>}
 
                   {premium && (
                     <Pressable

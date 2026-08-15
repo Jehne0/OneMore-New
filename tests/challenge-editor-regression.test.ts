@@ -107,3 +107,14 @@ test("today hook recalculates on foreground and polls for timezone changes", () 
   assert.match(hook, /resolvedOptions\(\)\.timeZone/);
   assert.match(hook, /scheduleMidnight\(\)/);
 });
+
+test("Today list keeps native clipping and reminder editors reserve safe bottom space", () => {
+  const home = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
+  const challenges = readFileSync(join(process.cwd(), "app/(tabs)/challenges.tsx"), "utf8");
+  assert.doesNotMatch(home, /removeClippedSubviews=\{false\}/);
+  assert.doesNotMatch(challenges, /const streakById = useMemo/);
+  assert.match(home, /contentContainerStyle=\{\{ paddingBottom: Math\.max\(32, insets\.bottom \+ 20\) \}\}/);
+  assert.match(challenges, /contentContainerStyle=\{\{ paddingBottom: Math\.max\(32, insets\.bottom \+ 20\) \}\}/);
+  assert.match(home, /manageScrollRef\.current\?\.scrollToEnd/);
+  assert.match(challenges, /reminderScrollRef\.current\?\.scrollToEnd/);
+});

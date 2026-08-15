@@ -16,6 +16,10 @@ import {
   type FlexibleWeeklyPendingSettings,
 } from "./flexibleWeekly";
 import { getPlanAccessibleChallengeIds } from "./plan";
+import {
+  migrateFlexibleWeeklyReminderRows,
+  type FlexibleWeeklyReminderRow,
+} from "./flexibleReminderRows";
 
 const LEGACY_STORAGE_KEY = "onemore_state";
 const LEGACY_BACKUP_KEY = "onemore_state_backup";
@@ -275,6 +279,8 @@ export type Challenge = {
   reminderTimes?: string[]; // ["HH:mm", ...] (např. ["09:00","18:00"])
   /** Pouze pro notifikace flexibleWeekly: 0=Po … 6=Ne. */
   reminderDays?: number[];
+  /** Canonical flexibleWeekly reminder rows. 1=Monday … 7=Sunday. */
+  flexibleReminderRows?: FlexibleWeeklyReminderRow[];
 
   /** Irreversible fun mode: no streak reset, no new competitive stats/medals. */
   easyMode?: boolean;
@@ -850,13 +856,16 @@ function mergeWithExisting(existing: AppState, incoming: Partial<AppState>): App
         ? Math.floor(c.targetPerDay)
         : 1,
 
-    reminderEnabled: typeof c.reminderEnabled === "boolean" ? c.reminderEnabled : false,
+    reminderEnabled: typeof c.reminderEnabled === "boolean"
+      ? c.reminderEnabled && !(c.period === FLEXIBLE_WEEKLY_PERIOD && migrateFlexibleWeeklyReminderRows(c.flexibleReminderRows, c.reminderDays, c.reminderTimes).length === 0)
+      : false,
     reminderTimes: Array.isArray(c.reminderTimes)
       ? c.reminderTimes.map(normalizeTimeHHMM).filter(Boolean)
       : normalizeTimeHHMM(c.reminderTime)
         ? [normalizeTimeHHMM(c.reminderTime) as string]
         : [],
     reminderDays: normalizeReminderDays(c.reminderDays),
+    flexibleReminderRows: migrateFlexibleWeeklyReminderRows(c.flexibleReminderRows, c.reminderDays, c.reminderTimes),
     easyMode: c.easyMode === true || existingEasyIds.has(String(c.id)),
     inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
       ? normalizeInactivePeriods(c.inactivePeriods)
@@ -921,13 +930,16 @@ targetPerDay: typeof c.targetPerDay === "number" && Number.isFinite(c.targetPerD
   ? Math.floor(c.targetPerDay)
   : 1,
 
-reminderEnabled: typeof c.reminderEnabled === "boolean" ? c.reminderEnabled : false,
+reminderEnabled: typeof c.reminderEnabled === "boolean"
+  ? c.reminderEnabled && !(c.period === FLEXIBLE_WEEKLY_PERIOD && migrateFlexibleWeeklyReminderRows(c.flexibleReminderRows, c.reminderDays, c.reminderTimes).length === 0)
+  : false,
 reminderTimes: Array.isArray(c.reminderTimes)
   ? c.reminderTimes.map(normalizeTimeHHMM).filter(Boolean)
   : normalizeTimeHHMM(c.reminderTime)
     ? [normalizeTimeHHMM(c.reminderTime) as string]
     : [],
 reminderDays: normalizeReminderDays(c.reminderDays),
+flexibleReminderRows: migrateFlexibleWeeklyReminderRows(c.flexibleReminderRows, c.reminderDays, c.reminderTimes),
 easyMode: c.easyMode === true || parsedEasyIds.has(String(c.id)),
 inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
   ? normalizeInactivePeriods(c.inactivePeriods)
@@ -1322,13 +1334,16 @@ export async function loadChallengesFast(): Promise<Challenge[]> {
           flexibleWeeklyPending: c.flexibleWeeklyPending,
 
           targetPerDay: typeof c.targetPerDay === "number" && Number.isFinite(c.targetPerDay) && c.targetPerDay > 0 ? Math.floor(c.targetPerDay) : 1,
-          reminderEnabled: typeof c.reminderEnabled === "boolean" ? c.reminderEnabled : false,
+          reminderEnabled: typeof c.reminderEnabled === "boolean"
+            ? c.reminderEnabled && !(c.period === FLEXIBLE_WEEKLY_PERIOD && migrateFlexibleWeeklyReminderRows(c.flexibleReminderRows, c.reminderDays, c.reminderTimes).length === 0)
+            : false,
           reminderTimes: Array.isArray(c.reminderTimes)
             ? c.reminderTimes.map(normalizeTimeHHMM).filter(Boolean)
             : normalizeTimeHHMM((c as any).reminderTime)
               ? [normalizeTimeHHMM((c as any).reminderTime) as string]
               : [],
           reminderDays: normalizeReminderDays(c.reminderDays),
+          flexibleReminderRows: migrateFlexibleWeeklyReminderRows(c.flexibleReminderRows, c.reminderDays, c.reminderTimes),
           easyMode: c.easyMode === true,
           inactivePeriods: normalizeInactivePeriods(c.inactivePeriods).length > 0
             ? normalizeInactivePeriods(c.inactivePeriods)

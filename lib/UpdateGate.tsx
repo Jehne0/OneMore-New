@@ -6,7 +6,6 @@ import { useI18n } from "./i18n";
 import { useTheme } from "./theme";
 import { checkRemoteAppVersion, type VersionCheckDecision, type VersionCheckResult } from "./versionCheck";
 import { getSafeModalMetrics } from "./safeModalLayout";
-import { getResponsiveLayout } from "./responsiveLayout";
 import { createVersionGateController, type VersionGateController } from "./updateStartupPolicy";
 import type { CloudAccessStatus } from "./cloudAccessGate";
 
@@ -35,8 +34,7 @@ export function UpdateGate({
   const { lang, t } = useI18n();
   const { UI, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const responsive = getResponsiveLayout(windowWidth);
+  const { height: windowHeight } = useWindowDimensions();
   const safeModal = getSafeModalMetrics({
     windowHeight,
     topInset: insets.top,
@@ -107,6 +105,9 @@ export function UpdateGate({
         paddingBottom: safeModal.paddingBottom,
       },
       card: {
+        width: "100%",
+        maxWidth: 420,
+        alignSelf: "center",
         backgroundColor: sheetBg,
         borderRadius: 18,
         borderWidth: 1,
@@ -217,7 +218,7 @@ export function UpdateGate({
   return (
     <Modal visible transparent animationType="fade" onRequestClose={close}>
       <View style={styles.backdrop}>
-        <ScrollView style={[styles.card, { width: responsive.modalWidth }]} contentContainerStyle={{ flexGrow: 0 }}>
+        <ScrollView style={styles.card} contentContainerStyle={{ flexGrow: 0, paddingBottom: 2 }}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.msg}>{message}</Text>
 

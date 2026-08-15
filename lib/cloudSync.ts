@@ -100,6 +100,7 @@ function reviewDemoChallengeTemplate(
     reminderEnabled: false,
     reminderTimes: [],
     reminderDays: [],
+    flexibleReminderRows: [],
   };
 }
 
@@ -220,6 +221,7 @@ function ensureReviewChallenge(
     reminderEnabled: typeof existing.reminderEnabled === "boolean" ? existing.reminderEnabled : false,
     reminderTimes: Array.isArray(existing.reminderTimes) ? existing.reminderTimes : [],
     reminderDays: Array.isArray(existing.reminderDays) ? existing.reminderDays : [],
+    flexibleReminderRows: Array.isArray(existing.flexibleReminderRows) ? existing.flexibleReminderRows : [],
   };
 
   const changed = JSON.stringify(existing) !== JSON.stringify(next);

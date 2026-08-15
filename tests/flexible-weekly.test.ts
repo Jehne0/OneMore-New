@@ -230,6 +230,17 @@ test("saveStateForUid and loadStateForUid preserve a 2-fire weekly streak", asyn
   const wednesday = applyChallengeCompletion(current, "flex-1", "2026-03-25", new Date("2026-03-25T08:00:00"));
   assert.equal(wednesday.status, "completed");
   current = wednesday.state;
+  current = {
+    ...current,
+    challenges: current.challenges.map((item: any) => item.id === "flex-1" ? {
+      ...item,
+      reminderEnabled: true,
+      flexibleReminderRows: [
+        { weekday: 4, hour: 18, minute: 0 },
+        { weekday: 6, hour: 9, minute: 30 },
+      ],
+    } : item),
+  };
 
   await saveStateForUid(current, uid);
   const loaded = await loadStateForUid(uid);
@@ -237,6 +248,10 @@ test("saveStateForUid and loadStateForUid preserve a 2-fire weekly streak", asyn
   assert.equal(loaded.challengeStats["flex-1"].currentStreak, 2);
   assert.equal(loaded.challengeStats["flex-1"].bestStreak, 2);
   assert.equal(loaded.history.filter((entry) => entry.eventType === "flexibleWeeklyCompleted").length, 2);
+  assert.deepEqual(loaded.challenges[0].flexibleReminderRows, [
+    { weekday: 4, hour: 18, minute: 0 },
+    { weekday: 6, hour: 9, minute: 30 },
+  ]);
   const afterCloudPolicy = preserveUnknownFlexibleWeeklyFields(loaded, {
     ...loaded,
     challengeStats: { ...loaded.challengeStats, "flex-1": { ...loaded.challengeStats["flex-1"] } },
@@ -245,7 +260,29 @@ test("saveStateForUid and loadStateForUid preserve a 2-fire weekly streak", asyn
   const afterCloudLoad = await loadStateForUid(uid);
   assert.equal(afterCloudLoad.challengeStats["flex-1"].currentStreak, 2);
   assert.equal(afterCloudLoad.challengeStats["flex-1"].bestStreak, 2);
+  assert.deepEqual(afterCloudLoad.challenges[0].flexibleReminderRows, loaded.challenges[0].flexibleReminderRows);
   await clearDebugTodayISO();
+});
+
+test("storage disables legacy flexible time-only data and migrates day plus shared time", async () => {
+  const invalidUid = "flex-invalid-reminder";
+  await replaceStateForUid(state({
+    challenges: [challenge({ reminderEnabled: true, reminderTimes: ["18:00"], reminderDays: undefined })],
+  }), invalidUid, "2026-03-25T10:00:00.000Z");
+  const invalid = await loadStateForUid(invalidUid);
+  assert.equal(invalid.challenges[0].reminderEnabled, false);
+  assert.deepEqual(invalid.challenges[0].flexibleReminderRows, []);
+
+  const migratedUid = "flex-migrated-reminder";
+  await replaceStateForUid(state({
+    challenges: [challenge({ reminderEnabled: true, reminderTimes: ["18:00"], reminderDays: [3, 5] })],
+  }), migratedUid, "2026-03-25T10:01:00.000Z");
+  const migrated = await loadStateForUid(migratedUid);
+  assert.equal(migrated.challenges[0].reminderEnabled, true);
+  assert.deepEqual(migrated.challenges[0].flexibleReminderRows, [
+    { weekday: 4, hour: 18, minute: 0 },
+    { weekday: 6, hour: 18, minute: 0 },
+  ]);
 });
 
 test("disabled weeks are neutral and re-enable starts at the next whole period", () => {

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   commitPreparedNotificationChange,
   scheduleBatchWithRollback,
@@ -30,6 +32,13 @@ function memoryStore(events: string[] = []): NotificationJournalStore {
     removeItem: async (key) => { events.push(`remove:${key}`); values.delete(key); },
   } as NotificationJournalStore;
 }
+
+test("production reminder runtime waits for Firebase Auth restoration before capturing the journal UID", () => {
+  const source = readFileSync(join(process.cwd(), "lib/reminders.ts"), "utf8");
+  const ready = source.indexOf("await auth.authStateReady()");
+  const capture = source.indexOf("const uid = String(auth.currentUser?.uid ?? \"\")", ready);
+  assert.ok(ready >= 0 && capture > ready);
+});
 
 function notificationHarness(
   initial: { id: string; operationId?: string; data?: Record<string, unknown> }[],
@@ -65,6 +74,7 @@ function productionRuntime(options: {
   store?: NotificationJournalStore;
   events?: string[];
   uidCurrent?: () => boolean;
+  failScheduleAt?: number;
 }) {
   const events = options.events ?? [];
   const store = options.store ?? memoryStore(events);
@@ -80,6 +90,7 @@ function productionRuntime(options: {
     AndroidNotificationPriority: { HIGH: "high" },
     scheduleNotificationAsync: async (request: any) => {
       const id = `new-${++sequence}`;
+      if (sequence === options.failScheduleAt) throw new Error(`native-schedule-${sequence}`);
       events.push(`schedule:${id}`);
       notifications.scheduled.set(id, { identifier: id, content: request.content });
       return id;
@@ -281,6 +292,26 @@ test("production prepareChallengeReminders persists journal before first schedul
   const journalIndex = events.findIndex((event) => event.includes("notification_journal"));
   assert.ok(journalIndex >= 0 && journalIndex < scheduleIndex, events.join(","));
   await prepared.rollback();
+});
+
+test("production prepare rolls back partial native schedules at first, middle and last failure", async () => {
+  for (const failScheduleAt of [1, 2, 3]) {
+    const notifications = notificationHarness([{ id: "old-1" }]);
+    const run = productionRuntime({
+      notifications,
+      failScheduleAt,
+      state: {
+        challenges: [{ id: "c1", text: "A", enabled: true, reminderEnabled: true }],
+        history: [], challengeStats: {}, reminderNotifIds: { c1: ["old-1"] },
+      },
+    });
+    await assert.rejects(() => prepareChallengeReminders(
+      "c1", "A", ["08:00", "12:00", "18:00"], true,
+      { period: "daily", enabled: true, isActiveOnDate: () => true }, run.runtime,
+    ), new RegExp(`native-schedule-${failScheduleAt}`));
+    assert.deepEqual([...notifications.scheduled.keys()], ["old-1"], String(failScheduleAt));
+    assert.equal((await readReminderCleanupQueue("u1", run.runtime.store)).length, 0);
+  }
 });
 
 test("public challenge cancellation persists every journal before first cancel", async () => {

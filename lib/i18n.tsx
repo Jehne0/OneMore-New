@@ -24,6 +24,13 @@ export type Dictionary = {
     notificationTime: string;
     notificationDayRequiredTitle: string;
     notificationDayRequired: string;
+    notificationRowsHint: string;
+    addNotificationRow: string;
+    removeNotificationRow: string;
+    notificationDay: string;
+    notificationRowDuplicateTitle: string;
+    notificationRowDuplicate: string;
+    notificationSaveFailed: string;
     weekdays: string[];
   };
   tabs: {
@@ -133,6 +140,13 @@ export const STRINGS: Record<Lang, Dictionary> = {
       notificationTime: "Čas pro vybrané dny",
       notificationDayRequiredTitle: "Chybí den upozornění",
       notificationDayRequired: "Vyber alespoň jeden den v týdnu, nebo notifikaci vypni.",
+      notificationRowsHint: "Každý den má vlastní čas a neurčuje povinný den splnění výzvy.",
+      addNotificationRow: "+ Přidat upozornění",
+      removeNotificationRow: "Odstranit upozornění",
+      notificationDay: "Den",
+      notificationRowDuplicateTitle: "Duplicitní den",
+      notificationRowDuplicate: "Pro jeden den lze nastavit pouze jedno upozornění.",
+      notificationSaveFailed: "Upozornění se nepodařilo uložit. Původní nastavení zůstalo zachované. Zkontroluj oprávnění a zkus to znovu.",
       weekdays: ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota", "Neděle"],
     },
     tabs: {
@@ -241,6 +255,13 @@ export const STRINGS: Record<Lang, Dictionary> = {
       notificationTime: "Time for selected days",
       notificationDayRequiredTitle: "Notification day missing",
       notificationDayRequired: "Choose at least one weekday or turn the notification off.",
+      notificationRowsHint: "Each day has its own time and does not become a required completion day.",
+      addNotificationRow: "+ Add reminder",
+      removeNotificationRow: "Remove reminder",
+      notificationDay: "Day",
+      notificationRowDuplicateTitle: "Duplicate day",
+      notificationRowDuplicate: "Only one reminder can be set for each weekday.",
+      notificationSaveFailed: "The reminder could not be saved. Your previous settings were kept. Check notification permission and try again.",
       weekdays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
     },
     tabs: {
@@ -349,6 +370,13 @@ export const STRINGS: Record<Lang, Dictionary> = {
       notificationTime: "Godzina dla wybranych dni",
       notificationDayRequiredTitle: "Brak dnia powiadomienia",
       notificationDayRequired: "Wybierz co najmniej jeden dzień tygodnia albo wyłącz powiadomienie.",
+      notificationRowsHint: "Każdy dzień ma własną godzinę i nie staje się obowiązkowym dniem wykonania.",
+      addNotificationRow: "+ Dodaj przypomnienie",
+      removeNotificationRow: "Usuń przypomnienie",
+      notificationDay: "Dzień",
+      notificationRowDuplicateTitle: "Powtórzony dzień",
+      notificationRowDuplicate: "Dla każdego dnia tygodnia można ustawić tylko jedno przypomnienie.",
+      notificationSaveFailed: "Nie udało się zapisać przypomnienia. Poprzednie ustawienia zostały zachowane. Sprawdź uprawnienia i spróbuj ponownie.",
       weekdays: ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"],
     },
     tabs: {
@@ -457,6 +485,13 @@ export const STRINGS: Record<Lang, Dictionary> = {
       notificationTime: "Zeit für ausgewählte Tage",
       notificationDayRequiredTitle: "Benachrichtigungstag fehlt",
       notificationDayRequired: "Wähle mindestens einen Wochentag oder deaktiviere die Benachrichtigung.",
+      notificationRowsHint: "Jeder Tag hat eine eigene Uhrzeit und wird nicht zum verpflichtenden Erfüllungstag.",
+      addNotificationRow: "+ Erinnerung hinzufügen",
+      removeNotificationRow: "Erinnerung entfernen",
+      notificationDay: "Tag",
+      notificationRowDuplicateTitle: "Doppelter Tag",
+      notificationRowDuplicate: "Pro Wochentag kann nur eine Erinnerung festgelegt werden.",
+      notificationSaveFailed: "Die Erinnerung konnte nicht gespeichert werden. Die bisherigen Einstellungen wurden beibehalten. Prüfe die Berechtigung und versuche es erneut.",
       weekdays: ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
     },
     tabs: {

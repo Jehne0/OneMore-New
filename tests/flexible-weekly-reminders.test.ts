@@ -13,7 +13,7 @@ import {
 } from "../lib/notificationJournal";
 import { recoverReminderNotificationOperations } from "../lib/reminderRecovery";
 import {
-  isReminderDaySelectionValid,
+  isFlexibleReminderRowSelectionValid,
   normalizeReminderDays,
   plannedReminderDates,
   prepareChallengeReminders,
@@ -21,6 +21,11 @@ import {
   setRemindersPremiumEnabled,
   type ReminderOperationRuntime,
 } from "../lib/reminders";
+import {
+  hasDuplicateFlexibleReminderWeekday,
+  migrateFlexibleWeeklyReminderRows,
+  normalizeFlexibleWeeklyReminderRows,
+} from "../lib/flexibleReminderRows";
 import { scheduleFlexibleWeeklySettings } from "../lib/flexibleWeekly";
 
 process.env.TZ = "Europe/Prague";
@@ -44,6 +49,7 @@ function flexibleChallenge(overrides: Record<string, unknown> = {}) {
     reminderEnabled: true,
     reminderTimes: ["18:00"],
     reminderDays: [3],
+    flexibleReminderRows: undefined,
     ...overrides,
   };
 }
@@ -118,13 +124,42 @@ test("multiple selected notification days share one time", () => {
   assert.ok(plan.every((date) => date.getHours() === 18 && date.getMinutes() === 0));
 });
 
+test("canonical Thursday 18:00 and Saturday 09:30 rows keep their paired local times", () => {
+  const rows = [
+    { weekday: 4, hour: 18, minute: 0 },
+    { weekday: 6, hour: 9, minute: 30 },
+  ];
+  const schedule = reminderScheduleForChallenge(flexibleChallenge({ flexibleReminderRows: rows }) as any);
+  const plan = plannedReminderDates(schedule, [], new Date(2026, 3, 6, 12), 8);
+  assert.deepEqual(plan.map((date) => `${dateKey(date)} ${date.getHours()}:${date.getMinutes()}`), [
+    "2026-04-09 18:0", "2026-04-11 9:30",
+  ]);
+});
+
+test("canonical rows reject duplicate weekdays", () => {
+  const duplicate = [
+    { weekday: 4, hour: 18, minute: 0 },
+    { weekday: 4, hour: 9, minute: 30 },
+  ];
+  assert.equal(hasDuplicateFlexibleReminderWeekday(duplicate), true);
+  assert.deepEqual(normalizeFlexibleWeeklyReminderRows(duplicate), [duplicate[0]]);
+});
+
 test("enabled legacy flexible setting without a day has no schedule", () => {
   const schedule = reminderScheduleForChallenge(flexibleChallenge({ reminderDays: undefined }) as any);
   assert.deepEqual(normalizeReminderDays(undefined), []);
   assert.deepEqual(plannedReminderDates(schedule, ["18:00"], new Date(2026, 3, 6, 12)), []);
-  assert.equal(isReminderDaySelectionValid("flexibleWeekly", true, []), false);
-  assert.equal(isReminderDaySelectionValid("flexibleWeekly", false, []), true);
-  assert.equal(isReminderDaySelectionValid("daily", true, []), true);
+  assert.equal(isFlexibleReminderRowSelectionValid("flexibleWeekly", true, []), false);
+  assert.equal(isFlexibleReminderRowSelectionValid("flexibleWeekly", false, []), true);
+  assert.equal(isFlexibleReminderRowSelectionValid("daily", true, []), true);
+});
+
+test("legacy selected days and shared time migrate to canonical rows", () => {
+  assert.deepEqual(migrateFlexibleWeeklyReminderRows(undefined, [3, 5], ["18:00"]), [
+    { weekday: 4, hour: 18, minute: 0 },
+    { weekday: 6, hour: 18, minute: 0 },
+  ]);
+  assert.deepEqual(migrateFlexibleWeeklyReminderRows(undefined, undefined, ["18:00"]), []);
 });
 
 test("Thursday reminder is independent of a Monday flexible period start", () => {
@@ -182,10 +217,13 @@ test("changing selected days journals the replacement and removes old notificati
     challenges: [challenge],
     history: [], challengeStats: {}, reminderNotifIds: { "flex-1": oldIds },
   }, oldIds);
-  const nextDays = [1, 5];
+  const nextRows = [
+    { weekday: 2, hour: 18, minute: 0 },
+    { weekday: 6, hour: 18, minute: 0 },
+  ];
   const prepared = await prepareChallengeReminders(
     "flex-1", "Run", ["18:00"], true,
-    reminderScheduleForChallenge(challenge as any, nextDays), run.runtime,
+    reminderScheduleForChallenge(challenge as any, nextRows), run.runtime,
   );
 
   const journals = await readReminderOperationJournals("u-flex", run.store);
@@ -197,7 +235,8 @@ test("changing selected days journals the replacement and removes old notificati
   await run.runtime.updateState((state) => prepared.applyToState(state));
   await prepared.finalize();
 
-  assert.deepEqual(run.state().challenges[0].reminderDays, nextDays);
+  assert.deepEqual(run.state().challenges[0].reminderDays, [1, 5]);
+  assert.deepEqual(run.state().challenges[0].flexibleReminderRows, nextRows);
   assert.ok(run.cancelled.includes("old-thursday"));
   assert.equal(run.scheduled.has("old-thursday"), false);
   assert.equal((await readReminderOperationJournals("u-flex", run.store)).length, 0);
@@ -240,23 +279,40 @@ test("restart recovery rolls back an unfinished flexible-weekly replacement", as
   assert.equal((await readReminderCleanupQueue("u-flex", run.store)).length, 0);
 });
 
-test("legacy time-only flexible reminder cleans old daily IDs without scheduling new ones", async () => {
+test("legacy time-only flexible reminder is rejected while enabled and can be disabled through journal cleanup", async () => {
   setRemindersPremiumEnabled(true);
   const challenge = flexibleChallenge({ reminderDays: undefined });
   const run = runtimeHarness({
     challenges: [challenge],
     history: [], challengeStats: {}, reminderNotifIds: { "flex-1": ["old-daily"] },
   }, ["old-daily"]);
-  const prepared = await prepareChallengeReminders(
+  await assert.rejects(() => prepareChallengeReminders(
     "flex-1", "Run", ["18:00"], true,
     reminderScheduleForChallenge(challenge as any), run.runtime,
-  );
+  ), /NOTIFICATIONS_FLEXIBLE_ROWS_REQUIRED/);
   assert.equal(run.requests.length, 0);
+  assert.deepEqual([...run.scheduled.keys()], ["old-daily"]);
+  assert.equal(run.state().challenges[0].reminderEnabled, true);
+  const prepared = await prepareChallengeReminders("flex-1", "Run", [], false, undefined, run.runtime);
   await run.runtime.updateState((state) => prepared.applyToState(state));
   await prepared.finalize();
-  assert.equal(run.state().challenges[0].reminderEnabled, true);
+  assert.equal(run.state().challenges[0].reminderEnabled, false);
   assert.deepEqual(run.state().challenges[0].reminderDays, []);
   assert.deepEqual([...run.scheduled.keys()], []);
+});
+
+test("Free limit applies per challenge and does not truncate flexible reminder rows", async () => {
+  setRemindersPremiumEnabled(false);
+  const rows = [1, 2, 3, 4].map((weekday) => ({ weekday, hour: 8 + weekday, minute: 0 }));
+  const challenge = flexibleChallenge({ flexibleReminderRows: rows, reminderDays: undefined });
+  const run = runtimeHarness({ challenges: [challenge], history: [], challengeStats: {}, reminderNotifIds: {} });
+  const prepared = await prepareChallengeReminders(
+    "flex-1", "Run", rows.map(({ hour }) => `${String(hour).padStart(2, "0")}:00`), true,
+    reminderScheduleForChallenge(challenge as any), run.runtime,
+  );
+  assert.equal(prepared.reminderRows.length, 4);
+  assert.ok(run.requests.length >= 16);
+  await prepared.rollback();
 });
 
 test("flexible weekly uses date triggers on Android and iOS", async () => {
@@ -273,7 +329,50 @@ test("flexible weekly uses date triggers on Android and iOS", async () => {
     assert.ok(run.requests.length > 0, platform);
     assert.ok(run.requests.every((request) => request.trigger.type === "date"), platform);
     assert.ok(run.requests.every((request) =>
-      platform === "android" ? request.content.channelId === "reminders_high_v1" : request.content.channelId === undefined), platform);
+      platform === "android" ? request.trigger.channelId === "reminders_high_v1" : request.trigger.channelId === undefined), platform);
+    assert.ok(run.requests.every((request) => request.content.channelId === undefined), platform);
+    await prepared.rollback();
+  }
+});
+
+test("production prepare accepts daily, every2, custom and flexibleWeekly trigger shapes", async () => {
+  setRemindersPremiumEnabled(true);
+  const cases = [
+    {
+      period: "daily",
+      schedule: { period: "daily", enabled: true, isActiveOnDate: () => true },
+      expectedType: "daily",
+    },
+    {
+      period: "every2",
+      schedule: { period: "every2", enabled: true, isActiveOnDate: (dateISO: string) => Number(dateISO.slice(-2)) % 2 === 0 },
+      expectedType: "date",
+    },
+    {
+      period: "custom",
+      schedule: { period: "custom", enabled: true, isActiveOnDate: () => true },
+      expectedType: "date",
+    },
+    {
+      period: "flexibleWeekly",
+      schedule: {
+        period: "flexibleWeekly", enabled: true,
+        reminderRows: [{ weekday: 4, hour: 18, minute: 0 }],
+        isActiveOnDate: (dateISO: string) => new Date(`${dateISO}T12:00:00`).getDay() === 4,
+      },
+      expectedType: "date",
+    },
+  ] as const;
+
+  for (const item of cases) {
+    const challenge = flexibleChallenge({ period: item.period });
+    const run = runtimeHarness({ challenges: [challenge], history: [], challengeStats: {}, reminderNotifIds: {} });
+    const prepared = await prepareChallengeReminders(
+      "flex-1", "Run", ["18:00"], true, item.schedule as any, run.runtime,
+    );
+    assert.ok(run.requests.length > 0, item.period);
+    assert.ok(run.requests.every((request) => request.trigger.type === item.expectedType), item.period);
+    assert.ok(run.requests.every((request) => request.trigger.channelId === "reminders_high_v1"), item.period);
     await prepared.rollback();
   }
 });
@@ -300,12 +399,13 @@ test("daily, every2 and custom schedules retain their existing cadence", () => {
   assert.equal(custom.isActiveOnDate("2026-04-08"), true);
 });
 
-test("both personal notification editors render the central weekday copy and validate it", async () => {
+test("both personal notification editors render canonical day-time rows and validate them", async () => {
   for (const file of ["app/(tabs)/challenges.tsx", "app/(tabs)/index.tsx"]) {
     const source = await readFile(file, "utf8");
     assert.match(source, /t\.flexibleWeekly\.weekdays\.map/);
-    assert.match(source, /t\.flexibleWeekly\.notificationDaysHint/);
-    assert.match(source, /isReminderDaySelectionValid/);
+    assert.match(source, /t\.flexibleWeekly\.addNotificationRow/);
+    assert.match(source, /isFlexibleReminderRowSelectionValid/);
     assert.match(source, /notificationDayRequiredTitle/);
+    assert.match(source, /paddingBottom: Math\.max\(32, insets\.bottom \+ 20\)/);
   }
 });
