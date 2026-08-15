@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+
+const root = process.cwd();
+
+function read(relativePath: string) {
+  return fs.readFileSync(path.join(root, relativePath), "utf8");
+}
+
+function filesNamed(directory: string, fileName: string): string[] {
+  if (!fs.existsSync(directory)) return [];
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return filesNamed(entryPath, fileName);
+    return entry.isFile() && entry.name === fileName ? [entryPath] : [];
+  });
+}
+
+test("app.json, Android, and iOS use one public version", () => {
+  const appVersion = JSON.parse(read("app.json")).expo.version as string;
+  const packageVersion = JSON.parse(read("package.json")).version as string;
+  assert.equal(packageVersion, appVersion, "package.json must match the public Expo version");
+
+  const androidGradlePath = path.join(root, "android", "app", "build.gradle");
+  if (fs.existsSync(androidGradlePath)) {
+    const androidGradle = fs.readFileSync(androidGradlePath, "utf8");
+    const androidVersion = androidGradle.match(/^\s*versionName\s+["']([^"']+)["']/m)?.[1];
+    assert.ok(androidVersion, "Android versionName must be a literal public version");
+    assert.equal(androidVersion, appVersion, "Android versionName must match app.json");
+  }
+
+  const iosRoot = path.join(root, "ios");
+  if (!fs.existsSync(iosRoot)) {
+    const iosPlugin = read("plugins/withOneMoreIosWidget.js");
+    assert.match(
+      iosPlugin,
+      /CFBundleShortVersionString<\/key><string>\$\(MARKETING_VERSION\)<\/string>/,
+      "generated iOS Info.plist must resolve CFBundleShortVersionString through MARKETING_VERSION",
+    );
+    assert.match(
+      iosPlugin,
+      /marketingVersion:\s*String\(value\.version\s*\?\?\s*["']1\.0\.0["']\)/,
+      "the iOS project plugin must derive MARKETING_VERSION from the Expo public version",
+    );
+    return;
+  }
+
+  const projects = filesNamed(iosRoot, "project.pbxproj");
+  assert.ok(projects.length > 0, "a native iOS directory must contain project.pbxproj");
+  const marketingVersions = projects.flatMap((project) =>
+    [...fs.readFileSync(project, "utf8").matchAll(/MARKETING_VERSION\s*=\s*["']?([^;"']+)["']?;/g)]
+      .map((match) => match[1].trim()),
+  );
+  assert.ok(marketingVersions.length > 0, "native iOS targets must define MARKETING_VERSION");
+  for (const marketingVersion of marketingVersions) {
+    assert.equal(marketingVersion, appVersion, "iOS MARKETING_VERSION must match app.json");
+  }
+
+  for (const plist of filesNamed(iosRoot, "Info.plist")) {
+    const value = fs.readFileSync(plist, "utf8")
+      .match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+    if (!value) continue;
+    assert.ok(
+      value === "$(MARKETING_VERSION)" || value === appVersion,
+      `CFBundleShortVersionString in ${path.relative(root, plist)} must match app.json or use $(MARKETING_VERSION)`,
+    );
+  }
+});
