@@ -99,6 +99,8 @@ export function AppAlertHost() {
         borderColor: sheetBorder,
         padding: 14,
         maxHeight: safeModal.maxHeight,
+        maxWidth: 400,
+        alignSelf: "center",
       },
       title: {
         color: UI.text,
@@ -161,7 +163,7 @@ export function AppAlertHost() {
           if (!hasCancel) close();
         }}
       >
-        <Pressable style={[styles.card, { width: responsive.modalWidth }]} onPress={() => {}}>
+        <Pressable style={[styles.card, { width: Math.min(responsive.modalWidth, 400) }]} onPress={() => {}}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 0 }}>
             {!!payload.title && <Text style={styles.title}>{payload.title}</Text>}
             {!!payload.message && <Text style={styles.msg}>{payload.message}</Text>}

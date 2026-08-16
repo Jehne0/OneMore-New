@@ -30,6 +30,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -114,6 +115,7 @@ import { medalDisplaySummaryFromHistory } from "../../lib/statisticsMedalSummary
 import { updateAllOneMoreWidgets } from "../../widgets/widgetService";
 import { useCloudAccess } from "../../lib/cloudAccessGate";
 import { commitPreparedNotificationChange, createEditorConfirmationController, createEditorDraft } from "../../lib/notificationSaveFlow";
+import { createChallengeId } from "../../lib/challengeIds";
 import {
   cacheSharedChallenges,
   cacheSharedProgress,
@@ -659,8 +661,11 @@ function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight
       bottom: undefined,
       width: "100%",
       minHeight: 0,
-      flexShrink: 1,
+      flex: 1,
+      maxHeight: safeModal.maxHeight,
     },
+    editorScroll: { flex: 1, minHeight: 0 },
+    editorFooter: { flexShrink: 0, paddingTop: 10 },
     sheetHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -1874,6 +1879,7 @@ notificationCount: "Počet notifikací",
   const [addModalText, setAddModalText] = useState("");
   const [addSaving, setAddSaving] = useState(false);
   const addSaveLock = useRef(false);
+  const newlyCreatedChallengeIds = useRef(new Set<string>());
   const [manageId, setManageId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -2050,13 +2056,14 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     }
     Keyboard.dismiss();
     setAddModalText("");
+    const newId = createChallengeId();
     await persist((latest2) => {
-      const newId = String(Date.now());
       return {
         ...latest2,
         challenges: [{ id: newId, text: trimmed, enabled: true, createdDate: todayISO }, ...(latest2.challenges ?? [])],
       };
     });
+    newlyCreatedChallengeIds.current.add(newId);
     setAddModalOpen(false);
     } finally {
       addSaveLock.current = false;
@@ -2325,10 +2332,13 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       return { ...configured, text: name };
     };
     const preview = configureChallenge(managed);
-    const reminderSchedule = reminderScheduleForChallenge(
-      preview,
-      managePeriod === FLEXIBLE_WEEKLY_PERIOD ? reminderRows : undefined,
-    );
+    const reminderSchedule = {
+      ...reminderScheduleForChallenge(
+        preview,
+        managePeriod === FLEXIBLE_WEEKLY_PERIOD ? reminderRows : undefined,
+      ),
+      isNewChallenge: newlyCreatedChallengeIds.current.has(id),
+    };
     const prepared = await prepareChallengeReminders(
       id,
       name,
@@ -2344,6 +2354,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       restore: prepared.restoreOriginalState,
       rollback: prepared.rollback,
       finalize: prepared.finalize,
+      onPhase: prepared.reportPhase,
     });
 
     if (wantsEnabled) {
@@ -2364,6 +2375,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       showConfirmation: setManageSaveConfirmation,
       closeEditor: closeManage,
     });
+    newlyCreatedChallengeIds.current.delete(id);
   } catch (e: any) {
     const msg = String(e?.message ?? "");
     if (__DEV__) console.error("[PersonalReminders] save failed", { code: msg || "unknown", period: managePeriod });
@@ -2371,7 +2383,10 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
       Alert.alert(TXT.notifications, TXT.expoGoNotifications);
     } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
-      Alert.alert(TXT.notifications, TXT.notificationPermissionDenied);
+      Alert.alert(TXT.notifications, TXT.notificationPermissionDenied, [
+        { text: TXT.close, style: "cancel" },
+        { text: lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings", onPress: () => void Linking.openSettings() },
+      ]);
     } else {
       Alert.alert(TXT.notifications, t.flexibleWeekly.notificationSaveFailed);
     }
@@ -2404,6 +2419,8 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   TXT.expoGoNotifications,
   TXT.notificationPermissionDenied,
   TXT.notificationsSaved,
+  TXT.close,
+  lang,
   t.flexibleWeekly.notificationDayRequired,
   t.flexibleWeekly.notificationDayRequiredTitle,
   t.flexibleWeekly.notificationSaveFailed,
@@ -3826,8 +3843,9 @@ useEffect(() => {
           behavior="height"
           keyboardVerticalOffset={0}
         >
-        <Pressable style={styles.keyboardBackdrop} onPress={manageSaving ? () => {} : closeManage}>
-          <Pressable style={[styles.sheet, styles.keyboardSheet]} onPress={() => {}}>
+        <View style={styles.keyboardBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={manageSaving ? () => {} : closeManage} />
+          <View style={[styles.sheet, styles.keyboardSheet]}>
             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.manageTitle}</Text>
               <Pressable disabled={manageSaving} onPress={closeManage} style={({ pressed }) => [styles.closeBtn, manageSaving && { opacity: 0.5 }, pressed && { opacity: 0.88 }]}>
@@ -3837,10 +3855,12 @@ useEffect(() => {
 
             <ScrollView
               ref={manageScrollRef}
+              style={styles.editorScroll}
               pointerEvents={manageSaving ? "none" : "auto"}
-              keyboardShouldPersistTaps="handled"
+              keyboardShouldPersistTaps="always"
+              keyboardDismissMode="on-drag"
               automaticallyAdjustKeyboardInsets={false}
-              contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 20) }}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: Math.max(32, insets.bottom + 20) }}
             >
               <TextInput
                 value={manageRename}
@@ -4096,7 +4116,10 @@ useEffect(() => {
                           <View style={styles.flexibleReminderRow}>
                             <Pressable
                               accessibilityLabel={t.flexibleWeekly.notificationDay}
-                              onPress={() => setManageReminderDayPickerIndex((current) => current === index ? null : index)}
+                              onPress={() => {
+                                setManageReminderDayPickerIndex((current) => current === index ? null : index);
+                                requestAnimationFrame(() => manageScrollRef.current?.scrollToEnd({ animated: true }));
+                              }}
                               style={({ pressed }) => [styles.timeRow, styles.flexibleReminderDay, { marginTop: 0 }, pressed && { opacity: 0.9 }]}
                             >
                               <Text style={{ color: UI.text, fontWeight: "900" }}>{t.flexibleWeekly.weekdays[row.weekday - 1]}</Text>
@@ -4205,6 +4228,7 @@ useEffect(() => {
                           if (Number.isFinite(mm)) d.setMinutes(mm);
                           setTimePickerValue(d);
                           setTimePickerOpen(true);
+                          requestAnimationFrame(() => manageScrollRef.current?.scrollToEnd({ animated: true }));
                         }}
                         style={({ pressed }) => [styles.timeRow, pressed && { opacity: 0.9 }]}
                       >
@@ -4215,24 +4239,7 @@ useEffect(() => {
                     );
                   })}
 
-                         <Pressable disabled={manageSaving} onPress={() => void applyManageReminders()} style={({ pressed }) => [styles.primaryBtn, manageSaving && { opacity: 0.55 }, pressed && { opacity: 0.9 }]}>
-                    <Text style={styles.primaryBtnText}>{manageSaving ? TXT.saving : TXT.saveNotifications}</Text>
-                  </Pressable>
                 </>
-              )}
-
-              {!manageRemEnabled && (
-                <Pressable
-                  onPress={() => void applyManageReminders()}
-                  disabled={manageSaving}
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    manageSaving && { opacity: 0.55 },
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text style={styles.primaryBtnText}>{manageSaving ? TXT.saving : TXT.saveNotifications}</Text>
-                </Pressable>
               )}
 
               {!!manageSaveConfirmation && (
@@ -4267,6 +4274,16 @@ useEffect(() => {
                 <Text style={styles.dangerBtnText}>{TXT.deleteChallenge}</Text>
               </Pressable>
             </ScrollView>
+
+            <View style={styles.editorFooter}>
+              <Pressable
+                onPress={() => void applyManageReminders()}
+                disabled={manageSaving}
+                style={({ pressed }) => [styles.primaryBtn, manageSaving && { opacity: 0.55 }, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.primaryBtnText}>{manageSaving ? TXT.saving : TXT.saveNotifications}</Text>
+              </Pressable>
+            </View>
 
             <Modal
               visible={periodPickerOpen}
@@ -4348,8 +4365,8 @@ useEffect(() => {
                 }}
               />
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
         </KeyboardAvoidingView>
       </Modal>
 

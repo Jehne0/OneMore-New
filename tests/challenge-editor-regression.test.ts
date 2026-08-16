@@ -113,8 +113,28 @@ test("Today list keeps native clipping and reminder editors reserve safe bottom 
   const challenges = readFileSync(join(process.cwd(), "app/(tabs)/challenges.tsx"), "utf8");
   assert.doesNotMatch(home, /removeClippedSubviews=\{false\}/);
   assert.doesNotMatch(challenges, /const streakById = useMemo/);
-  assert.match(home, /contentContainerStyle=\{\{ paddingBottom: Math\.max\(32, insets\.bottom \+ 20\) \}\}/);
-  assert.match(challenges, /contentContainerStyle=\{\{ paddingBottom: Math\.max\(32, insets\.bottom \+ 20\) \}\}/);
+  assert.match(home, /contentContainerStyle=\{\{ flexGrow: 1, paddingBottom: Math\.max\(32, insets\.bottom \+ 20\) \}\}/);
+  assert.match(challenges, /contentContainerStyle=\{\{ flexGrow: 1, paddingBottom: Math\.max\(32, insets\.bottom \+ 20\) \}\}/);
   assert.match(home, /manageScrollRef\.current\?\.scrollToEnd/);
   assert.match(challenges, /reminderScrollRef\.current\?\.scrollToEnd/);
+});
+
+test("personal editors expose one continuous scroll viewport without nested backdrop Pressables", () => {
+  const home = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
+  const challenges = readFileSync(join(process.cwd(), "app/(tabs)/challenges.tsx"), "utf8");
+  assert.match(home, /editorScroll: \{ flex: 1, minHeight: 0 \}/);
+  assert.match(home, /<View style=\{styles\.keyboardBackdrop\}>[\s\S]*?<Pressable style=\{StyleSheet\.absoluteFill\}/);
+  assert.doesNotMatch(home, /<Pressable style=\{styles\.keyboardBackdrop\} onPress=\{manageSaving/);
+  assert.match(challenges, /modalScroll: \{ flex: 1, minHeight: 0 \}/);
+  assert.match(challenges, /<View style=\{styles\.modalBackdrop\}>[\s\S]*?<Pressable style=\{StyleSheet\.absoluteFill\}/);
+  assert.doesNotMatch(challenges, /<Pressable style=\{styles\.modalBackdrop\} onPress=\{\(\) => setReminderOpen/);
+  assert.match(home, /keyboardDismissMode="on-drag"/);
+  assert.match(challenges, /keyboardDismissMode="on-drag"/);
+});
+
+test("notification save actions live in fixed editor footers", () => {
+  const home = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
+  const challenges = readFileSync(join(process.cwd(), "app/(tabs)/challenges.tsx"), "utf8");
+  assert.match(home, /<\/ScrollView>\s*<View style=\{styles\.editorFooter\}>/);
+  assert.match(challenges, /<\/ScrollView>\s*<View style=\{\[styles\.modalBtns, styles\.modalFooter\]\}>/);
 });

@@ -18,17 +18,27 @@ function filesNamed(directory: string, fileName: string): string[] {
   });
 }
 
-test("app.json, Android, and iOS use one public version", () => {
-  const appVersion = JSON.parse(read("app.json")).expo.version as string;
+test("app.json, package metadata, Android, iOS, and widget extension use one release version", () => {
+  const appConfig = JSON.parse(read("app.json")).expo as {
+    version: string;
+    android: { versionCode: number };
+    ios: { buildNumber: string };
+  };
+  const appVersion = appConfig.version;
   const packageVersion = JSON.parse(read("package.json")).version as string;
+  const packageLock = JSON.parse(read("package-lock.json"));
   assert.equal(packageVersion, appVersion, "package.json must match the public Expo version");
+  assert.equal(packageLock.version, appVersion, "package-lock.json must match the public Expo version");
+  assert.equal(packageLock.packages?.[""]?.version, appVersion, "the root lockfile package must match app.json");
 
   const androidGradlePath = path.join(root, "android", "app", "build.gradle");
   if (fs.existsSync(androidGradlePath)) {
     const androidGradle = fs.readFileSync(androidGradlePath, "utf8");
     const androidVersion = androidGradle.match(/^\s*versionName\s+["']([^"']+)["']/m)?.[1];
+    const androidVersionCode = Number(androidGradle.match(/^\s*versionCode\s+(\d+)/m)?.[1]);
     assert.ok(androidVersion, "Android versionName must be a literal public version");
     assert.equal(androidVersion, appVersion, "Android versionName must match app.json");
+    assert.equal(androidVersionCode, appConfig.android.versionCode, "Android native versionCode must match app.json");
   }
 
   const iosRoot = path.join(root, "ios");
@@ -44,6 +54,11 @@ test("app.json, Android, and iOS use one public version", () => {
       /marketingVersion:\s*String\(value\.version\s*\?\?\s*["']1\.0\.0["']\)/,
       "the iOS project plugin must derive MARKETING_VERSION from the Expo public version",
     );
+    assert.match(
+      iosPlugin,
+      /buildNumber:\s*String\(value\.ios\?\.buildNumber\s*\?\?\s*["']1["']\)/,
+      "the iOS project plugin must derive CURRENT_PROJECT_VERSION from the Expo iOS build number",
+    );
     return;
   }
 
@@ -56,6 +71,14 @@ test("app.json, Android, and iOS use one public version", () => {
   assert.ok(marketingVersions.length > 0, "native iOS targets must define MARKETING_VERSION");
   for (const marketingVersion of marketingVersions) {
     assert.equal(marketingVersion, appVersion, "iOS MARKETING_VERSION must match app.json");
+  }
+  const buildNumbers = projects.flatMap((project) =>
+    [...fs.readFileSync(project, "utf8").matchAll(/CURRENT_PROJECT_VERSION\s*=\s*["']?([^;"']+)["']?;/g)]
+      .map((match) => match[1].trim()),
+  );
+  assert.ok(buildNumbers.length > 0, "native iOS targets must define CURRENT_PROJECT_VERSION");
+  for (const buildNumber of buildNumbers) {
+    assert.equal(buildNumber, appConfig.ios.buildNumber, "iOS build number must match app.json");
   }
 
   for (const plist of filesNamed(iosRoot, "Info.plist")) {

@@ -32,6 +32,16 @@ import {
   normalizeFlexibleWeeklyReminderRows,
   type FlexibleWeeklyReminderRow,
 } from "./flexibleReminderRows";
+import {
+  logNotificationDiagnostic,
+  notificationError,
+  sanitizeNotificationTrigger,
+  validateExpoNotificationTrigger,
+  waitForReminderAuthUser,
+  type NotificationDiagnostic,
+  type NotificationSavePhase,
+  type ReminderPermissionResult,
+} from "./notificationRuntime";
 
 type NotificationsModule = typeof import("expo-notifications");
 
@@ -46,7 +56,8 @@ export type ReminderOperationRuntime = {
   loadState(): Promise<AppState>;
   updateState(updater: (state: AppState) => AppState): Promise<AppState>;
   loadNotificationSettings: typeof loadNotificationSettings;
-  ensureSchedulingReady(): Promise<boolean>;
+  ensureSchedulingReady(): Promise<boolean | ReminderPermissionResult>;
+  diagnostic?(value: NotificationDiagnostic): void;
 };
 
 let _Notifications: NotificationsModule | null = null;
@@ -70,8 +81,7 @@ async function defaultReminderOperationRuntime(): Promise<ReminderOperationRunti
   // A personal challenge may already be visible from the UID-scoped cache while
   // Firebase Auth is still restoring currentUser. Journaling must wait for that
   // restoration instead of treating the transient null as a signed-out user.
-  await auth.authStateReady();
-  const uid = String(auth.currentUser?.uid ?? "");
+  const { uid } = await waitForReminderAuthUser(auth);
   return {
     uid,
     isUidCurrent: () => auth.currentUser?.uid === uid,
@@ -84,6 +94,7 @@ async function defaultReminderOperationRuntime(): Promise<ReminderOperationRunti
     updateState,
     loadNotificationSettings,
     ensureSchedulingReady: ensureReminderPermissions,
+    diagnostic: logNotificationDiagnostic,
   };
 }
 
@@ -105,6 +116,7 @@ export type ReminderSchedule = {
   /** Notification weekdays only (0=Monday … 6=Sunday), independent of challenge cadence. */
   reminderDays?: number[];
   reminderRows?: FlexibleWeeklyReminderRow[];
+  isNewChallenge?: boolean;
   isActiveOnDate: (dateISO: string) => boolean;
 };
 
@@ -307,38 +319,51 @@ async function ensureHandler() {
 }
 
 let channelReady = false;
-async function ensureAndroidChannel() {
+async function ensureAndroidChannel(): Promise<string | undefined> {
   if (await platformOS() !== "android") return;
-  if (channelReady) return;
 
   const Notifications = await N();
-
-  await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
-    name: "OneMore reminders",
-    importance: Notifications.AndroidImportance.HIGH,
-    sound: "default",
-    vibrationPattern: [0, 250, 250, 250],
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-  });
+  if (!channelReady || !(await Notifications.getNotificationChannelAsync(REMINDER_CHANNEL_ID))) {
+    await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
+      name: "OneMore reminders",
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: "default",
+      vibrationPattern: [0, 250, 250, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
+  }
+  const channel = await Notifications.getNotificationChannelAsync(REMINDER_CHANNEL_ID);
+  if (!channel) throw new Error("NOTIFICATIONS_CHANNEL_UNAVAILABLE");
 
   channelReady = true;
+  return REMINDER_CHANNEL_ID;
 }
 
-export async function ensureReminderPermissions(): Promise<boolean> {
-  if (await isExpoGo()) return false;
+function permissionResult(
+  Notifications: NotificationsModule,
+  settings: Awaited<ReturnType<NotificationsModule["getPermissionsAsync"]>>,
+  channelId?: string,
+): ReminderPermissionResult {
+  const provisional = settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  const granted = settings.granted || provisional;
+  const status = granted
+    ? "granted"
+    : String(settings.status) === "undetermined" ? "undetermined" : "denied";
+  return { granted, status, canAskAgain: settings.canAskAgain !== false, channelId };
+}
+
+export async function ensureReminderPermissions(): Promise<ReminderPermissionResult> {
+  if (await isExpoGo()) return { granted: false, status: "denied", canAskAgain: false };
 
   const Notifications = await N();
   await ensureHandler();
-  await ensureAndroidChannel();
+  const channelId = await ensureAndroidChannel();
 
   const settings = await Notifications.getPermissionsAsync();
-
-  if (settings.granted || settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) {
-    return true;
-  }
-
+  const current = permissionResult(Notifications, settings, channelId);
+  if (current.granted || !current.canAskAgain) return current;
   const req = await Notifications.requestPermissionsAsync();
-  return !!req.granted || req.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  return permissionResult(Notifications, req, channelId);
 }
 
 // ---------------- API ----------------
@@ -354,6 +379,7 @@ export type PreparedChallengeReminders = {
   restoreOriginalState: () => Promise<void>;
   rollback: () => Promise<void>;
   finalize: () => Promise<void>;
+  reportPhase: (phase: "persist" | "cleanup" | "complete", error?: unknown) => void;
 };
 
 export async function prepareChallengeReminders(
@@ -364,11 +390,20 @@ export async function prepareChallengeReminders(
   scheduleOverride?: ReminderSchedule,
   runtimeOverride?: ReminderOperationRuntime,
 ): Promise<PreparedChallengeReminders> {
+  let diagnosticPhase: NotificationSavePhase = "auth";
   const runtime = runtimeOverride ?? await defaultReminderOperationRuntime();
   const reminderKey = String(challengeId);
   const uid = runtime.uid;
   const expoGo = runtime.expoGo;
   const currentPlatform = runtime.platformOS;
+  const emitDiagnostic = (value: Omit<NotificationDiagnostic, "phase" | "platform" | "challengeId"> = {}) => {
+    runtime.diagnostic?.({
+      phase: diagnosticPhase,
+      platform: currentPlatform,
+      challengeId: reminderKey,
+      ...value,
+    });
+  };
   if (!expoGo && !uid) throw new Error("NOTIFICATION_UID_REQUIRED");
   const releaseMutation = uid && !expoGo
     ? await acquireReminderMutationLock(uid)
@@ -377,6 +412,7 @@ export async function prepareChallengeReminders(
   try {
   if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
   if (uid && !expoGo) {
+    diagnosticPhase = "recovery";
     const Notifications = runtime.Notifications;
     if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
     await recoverReminderNotificationOperationsUnlocked({
@@ -389,6 +425,7 @@ export async function prepareChallengeReminders(
     });
     if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
   }
+  diagnosticPhase = "prepare";
   const schedule = await resolveReminderSchedule(reminderKey, scheduleOverride);
   const reminderRows = schedule.period === "flexibleWeekly"
     ? normalizeFlexibleWeeklyReminderRows(schedule.reminderRows)
@@ -409,6 +446,12 @@ export async function prepareChallengeReminders(
   }
 
   const latest = runtime.getCachedState() ?? (await runtime.loadState());
+  const challengeMissing = !(latest.challenges ?? []).some((challenge) => String(challenge.id) === reminderKey);
+  const isNewChallenge = schedule.isNewChallenge === true;
+  emitDiagnostic({ period: schedule.period, isNewChallenge });
+  if (reminderKindForId(reminderKey) === "challenge" && challengeMissing) {
+    throw new Error("NOTIFICATION_CHALLENGE_NOT_PERSISTED");
+  }
   const reminderDays = schedule.period === "flexibleWeekly"
     ? reminderRows.map((row) => row.weekday - 1)
     : [];
@@ -467,17 +510,14 @@ export async function prepareChallengeReminders(
     if (expoGo) throw new Error("NOTIFICATIONS_EXPO_GO_UNSUPPORTED");
 
     Notifications = runtime.Notifications;
-    const ok = await runtime.ensureSchedulingReady();
-    if (!ok) throw new Error("NOTIFICATIONS_PERMISSION_DENIED");
-
     const useDailyTrigger = shouldUseDailyTrigger(schedule);
     const parsedForSchedule = schedule.period === "flexibleWeekly"
       ? reminderRows.map((row) => ({ t: flexibleReminderRowTime(row), p: { hour: row.hour, minute: row.minute } }))
       : parsed;
-    const withAndroidChannel = (trigger: Record<string, unknown>): any => currentPlatform === "android"
+    const withAndroidChannel = (trigger: Record<string, unknown>): Record<string, unknown> => currentPlatform === "android"
       ? { ...trigger, channelId: REMINDER_CHANNEL_ID }
       : trigger;
-    const triggers = useDailyTrigger
+    const rawTriggers = useDailyTrigger
       ? parsedForSchedule.map(({ p }) => ({
           type: Notifications!.SchedulableTriggerInputTypes.DAILY,
           hour: p.hour,
@@ -488,10 +528,32 @@ export async function prepareChallengeReminders(
             type: Notifications!.SchedulableTriggerInputTypes.DATE,
             date,
           }));
-    const channelAwareTriggers = useDailyTrigger
-      ? triggers.map((trigger) => withAndroidChannel(trigger))
-      : triggers;
+    const channelAwareTriggers = (useDailyTrigger
+      ? rawTriggers.map((trigger) => withAndroidChannel(trigger))
+      : rawTriggers).map((trigger) => validateExpoNotificationTrigger(trigger, currentPlatform));
 
+    diagnosticPhase = "triggerValidation";
+    for (const trigger of channelAwareTriggers) {
+      emitDiagnostic({ period: schedule.period, isNewChallenge, channelId: currentPlatform === "android" ? REMINDER_CHANNEL_ID : undefined, trigger: sanitizeNotificationTrigger(trigger) });
+      if (typeof Notifications.getNextTriggerDateAsync === "function") {
+        const next = await Notifications.getNextTriggerDateAsync(trigger);
+        if (!Number.isFinite(next) || Number(next) <= Date.now()) {
+          throw new Error("NOTIFICATIONS_INVALID_NEXT_TRIGGER_DATE");
+        }
+      }
+    }
+
+    diagnosticPhase = "channel";
+    const readiness = await runtime.ensureSchedulingReady();
+    const permission = typeof readiness === "boolean"
+      ? { granted: readiness, status: readiness ? "granted" as const : "denied" as const, canAskAgain: false }
+      : readiness;
+    emitDiagnostic({ period: schedule.period, isNewChallenge, channelId: permission.channelId });
+    diagnosticPhase = "permission";
+    emitDiagnostic({ period: schedule.period, isNewChallenge, permission: permission.status, channelId: permission.channelId });
+    if (!permission.granted) throw new Error("NOTIFICATIONS_PERMISSION_DENIED");
+
+    diagnosticPhase = "journal";
     await createJournal();
     if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
     await updateReminderOperationJournal(uid, journal!.operationId, (current) => ({
@@ -501,6 +563,7 @@ export async function prepareChallengeReminders(
     if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
     try {
       for (const trigger of channelAwareTriggers) {
+        diagnosticPhase = "schedule";
         if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
         const id = await Notifications.scheduleNotificationAsync({
         content: {
@@ -548,6 +611,7 @@ export async function prepareChallengeReminders(
     }
   } else if (!expoGo) {
     Notifications = runtime.Notifications;
+    diagnosticPhase = "journal";
     await createJournal();
     if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
     await updateReminderOperationJournal(uid, journal!.operationId, (current) => ({
@@ -567,6 +631,14 @@ export async function prepareChallengeReminders(
     times,
     reminderDays,
     reminderRows,
+    reportPhase: (phase, error) => {
+      diagnosticPhase = phase;
+      emitDiagnostic({
+        period: schedule.period,
+        isNewChallenge,
+        ...(error === undefined ? {} : { error: notificationError(error) }),
+      });
+    },
     applyToState: (state, updateChallenge) => {
       if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
       const nextMap = { ...(state.reminderNotifIds ?? {}) };
@@ -617,6 +689,7 @@ export async function prepareChallengeReminders(
       if (finalized || rolledBack) return;
       finalized = true;
       try {
+        diagnosticPhase = "cleanup";
         if (!uidStillCurrent() || !journal || !Notifications) return;
         await updateReminderOperationJournal(journal.uid, journal.operationId, (current) => ({
           ...current,
@@ -657,6 +730,7 @@ export async function prepareChallengeReminders(
     },
   };
   } catch (error) {
+    emitDiagnostic({ error: notificationError(error) });
     releaseMutation();
     throw error;
   }
@@ -668,6 +742,7 @@ async function commitPreparedChallengeReminders(prepared: PreparedChallengeRemin
     restore: prepared.restoreOriginalState,
     rollback: prepared.rollback,
     finalize: prepared.finalize,
+    onPhase: prepared.reportPhase,
   });
 }
 

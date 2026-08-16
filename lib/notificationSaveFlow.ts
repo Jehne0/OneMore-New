@@ -22,17 +22,29 @@ export async function commitPreparedNotificationChange(options: {
   restore?: () => Promise<void>;
   rollback(): Promise<void>;
   finalize(): Promise<void>;
+  onPhase?: (phase: "persist" | "cleanup" | "complete", error?: unknown) => void;
 }): Promise<void> {
   try {
+    options.onPhase?.("persist");
     await options.persist();
   } catch (error) {
     try {
       await options.restore?.();
     } catch {}
     await options.rollback();
+    options.onPhase?.("persist", error);
     throw error;
   }
-  await options.finalize();
+  try {
+    options.onPhase?.("cleanup");
+    await options.finalize();
+    options.onPhase?.("complete");
+  } catch (error) {
+    options.onPhase?.("cleanup", error);
+    // The new canonical state is already durable. Cleanup is journal-backed and
+    // will retry on foreground/startup, so it must not turn a successful save
+    // into a misleading failure or roll the editor back.
+  }
 }
 
 export async function finishSuccessfulNotificationSave(options: {

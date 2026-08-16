@@ -33,11 +33,10 @@ function memoryStore(events: string[] = []): NotificationJournalStore {
   } as NotificationJournalStore;
 }
 
-test("production reminder runtime waits for Firebase Auth restoration before capturing the journal UID", () => {
+test("production reminder runtime waits on the shared Firebase Auth instance before capturing the journal UID", () => {
   const source = readFileSync(join(process.cwd(), "lib/reminders.ts"), "utf8");
-  const ready = source.indexOf("await auth.authStateReady()");
-  const capture = source.indexOf("const uid = String(auth.currentUser?.uid ?? \"\")", ready);
-  assert.ok(ready >= 0 && capture > ready);
+  assert.match(source, /const \{ uid \} = await waitForReminderAuthUser\(auth\)/);
+  assert.match(source, /isUidCurrent: \(\) => auth\.currentUser\?\.uid === uid/);
 });
 
 function notificationHarness(

@@ -7,6 +7,7 @@ import {
   Animated,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -218,7 +219,11 @@ function makeStyles(UI: any, isDark: boolean, topInset: number, bottomInset: num
       borderColor: UI.sheetStroke,
       padding: 14,
       maxHeight: safeModal.maxHeight,
+      height: safeModal.maxHeight,
+      minHeight: 0,
     },
+    modalScroll: { flex: 1, minHeight: 0 },
+    modalFooter: { flexShrink: 0, paddingTop: 10 },
     modalTitle: { color: UI.text, fontWeight: "900", fontSize: 16, marginBottom: 10 },
     modalInput: {
       borderWidth: 1,
@@ -754,6 +759,18 @@ export default function ChallengesScreen() {
           tx.expoGoTitle,
           tx.expoGoText
         );
+      } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
+        const permissionText = lang === "cs"
+          ? "Oznámení jsou vypnutá v nastavení telefonu. Povol je, aby bylo možné připomínku uložit."
+          : lang === "de"
+            ? "Mitteilungen sind in den Systemeinstellungen deaktiviert. Aktiviere sie, um die Erinnerung zu speichern."
+            : lang === "pl"
+              ? "Powiadomienia są wyłączone w ustawieniach telefonu. Włącz je, aby zapisać przypomnienie."
+              : "Notifications are disabled in system settings. Enable them to save the reminder.";
+        Alert.alert(tx.notifications, permissionText, [
+          { text: tx.cancel, style: "cancel" },
+          { text: lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings", onPress: () => void Linking.openSettings() },
+        ]);
       } else {
         Alert.alert(tx.notifications, t.flexibleWeekly.notificationSaveFailed);
       }
@@ -1068,17 +1085,30 @@ export default function ChallengesScreen() {
           visible={reminderOpen}
           transparent
           animationType="fade"
-          onRequestClose={() => setReminderOpen(false)}
+          onRequestClose={() => {
+            if (timePickerOpen) {
+              setTimePickerOpen(false);
+              return;
+            }
+            if (tempDayPickerIndex !== null) {
+              setTempDayPickerIndex(null);
+              return;
+            }
+            Keyboard.dismiss();
+            setReminderOpen(false);
+          }}
         >
-          <Pressable style={styles.modalBackdrop} onPress={() => setReminderOpen(false)}>
-            <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalBackdrop}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setReminderOpen(false)} />
+            <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>{tx.notifications}</Text>
 
               <ScrollView
                 ref={reminderScrollRef}
-                style={{ flexShrink: 1 }}
-                contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 20) }}
-                keyboardShouldPersistTaps="handled"
+                style={styles.modalScroll}
+                contentContainerStyle={{ flexGrow: 1, paddingBottom: Math.max(32, insets.bottom + 20) }}
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode="on-drag"
                 nestedScrollEnabled={false}
               >
 
@@ -1110,7 +1140,10 @@ export default function ChallengesScreen() {
                         <View style={styles.reminderRow}>
                           <Pressable
                             accessibilityLabel={t.flexibleWeekly.notificationDay}
-                            onPress={() => setTempDayPickerIndex((current) => current === index ? null : index)}
+                            onPress={() => {
+                              setTempDayPickerIndex((current) => current === index ? null : index);
+                              requestAnimationFrame(() => reminderScrollRef.current?.scrollToEnd({ animated: true }));
+                            }}
                             style={({ pressed }) => [styles.timeBtn, styles.reminderDayBtn, pressed && { opacity: 0.85 }]}
                           >
                             <Text style={styles.timeText}>{t.flexibleWeekly.weekdays[row.weekday - 1]}</Text>
@@ -1233,16 +1266,6 @@ export default function ChallengesScreen() {
                     </Pressable>
                   )}
 
-                  <View style={styles.modalBtns}>
-                    <Pressable style={styles.modalBtn} onPress={() => setReminderOpen(false)}>
-                      <Text style={styles.modalBtnText}>{tx.cancel}</Text>
-                    </Pressable>
-
-                    <Pressable disabled={remSaving} style={[styles.modalBtnPrimary, remSaving && { opacity: 0.5 }]} onPress={() => void saveReminderConfig()}>
-                      <Text style={styles.modalBtnText}>{remSaving ? "…" : tx.save}</Text>
-                    </Pressable>
-                  </View>
-
                   {!!remConfirmation && (
                     <Text style={[styles.modalHint, { color: UI.accent, textAlign: "center" }]}>{remConfirmation}</Text>
                   )}
@@ -1255,8 +1278,16 @@ export default function ChallengesScreen() {
                     </View>
                   )}
               </ScrollView>
-            </Pressable>
-          </Pressable>
+              <View style={[styles.modalBtns, styles.modalFooter]}>
+                <Pressable style={styles.modalBtn} onPress={() => setReminderOpen(false)}>
+                  <Text style={styles.modalBtnText}>{tx.cancel}</Text>
+                </Pressable>
+                <Pressable disabled={remSaving} style={[styles.modalBtnPrimary, remSaving && { opacity: 0.5 }]} onPress={() => void saveReminderConfig()}>
+                  <Text style={styles.modalBtnText}>{remSaving ? "…" : tx.save}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
         </Modal>
 
         {/* ADD */}
