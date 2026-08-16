@@ -44,7 +44,7 @@
       "./plugins/withOneMoreAndroidCompatibility",
       "./plugins/withOneMoreIosWidget"
     ],
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "default",
     "icon": "./assets/icon/icon.png",
     "scheme": "onemore",
@@ -68,7 +68,7 @@
   }
 },
     "android": {
-      "versionCode": 84,
+      "versionCode": 85,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",

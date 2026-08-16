@@ -95,6 +95,19 @@ function withNarrowProjectRules(config) {
       "# No application-wide keep rules are required: manifest components are retained by AGP,",
       "# WidgetSessionPackage is directly instantiated, and dependencies provide consumer rules.",
       "",
+      "# expo-notifications persists these Serializable models in SharedPreferences.",
+      "# Preserve only the custom content serializer and the request/trigger graph OneMore schedules.",
+      "-keep class expo.modules.notifications.notifications.model.NotificationContent {",
+      "  private static final long serialVersionUID;",
+      "  private void writeObject(java.io.ObjectOutputStream);",
+      "  private void readObject(java.io.ObjectInputStream);",
+      "  private void readObjectNoData();",
+      "}",
+      "-keep class expo.modules.notifications.notifications.model.NotificationRequest { *; }",
+      "-keep class expo.modules.notifications.notifications.triggers.ChannelAwareTrigger { *; }",
+      "-keep class expo.modules.notifications.notifications.triggers.DailyTrigger { *; }",
+      "-keep class expo.modules.notifications.notifications.triggers.DateTrigger { *; }",
+      "",
     ].join("\n");
     if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== contents) {
       fs.writeFileSync(file, contents);

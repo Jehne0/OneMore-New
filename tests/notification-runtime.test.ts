@@ -11,10 +11,17 @@ import {
   formatNotificationFailureDetails,
   getNotificationFailureDetails,
   sanitizeNotificationTrigger,
+  validateExpoNotificationContent,
   validateExpoNotificationTrigger,
   waitForReminderAuthUser,
 } from "../lib/notificationRuntime";
-import { prepareChallengeReminders, savePersonalReminderWorkflow, type ReminderOperationRuntime, type ReminderSchedule } from "../lib/reminders";
+import {
+  buildReminderNotificationContent,
+  prepareChallengeReminders,
+  savePersonalReminderWorkflow,
+  type ReminderOperationRuntime,
+  type ReminderSchedule,
+} from "../lib/reminders";
 import type { NotificationJournalStore } from "../lib/notificationJournal";
 
 function memoryStore(events: string[]): NotificationJournalStore {
@@ -78,6 +85,7 @@ function strictRuntime(period: ReminderSchedule["period"], permission: "granted"
     },
     scheduleNotificationAsync: async (request: any) => {
       events.push("schedule");
+      validateExpoNotificationContent(request.content, "android");
       validateExpoNotificationTrigger(request.trigger, "android", new Date(Date.now() - 1));
       assert.ok(preflightTriggers.includes(request.trigger), "preflight and schedule must receive the same trigger object");
       assert.equal("channelId" in request.content, false, "channelId must never be placed in content");
@@ -142,6 +150,43 @@ test("SDK 54 validator rejects invalid native bridge inputs", () => {
   assert.throws(() => validateExpoNotificationTrigger({ type: "daily", hour: 8, minute: 0, channelId: undefined }, "android"), /undefined/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "date", date: future, channelId: "android-only" }, "ios"), /Android-only/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "date", date: future, channelId: "x", repeats: false }, "android"), /unexpected/);
+});
+
+test("strict Android content audit rejects string sound and non-JSON persistence values", () => {
+  assert.throws(() => validateExpoNotificationContent({
+    title: "OneMore",
+    body: "Run",
+    sound: "default",
+    data: { operation: "safe" },
+    priority: "high",
+  }, "android"), /Android string sound is unsafe/);
+  assert.throws(() => validateExpoNotificationContent({
+    title: "OneMore",
+    body: "Run",
+    sound: true,
+    data: { when: new Date() },
+    priority: "high",
+  }, "android"), /must not contain Date/);
+});
+
+test("production content uses persistence-safe platform sound values", () => {
+  const args = ["Run", "challenge-1", "challenge", "operation-1", 1, "high"] as const;
+  const android = buildReminderNotificationContent("android", ...args);
+  const ios = buildReminderNotificationContent("ios", ...args);
+  assert.equal(android.sound, true);
+  assert.equal(typeof android.sound, "boolean");
+  assert.equal(android.priority, "high");
+  assert.equal(ios.sound, "default");
+  assert.equal(typeof ios.sound, "string");
+  assert.equal(ios.priority, undefined);
+  assert.doesNotThrow(() => validateExpoNotificationContent(android, "android"));
+  assert.doesNotThrow(() => validateExpoNotificationContent(ios, "ios"));
+  assert.doesNotThrow(() => validateExpoNotificationContent({ title: "OneMore", sound: true, data: {} }, "android"));
+  assert.doesNotThrow(() => validateExpoNotificationContent({ title: "OneMore", data: {} }, "android"));
+  assert.throws(
+    () => validateExpoNotificationContent({ title: "OneMore", sound: "default", data: {} }, "android"),
+    /Android string sound is unsafe/,
+  );
 });
 
 test("public production prepare validates every period before permission, journal and schedule", async () => {
@@ -284,7 +329,8 @@ test("diagnostic preflight rejection does not block the same valid trigger from 
 test("a native scheduling rejection is surfaced with the SCHEDULE production diagnostic code", async () => {
   const run = strictRuntime("daily");
   run.runtime.Notifications.scheduleNotificationAsync = async () => {
-    const error = new Error("Failed to schedule the notification");
+    const cause = new Error("android.net.Uri$HierarchicalUri");
+    const error = new Error("Failed to schedule the notification", { cause });
     (error as Error & { code?: string }).code = "ERR_NOTIFICATIONS_FAILED_TO_SCHEDULE";
     throw error;
   };
@@ -300,6 +346,10 @@ test("a native scheduling rejection is surfaced with the SCHEDULE production dia
         name: "Error",
         code: "ERR_NOTIFICATIONS_FAILED_TO_SCHEDULE",
         message: "Failed to schedule the notification",
+        causeMessage: "android.net.Uri$HierarchicalUri",
+        platform: "android",
+        triggerType: "daily",
+        soundType: "boolean",
       });
       throw error;
     }
@@ -331,11 +381,22 @@ test("durable cleanup failure does not report a successfully persisted change as
 
 test("copied production diagnostics contain phase and sanitized error only", () => {
   const id = createChallengeId();
-  const error = new Error(`Scheduling failed for ${id}, person@example.com, Bearer secret-token-value`);
+  const tail = "complete-native-message-tail";
+  const cause = new Error(`Native cause for challengeId=${id}, cause@example.com, token=secret-cause-token`);
+  const error = new Error(`Scheduling failed for ${id}, person@example.com, Bearer secret-token-value ${"x".repeat(300)} ${tail}`, { cause });
   (error as Error & { code?: string }).code = "ERR_NOTIFICATIONS_FAILED_TO_SCHEDULE";
-  const details = formatNotificationFailureDetails(attachNotificationFailure(error, "schedule"));
+  const details = formatNotificationFailureDetails(attachNotificationFailure(error, "schedule", {
+    platform: "android",
+    triggerType: "date",
+    soundType: "boolean",
+  }));
   assert.match(details, /Phase: SCHEDULE/);
   assert.match(details, /Code: ERR_NOTIFICATIONS_FAILED_TO_SCHEDULE/);
+  assert.match(details, new RegExp(tail));
+  assert.match(details, /Cause: Native cause/);
+  assert.match(details, /Platform: android/);
+  assert.match(details, /Trigger: date/);
+  assert.match(details, /Sound type: boolean/);
   assert.doesNotMatch(details, new RegExp(id, "i"));
-  assert.doesNotMatch(details, /person@example\.com|secret-token-value/);
+  assert.doesNotMatch(details, /person@example\.com|cause@example\.com|secret-token-value|secret-cause-token/);
 });

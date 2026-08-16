@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { NotificationContentInput } from "expo-notifications";
 import { onAuthStateChanged } from "firebase/auth";
 import { getTodayISO } from "./clock";
 import { auth } from "./firebase";
@@ -38,6 +39,7 @@ import {
   logNotificationDiagnostic,
   notificationError,
   sanitizeNotificationTrigger,
+  validateExpoNotificationContent,
   validateExpoNotificationTrigger,
   waitForReminderAuthUser,
   type NotificationDiagnostic,
@@ -309,6 +311,31 @@ export function buildReminderTriggerInputs(
     }), platform, now));
 }
 
+export function buildReminderNotificationContent(
+  platform: string,
+  challengeText: string,
+  reminderKey: string,
+  reminderKind: ReminderKind,
+  operationId: string,
+  revision: string | number,
+  androidPriority?: NotificationContentInput["priority"],
+): NotificationContentInput {
+  const content: NotificationContentInput = {
+    title: "OneMore",
+    body: challengeText || "OneMore",
+    sound: platform === "android" ? true : "default",
+    ...(platform === "android" ? { priority: androidPriority } : {}),
+    data: {
+      [REMINDER_DATA_KEY]: reminderKey,
+      [REMINDER_DATA_KIND]: reminderKind,
+      [REMINDER_OPERATION_DATA_KEY]: operationId,
+      [REMINDER_REVISION_DATA_KEY]: revision,
+    },
+  };
+  validateExpoNotificationContent(content, platform);
+  return content;
+}
+
 export async function recoverReminderNotificationOperations(
   options?: { uid?: string; challengeId?: string },
 ): Promise<void> {
@@ -514,6 +541,8 @@ export async function prepareChallengeReminders(
     throw attachNotificationFailure(error, "AUTH");
   }
   const uidStillCurrent = () => !uid || runtime.isUidCurrent();
+  let lastTriggerType: string | undefined;
+  let lastSoundType: string | undefined;
   try {
   if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
   if (uid && !expoGo) {
@@ -691,23 +720,27 @@ export async function prepareChallengeReminders(
       for (const trigger of channelAwareTriggers) {
         diagnosticPhase = "schedule";
         if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
-        const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "OneMore",
-          body: challengeText || "OneMore",
-          sound: "default",
-          ...(currentPlatform === "android"
-            ? { priority: Notifications!.AndroidNotificationPriority.HIGH }
-            : {}),
-          data: {
-            [REMINDER_DATA_KEY]: reminderKey,
-            [REMINDER_DATA_KIND]: reminderKindForId(reminderKey),
-            [REMINDER_OPERATION_DATA_KEY]: journal!.operationId,
-            [REMINDER_REVISION_DATA_KEY]: journal!.revision,
-          },
-        },
-        trigger,
-        });
+        const content = buildReminderNotificationContent(
+          currentPlatform,
+          challengeText,
+          reminderKey,
+          reminderKindForId(reminderKey),
+          journal!.operationId,
+          journal!.revision,
+          Notifications.AndroidNotificationPriority.HIGH,
+        );
+        lastTriggerType = String((trigger as unknown as { type?: unknown })?.type ?? "immediate");
+        lastSoundType = typeof content.sound;
+        let id: string;
+        try {
+          id = await Notifications.scheduleNotificationAsync({ content, trigger });
+        } catch (error) {
+          throw attachNotificationFailure(error, "SCHEDULE", {
+            platform: currentPlatform,
+            triggerType: lastTriggerType,
+            soundType: lastSoundType,
+          });
+        }
         if (!uidStillCurrent()) throw new Error("NOTIFICATION_UID_CHANGED");
         newIds.push(String(id));
         await updateReminderOperationJournal(uid, journal!.operationId, (current) => ({
@@ -857,7 +890,11 @@ export async function prepareChallengeReminders(
   };
   } catch (error) {
     const failure = attachNotificationFailure(error, diagnosticPhase);
-    emitDiagnostic({ error: notificationError(failure) });
+    emitDiagnostic({
+      error: notificationError(failure),
+      ...(lastTriggerType ? { triggerType: lastTriggerType } : {}),
+      ...(lastSoundType ? { soundType: lastSoundType } : {}),
+    });
     releaseMutation();
     throw failure;
   }

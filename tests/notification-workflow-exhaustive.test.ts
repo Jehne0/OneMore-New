@@ -28,6 +28,7 @@ import {
   type ReminderOperationRuntime,
   type ReminderSchedule,
 } from "../lib/reminders";
+import { validateExpoNotificationContent } from "../lib/notificationRuntime";
 
 process.env.TZ = "Europe/Prague";
 setRemindersPremiumEnabled(true);
@@ -84,6 +85,7 @@ function memoryStore(events: string[] = []): NotificationJournalStore {
 }
 
 type HarnessOptions = {
+  platform?: "android" | "ios";
   newChallenge?: boolean;
   newChallengePersisted?: boolean;
   reminderEnabled?: boolean;
@@ -97,6 +99,7 @@ type HarnessOptions = {
 };
 
 function workflowHarness(period: Period, options: HarnessOptions = {}) {
+  const platform = options.platform ?? "android";
   const events: string[] = [];
   const store = memoryStore(events);
   const challengeId = options.newChallenge ? createChallengeId() : `existing-${period}`;
@@ -150,7 +153,11 @@ function workflowHarness(period: Period, options: HarnessOptions = {}) {
         throw error;
       }
       assert.ok(preflightTriggers.includes(request.trigger), `${period}: preflight identity`);
+      validateExpoNotificationContent(request.content, platform);
       assert.equal(request.content.channelId, undefined, `${period}: content.channelId`);
+      assert.equal(request.content.sound, platform === "android" ? true : "default", `${period}/${platform}: sound`);
+      assert.equal(request.content.priority, platform === "android" ? "high" : undefined, `${period}/${platform}: priority`);
+      assert.equal(request.trigger.channelId, platform === "android" ? "reminders_high_v1" : undefined, `${period}/${platform}: trigger channel`);
       assert.deepEqual(Object.keys(request.content.data).sort(), [
         "oneMoreReminderKey", "oneMoreReminderKind", "oneMoreReminderOperationId", "oneMoreReminderRevision",
       ].sort(), `${period}: journal metadata location`);
@@ -173,7 +180,7 @@ function workflowHarness(period: Period, options: HarnessOptions = {}) {
     uid: "workflow-user",
     isUidCurrent: () => uidCurrent,
     expoGo: false,
-    platformOS: "android",
+    platformOS: platform,
     Notifications,
     store,
     getCachedState: () => state,
@@ -221,7 +228,7 @@ function workflowHarness(period: Period, options: HarnessOptions = {}) {
     setUidCurrent: (value: boolean) => { uidCurrent = value; },
     setFailOldCleanup: (value: boolean) => { failOldCleanup = value; },
     expectedTriggerCount: () => buildReminderTriggerInputs(
-      config.schedule, config.times, "android", TRIGGER_TYPES as any,
+      config.schedule, config.times, platform, TRIGGER_TYPES as any,
     ).length,
   };
 }
@@ -250,6 +257,25 @@ test("new and existing challenges complete first enable for every period with ex
       if (newChallenge) assert.ok(run.events.indexOf("persist-challenge") < run.events.indexOf("preflight"), context);
       assert.equal((await readReminderOperationJournals("workflow-user", run.runtime.store)).length, 0, context);
       assert.equal((await readReminderCleanupQueue("workflow-user", run.runtime.store)).length, 0, context);
+    }
+  }
+});
+
+test("production request content is persistence-safe for every period, platform, and challenge lifecycle", async () => {
+  for (const period of PERIODS) {
+    for (const platform of ["android", "ios"] as const) {
+      for (const newChallenge of [true, false]) {
+        const context = `${period}/${platform}/${newChallenge ? "new" : "existing"}`;
+        const run = workflowHarness(period, { platform, newChallenge });
+        await run.save();
+        assert.ok(run.requests.length > 0, context);
+        for (const request of run.requests) {
+          assert.doesNotThrow(() => validateExpoNotificationContent(request.content, platform), context);
+          assert.equal(typeof request.content.sound, platform === "android" ? "boolean" : "string", context);
+          assert.equal(request.content.sound, platform === "android" ? true : "default", context);
+          assert.equal(request.trigger.channelId, platform === "android" ? "reminders_high_v1" : undefined, context);
+        }
+      }
     }
   }
 });
@@ -393,17 +419,20 @@ test("throwing and null diagnostic preflight results never block the valid sched
 test("a deleted Android channel is recreated and only existence, not normalized properties, is required", async () => {
   let channel: any = null;
   let creates = 0;
+  let requestedChannel: any = null;
   const Notifications: any = {
     AndroidImportance: { HIGH: 4 },
     AndroidNotificationVisibility: { PUBLIC: 1 },
     getNotificationChannelAsync: async () => channel,
-    setNotificationChannelAsync: async (id: string) => {
+    setNotificationChannelAsync: async (id: string, value: any) => {
       creates += 1;
+      requestedChannel = value;
       channel = { id, importance: 3, sound: null, vibrationPattern: [0, 250] };
     },
   };
   assert.equal(await ensureAndroidReminderChannel(Notifications, 33), "reminders_high_v1");
   assert.equal(creates, 1);
+  assert.equal(requestedChannel.sound, "default", "channel keeps the Android default sound");
   assert.equal(await ensureAndroidReminderChannel(Notifications, 33), "reminders_high_v1");
   assert.equal(creates, 1, "normalized existing channel must be accepted");
   channel = null;

@@ -53,6 +53,7 @@ test("generated Android manifest is resizable and preserves widget lifecycle int
 });
 
 test("production R8 preserves the directly registered native account snapshot bridge", () => {
+  const plugin = readFileSync("plugins/withOneMoreAndroidCompatibility.js", "utf8");
   const buildGradle = readFileSync("android/app/build.gradle", "utf8");
   const mainApplication = readFileSync("android/app/src/main/java/com/anonymous/OneMore/MainApplication.kt", "utf8");
   const module = readFileSync("android/app/src/main/java/com/anonymous/OneMore/WidgetSessionModule.kt", "utf8");
@@ -68,6 +69,20 @@ test("production R8 preserves the directly registered native account snapshot br
   assert.match(module, /@ReactMethod[\s\S]*fun setAccountSnapshot/);
   assert.match(reactNativeRules, /@com\.facebook\.react\.bridge\.ReactMethod \*;/);
   assert.doesNotMatch(projectRules, /-keep class \*\*/);
+  assert.match(projectRules, /-keep class expo\.modules\.notifications\.notifications\.model\.NotificationContent \{/);
+  assert.match(projectRules, /private static final long serialVersionUID;/);
+  assert.match(projectRules, /private void writeObject\(java\.io\.ObjectOutputStream\);/);
+  assert.match(projectRules, /private void readObject\(java\.io\.ObjectInputStream\);/);
+  assert.match(projectRules, /private void readObjectNoData\(\);/);
+  assert.match(projectRules, /-keep class expo\.modules\.notifications\.notifications\.model\.NotificationRequest \{ \*; \}/);
+  assert.match(projectRules, /-keep class expo\.modules\.notifications\.notifications\.triggers\.ChannelAwareTrigger \{ \*; \}/);
+  assert.match(projectRules, /-keep class expo\.modules\.notifications\.notifications\.triggers\.DailyTrigger \{ \*; \}/);
+  assert.match(projectRules, /-keep class expo\.modules\.notifications\.notifications\.triggers\.DateTrigger \{ \*; \}/);
+  assert.doesNotMatch(projectRules, /notifications\.triggers\.\*\*/);
+  for (const rule of projectRules.split(/\r?\n/).filter((line) => line.startsWith("-keep class expo.modules.notifications"))) {
+    assert.equal(projectRules.split(rule).length - 1, 1, `duplicate rule: ${rule}`);
+    assert.ok(plugin.includes(JSON.stringify(rule)), `CNG plugin must generate: ${rule}`);
+  }
   assert.match(contract, /onemore_account_snapshot:/);
   assert.equal(eas.build.preview.env, undefined);
   assert.equal(eas.build.production.env, undefined);
@@ -76,4 +91,24 @@ test("production R8 preserves the directly registered native account snapshot br
   assert.equal(eas.build["cold-start-verification"].android.buildType, "apk");
   assert.equal(eas.build["cold-start-verification"].android.gradleCommand, ":app:assembleRelease");
   assert.notEqual("cold-start-verification", "preview");
+});
+
+test("Expo notification persistence source stringifies Uri and data when R8 keeps its serialization contract", () => {
+  const content = readFileSync(
+    "node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/model/NotificationContent.java",
+    "utf8",
+  );
+  const store = readFileSync(
+    "node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/service/delegates/SharedPreferencesNotificationsStore.kt",
+    "utf8",
+  );
+  const serializer = readFileSync(
+    "node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/service/delegates/Base64Serialization.kt",
+    "utf8",
+  );
+  assert.match(content, /private void writeObject\(java\.io\.ObjectOutputStream out\)/);
+  assert.match(content, /mSound == null \? null : mSound\.toString\(\)/);
+  assert.match(content, /mBody != null \? mBody\.toString\(\) : null/);
+  assert.match(store, /notificationRequest\.encodedInBase64\(\)/);
+  assert.match(serializer, /objectOutputStream\.writeObject\(this\)/);
 });
