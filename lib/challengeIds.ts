@@ -14,3 +14,12 @@ export function createChallengeId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return `${randomHex(8)}-${randomHex(4)}-4${randomHex(3)}-${((8 + Math.floor(Math.random() * 4)).toString(16))}${randomHex(3)}-${randomHex(12)}`;
 }
+
+export function isStableChallengeId(value: unknown): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value ?? ""));
+}
+
+/** Builds the exact stable object persisted by the home-screen quick-create modal. */
+export function createQuickChallenge(text: string, createdDate: string, id = createChallengeId()) {
+  return { id, text: text.trim(), enabled: true, createdDate };
+}

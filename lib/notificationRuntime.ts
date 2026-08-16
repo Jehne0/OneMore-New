@@ -16,6 +16,44 @@ export type NotificationSavePhase =
 
 export type NotificationPermissionState = "granted" | "denied" | "undetermined";
 
+export type NotificationFailurePhase =
+  | "AUTH"
+  | "STATE"
+  | "RECOVERY"
+  | "PREPARE"
+  | "PREFLIGHT"
+  | "PERMISSION"
+  | "CHANNEL"
+  | "JOURNAL"
+  | "SCHEDULE"
+  | "PERSIST"
+  | "CLEANUP"
+  | "UNKNOWN";
+
+export type NotificationFailureDetails = {
+  phase: NotificationFailurePhase;
+  name: string;
+  code?: string;
+  message: string;
+};
+
+const FAILURE_DETAILS_KEY = "notificationFailureDetails";
+
+const FAILURE_PHASES: Record<NotificationSavePhase, NotificationFailurePhase> = {
+  auth: "AUTH",
+  state: "STATE",
+  recovery: "RECOVERY",
+  prepare: "PREPARE",
+  triggerValidation: "PREFLIGHT",
+  permission: "PERMISSION",
+  channel: "CHANNEL",
+  journal: "JOURNAL",
+  schedule: "SCHEDULE",
+  persist: "PERSIST",
+  cleanup: "CLEANUP",
+  complete: "UNKNOWN",
+};
+
 export type ReminderPermissionResult = {
   granted: boolean;
   status: NotificationPermissionState;
@@ -121,6 +159,64 @@ export function notificationError(error: unknown) {
     message: value.message || String(error),
     ...(value.stack ? { stack: value.stack } : {}),
   };
+}
+
+function sanitizeDiagnosticText(value: unknown): string {
+  return String(value ?? "Unknown notification error")
+    .replace(/Bearer\s+[^\s]+/gi, "Bearer [redacted]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted-id]")
+    .replace(/\b[A-Za-z0-9_-]{12,}:[A-Za-z0-9_-]{4,}:[A-Za-z0-9_.-]{4,}\b/g, "[redacted-operation]")
+    .slice(0, 240);
+}
+
+export function attachNotificationFailure(
+  error: unknown,
+  phase: NotificationSavePhase | NotificationFailurePhase,
+): Error {
+  const value = error instanceof Error ? error : new Error(String(error));
+  const existing = (value as Error & { [FAILURE_DETAILS_KEY]?: NotificationFailureDetails })[FAILURE_DETAILS_KEY];
+  if (existing) return value;
+  const rawCode = (error as { code?: unknown } | null)?.code;
+  const details: NotificationFailureDetails = {
+    phase: phase in FAILURE_PHASES
+      ? FAILURE_PHASES[phase as NotificationSavePhase]
+      : phase as NotificationFailurePhase,
+    name: sanitizeDiagnosticText(value.name || "Error"),
+    ...(rawCode == null ? {} : { code: sanitizeDiagnosticText(rawCode) }),
+    message: sanitizeDiagnosticText(value.message),
+  };
+  try {
+    Object.defineProperty(value, FAILURE_DETAILS_KEY, { value: details, enumerable: false });
+    return value;
+  } catch {
+    const wrapped = new Error(value.message);
+    (wrapped as Error & { [FAILURE_DETAILS_KEY]?: NotificationFailureDetails })[FAILURE_DETAILS_KEY] = details;
+    return wrapped;
+  }
+}
+
+export function getNotificationFailureDetails(error: unknown): NotificationFailureDetails {
+  const value = error instanceof Error ? error : new Error(String(error));
+  return (value as Error & { [FAILURE_DETAILS_KEY]?: NotificationFailureDetails })[FAILURE_DETAILS_KEY] ?? {
+    phase: "UNKNOWN",
+    name: sanitizeDiagnosticText(value.name || "Error"),
+    ...((error as { code?: unknown } | null)?.code == null
+      ? {}
+      : { code: sanitizeDiagnosticText((error as { code?: unknown }).code) }),
+    message: sanitizeDiagnosticText(value.message),
+  };
+}
+
+export function formatNotificationFailureDetails(error: unknown): string {
+  const details = getNotificationFailureDetails(error);
+  return [
+    "OneMore notification diagnostics",
+    `Phase: ${details.phase}`,
+    `Error: ${details.name}`,
+    ...(details.code ? [`Code: ${details.code}`] : []),
+    `Message: ${details.message}`,
+  ].join("\n");
 }
 
 export function logNotificationDiagnostic(value: NotificationDiagnostic): void {

@@ -1,6 +1,7 @@
  import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -46,7 +47,9 @@ import { AppState, challengeDisplayText, ensureDailyPick, loadState, renameChall
 import { FLEXIBLE_WEEKLY_PERIOD, clampFlexibleWeeklyTarget, scheduleFlexibleWeeklySettings } from "../../lib/flexibleWeekly";
 import { useTheme } from "../../lib/theme";
 import { useI18n, type Lang } from "../../lib/i18n";
-import { finishSuccessfulNotificationSave } from "../../lib/notificationSaveFlow";
+import { acquireNotificationSaveGuard, finishSuccessfulNotificationSave, runNotificationEditorSave } from "../../lib/notificationSaveFlow";
+import { createChallengeId } from "../../lib/challengeIds";
+import { formatNotificationFailureDetails } from "../../lib/notificationRuntime";
 
 const FREE_MAX = FREE_MAX_CHALLENGES;
 
@@ -352,22 +355,6 @@ modalBtnPrimary: {
   });
 }
 
-/**
- * ✅ ID se NESMÍ recyklovat – jinak se nová výzva tváří „zeleně“
- * kvůli staré historii pro stejné challengeId.
- * Proto bereme max ID i z historie.
- */
-function nextNumericId(state: AppState): string {
-  const idsFromActive = (state.challenges ?? []).map((c) => Number((c as any).id) || 0);
-
-  const idsFromHistory = (state.history ?? [])
-    .map((h: any) => Number(h?.challengeId) || 0)
-    .filter((n: number) => Number.isFinite(n));
-
-  const maxId = Math.max(0, ...idsFromActive, ...idsFromHistory);
-  return String(maxId + 1);
-}
-
 function countFreeChallenges(s: AppState): number {
   const archivedIds = new Set(
     (((s as any).archivedChallenges ?? []) as any[]).map((a) => String(a?.id ?? "")).filter(Boolean)
@@ -583,8 +570,8 @@ export default function ChallengesScreen() {
     Keyboard.dismiss();
     setText("");
 
+    const newId = createChallengeId();
     await persist((latest2) => {
-      const newId = nextNumericId(latest2);
       return {
         ...latest2,
         challenges: [{ id: newId, text: trimmed, enabled: true, createdDate: getTodayISO() }, ...(latest2.challenges ?? [])],
@@ -677,8 +664,7 @@ export default function ChallengesScreen() {
   }
 
   async function saveReminderConfig() {
-    if (!state || !reminderId || remSaveLock.current) return;
-    remSaveLock.current = true;
+    if (!state || !reminderId || !acquireNotificationSaveGuard(remSaveLock)) return;
     setRemSaving(true);
     setRemConfirmation("");
 
@@ -736,28 +722,46 @@ export default function ChallengesScreen() {
     }
 
     try {
-      if (remEnabled && (c0?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows.length > 0 : times.length > 0)) {
-        const latest = await loadState();
-        const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
-        await setDailyRemindersForChallenge(
-          id,
-          String(c?.text ?? "OneMore"),
-          times,
-          reminderScheduleForChallenge(
-            c,
-            c?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows : undefined,
-          ),
-        );
-      } else {
-        await clearDailyRemindersForChallenge(id);
-      }
+      await runNotificationEditorSave({
+        save: async () => {
+          if (remEnabled && (c0?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows.length > 0 : times.length > 0)) {
+            const latest = await loadState();
+            const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
+            await setDailyRemindersForChallenge(
+              id,
+              String(c?.text ?? "OneMore"),
+              times,
+              reminderScheduleForChallenge(
+                c,
+                c?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows : undefined,
+              ),
+            );
+          } else {
+            await clearDailyRemindersForChallenge(id);
+          }
+        },
+        confirm: () => finishSuccessfulNotificationSave({
+          message: NOTIFICATION_SAVED[lang],
+          showConfirmation: setRemConfirmation,
+          closeEditor: () => {
+            setReminderOpen(false);
+            setActionsOpen(false);
+            setRenameOpen(false);
+            setTargetOpen(false);
+          },
+        }),
+      });
     } catch (e: any) {
       const msg = String(e?.message ?? "");
       if (__DEV__) console.error("[PersonalReminders] save failed", { code: msg || "unknown", period: c0?.period });
       if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
         Alert.alert(
           tx.expoGoTitle,
-          tx.expoGoText
+          tx.expoGoText,
+          [
+            { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
+            { text: tx.cancel, style: "cancel" },
+          ],
         );
       } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
         const permissionText = lang === "cs"
@@ -769,26 +773,20 @@ export default function ChallengesScreen() {
               : "Notifications are disabled in system settings. Enable them to save the reminder.";
         Alert.alert(tx.notifications, permissionText, [
           { text: tx.cancel, style: "cancel" },
+          { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
           { text: lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings", onPress: () => void Linking.openSettings() },
         ]);
       } else {
-        Alert.alert(tx.notifications, t.flexibleWeekly.notificationSaveFailed);
+        Alert.alert(tx.notifications, t.flexibleWeekly.notificationSaveFailed, [
+          { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
+          { text: tx.cancel, style: "cancel" },
+        ]);
       }
       remSaveLock.current = false;
       setRemSaving(false);
       return;
     }
 
-    await finishSuccessfulNotificationSave({
-      message: NOTIFICATION_SAVED[lang],
-      showConfirmation: setRemConfirmation,
-      closeEditor: () => {
-        setReminderOpen(false);
-        setActionsOpen(false);
-        setRenameOpen(false);
-        setTargetOpen(false);
-      },
-    });
     setRemConfirmation("");
     remSaveLock.current = false;
     setRemSaving(false);

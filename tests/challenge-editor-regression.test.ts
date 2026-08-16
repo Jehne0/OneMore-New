@@ -76,14 +76,14 @@ test("unmount cancellation resolves confirmation without closing the editor", as
   assert.equal(timers.size, 0);
 });
 
-test("iOS title editors use a keyboard-sized frame, safe area and automatic scroll-to-title", () => {
+test("large title editors retain keyboard sizing, safe area and automatic scroll-to-title", () => {
   const home = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
   const challenges = readFileSync(join(process.cwd(), "app/(tabs)/challenges.tsx"), "utf8");
   assert.match(home, /behavior="height"/);
   assert.match(home, /styles\.keyboardBackdrop/);
   assert.match(home, /paddingBottom: safeModal\.bottom/);
   assert.match(home, /manageScrollRef\.current\?\.scrollTo\(\{ y: 0/);
-  assert.match(home, /addScrollRef\.current\?\.scrollTo\(\{ y: 0/);
+  assert.doesNotMatch(home, /addScrollRef/);
   assert.match(challenges, /behavior=\{Platform\.OS === "ios" \? "height" : undefined\}/);
 });
 

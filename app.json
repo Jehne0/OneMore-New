@@ -44,7 +44,7 @@
       "./plugins/withOneMoreAndroidCompatibility",
       "./plugins/withOneMoreIosWidget"
     ],
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "default",
     "icon": "./assets/icon/icon.png",
     "scheme": "onemore",
@@ -53,7 +53,7 @@
  "ios": {
   "supportsTablet": false,
   "bundleIdentifier": "eu.desigame.onemore",
-  "buildNumber": "36",
+  "buildNumber": "37",
  "googleServicesFile": "./GoogleService-Info.plist",
   "entitlements": {
     "com.apple.security.application-groups": [
@@ -68,7 +68,7 @@
   }
 },
     "android": {
-      "versionCode": 83,
+      "versionCode": 84,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",

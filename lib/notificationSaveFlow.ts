@@ -1,5 +1,22 @@
 export const NOTIFICATION_CONFIRMATION_MS = 900;
 
+export function acquireNotificationSaveGuard(lock: { current: boolean }): boolean {
+  if (lock.current) return false;
+  lock.current = true;
+  return true;
+}
+
+export async function runNotificationEditorSave<T>(options: {
+  save(): Promise<T>;
+  onSaved?(value: T): void | Promise<void>;
+  confirm(value: T): Promise<unknown>;
+}): Promise<T> {
+  const value = await options.save();
+  await options.onSaved?.(value);
+  await options.confirm(value);
+  return value;
+}
+
 export async function scheduleBatchWithRollback<T>(options: {
   items: T[];
   schedule(item: T): Promise<string>;

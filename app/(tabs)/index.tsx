@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -61,9 +62,9 @@ import {
   clearDailyRemindersForChallenge,
   getFreeActiveReminderChallengeId,
   isFlexibleReminderRowSelectionValid,
-  prepareChallengeReminders,
   refreshScheduledChallengeReminders,
   reminderScheduleForChallenge,
+  savePersonalReminderWorkflow,
   setDailyRemindersForChallenge,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
@@ -114,8 +115,9 @@ import { MAX_MEDAL_COUNT_PER_CHALLENGE } from "../../lib/medalCollectionFromHist
 import { medalDisplaySummaryFromHistory } from "../../lib/statisticsMedalSummary";
 import { updateAllOneMoreWidgets } from "../../widgets/widgetService";
 import { useCloudAccess } from "../../lib/cloudAccessGate";
-import { commitPreparedNotificationChange, createEditorConfirmationController, createEditorDraft } from "../../lib/notificationSaveFlow";
-import { createChallengeId } from "../../lib/challengeIds";
+import { acquireNotificationSaveGuard, createEditorConfirmationController, createEditorDraft, runNotificationEditorSave } from "../../lib/notificationSaveFlow";
+import { createQuickChallenge } from "../../lib/challengeIds";
+import { formatNotificationFailureDetails } from "../../lib/notificationRuntime";
 import {
   cacheSharedChallenges,
   cacheSharedProgress,
@@ -664,6 +666,28 @@ function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight
       flex: 1,
       maxHeight: safeModal.maxHeight,
     },
+    quickCreateBackdrop: {
+      flex: 1,
+      justifyContent: "flex-end",
+      paddingTop: safeModal.paddingTop,
+      paddingHorizontal: 12,
+      paddingBottom: safeModal.bottom,
+      backgroundColor: UI.backdrop,
+    },
+    quickCreateBackdropKeyboard: { paddingBottom: 8 },
+    quickCreateSheet: {
+      width: "100%",
+      flexGrow: 0,
+      flexShrink: 1,
+      maxHeight: safeModal.maxHeight,
+      borderRadius: 22,
+      backgroundColor: UI.sheetBg,
+      borderWidth: 1,
+      borderColor: UI.sheetStroke,
+      padding: 14,
+    },
+    quickCreateScroll: { flexGrow: 0, flexShrink: 1 },
+    quickCreateContent: { flexGrow: 0 },
     editorScroll: { flex: 1, minHeight: 0 },
     editorFooter: { flexShrink: 0, paddingTop: 10 },
     sheetHeader: {
@@ -1878,6 +1902,7 @@ notificationCount: "Počet notifikací",
   const [medalsOverviewOpen, setMedalsOverviewOpen] = useState(false);
   const [addModalText, setAddModalText] = useState("");
   const [addSaving, setAddSaving] = useState(false);
+  const [addKeyboardVisible, setAddKeyboardVisible] = useState(false);
   const addSaveLock = useRef(false);
   const newlyCreatedChallengeIds = useRef(new Set<string>());
   const [manageId, setManageId] = useState<string | null>(null);
@@ -1940,9 +1965,39 @@ async function openSharedNotificationSettings() {
   const manageEditorSession = useRef(0);
   const manageConfirmation = useRef(createEditorConfirmationController());
   const manageScrollRef = useRef<ScrollView>(null);
-  const addScrollRef = useRef<ScrollView>(null);
-
   useEffect(() => () => manageConfirmation.current.cancelSession(), []);
+
+  useEffect(() => {
+    if (!addModalOpen) return;
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, () => setAddKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setAddKeyboardVisible(false));
+    const appStateSubscription = RNAppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") {
+        Keyboard.dismiss();
+        setAddKeyboardVisible(false);
+      }
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+      appStateSubscription.remove();
+    };
+  }, [addModalOpen]);
+
+  const openQuickCreate = useCallback(() => {
+    Keyboard.dismiss();
+    setAddKeyboardVisible(false);
+    setAddModalOpen(true);
+  }, []);
+
+  const closeQuickCreate = useCallback(() => {
+    Keyboard.dismiss();
+    setAddKeyboardVisible(false);
+    setAddModalOpen(false);
+    setAddModalText("");
+  }, []);
 
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [timePickerIndex, setTimePickerIndex] = useState(0);
@@ -2044,8 +2099,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
             {
               text: TXT.unlockPremium,
               onPress: () => {
-                setAddModalOpen(false);
-                setAddModalText("");
+                closeQuickCreate();
                 router.push("/(tabs)/profile" as any);
               },
             },
@@ -2055,21 +2109,22 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       }
     }
     Keyboard.dismiss();
+    setAddKeyboardVisible(false);
     setAddModalText("");
-    const newId = createChallengeId();
+    const newChallenge = createQuickChallenge(trimmed, todayISO);
     await persist((latest2) => {
       return {
         ...latest2,
-        challenges: [{ id: newId, text: trimmed, enabled: true, createdDate: todayISO }, ...(latest2.challenges ?? [])],
+        challenges: [newChallenge, ...(latest2.challenges ?? [])],
       };
     });
-    newlyCreatedChallengeIds.current.add(newId);
+    newlyCreatedChallengeIds.current.add(newChallenge.id);
     setAddModalOpen(false);
     } finally {
       addSaveLock.current = false;
       setAddSaving(false);
     }
-  }, [addModalText, persist, premium, router, todayISO]);
+  }, [addModalText, closeQuickCreate, persist, premium, router, todayISO]);
 
   const saveBasicsImmediate = useCallback(
     async (nextEnabled: boolean, nextTarget: number) => {
@@ -2265,8 +2320,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   }, [manageOpen, manageSaving, manageId, managed?.text, manageRename, saveRenameImmediate]);
 
  const applyManageReminders = useCallback(async () => {
-  if (!manageId || manageSaveLock.current) return;
-  manageSaveLock.current = true;
+  if (!manageId || !acquireNotificationSaveGuard(manageSaveLock)) return;
   setManageSaving(true);
   setManageSaveConfirmation("");
 
@@ -2339,41 +2393,37 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       ),
       isNewChallenge: newlyCreatedChallengeIds.current.has(id),
     };
-    const prepared = await prepareChallengeReminders(
-      id,
-      name,
-      times,
-      wantsEnabled,
-      reminderSchedule,
-    );
-
-    await commitPreparedNotificationChange({
-      persist: () => persist((latest) =>
-        prepared.applyToState(latest, (challenge) => configureChallenge(challenge))
-      ),
-      restore: prepared.restoreOriginalState,
-      rollback: prepared.rollback,
-      finalize: prepared.finalize,
-      onPhase: prepared.reportPhase,
-    });
-
-    if (wantsEnabled) {
-      times = prepared.times;
-      setManageRemTimes(times);
-      setManageRemCount(times.length);
-      if (managePeriod === FLEXIBLE_WEEKLY_PERIOD) {
-        setManageReminderRows(prepared.reminderRows);
-      }
-    } else {
-      setManageRemTimes([]);
-      setManageRemCount(1);
-      setManageReminderRows([]);
-    }
-    await manageConfirmation.current.confirm({
-      session: editorSession,
-      message: TXT.notificationsSaved,
-      showConfirmation: setManageSaveConfirmation,
-      closeEditor: closeManage,
+    await runNotificationEditorSave({
+      save: () => savePersonalReminderWorkflow({
+        challengeId: id,
+        challengeText: name,
+        timesHHMM: times,
+        enabled: wantsEnabled,
+        scheduleOverride: reminderSchedule,
+        persist: (preparedChange) => persist((latest) =>
+          preparedChange.applyToState(latest, (challenge) => configureChallenge(challenge))
+        ),
+      }),
+      onSaved: (prepared) => {
+        if (wantsEnabled) {
+          times = prepared.times;
+          setManageRemTimes(times);
+          setManageRemCount(times.length);
+          if (managePeriod === FLEXIBLE_WEEKLY_PERIOD) {
+            setManageReminderRows(prepared.reminderRows);
+          }
+        } else {
+          setManageRemTimes([]);
+          setManageRemCount(1);
+          setManageReminderRows([]);
+        }
+      },
+      confirm: () => manageConfirmation.current.confirm({
+        session: editorSession,
+        message: TXT.notificationsSaved,
+        showConfirmation: setManageSaveConfirmation,
+        closeEditor: closeManage,
+      }),
     });
     newlyCreatedChallengeIds.current.delete(id);
   } catch (e: any) {
@@ -2381,14 +2431,21 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     if (__DEV__) console.error("[PersonalReminders] save failed", { code: msg || "unknown", period: managePeriod });
 
     if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
-      Alert.alert(TXT.notifications, TXT.expoGoNotifications);
+      Alert.alert(TXT.notifications, TXT.expoGoNotifications, [
+        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
+        { text: TXT.close, style: "cancel" },
+      ]);
     } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
       Alert.alert(TXT.notifications, TXT.notificationPermissionDenied, [
         { text: TXT.close, style: "cancel" },
+        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
         { text: lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings", onPress: () => void Linking.openSettings() },
       ]);
     } else {
-      Alert.alert(TXT.notifications, t.flexibleWeekly.notificationSaveFailed);
+      Alert.alert(TXT.notifications, t.flexibleWeekly.notificationSaveFailed, [
+        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
+        { text: TXT.close, style: "cancel" },
+      ]);
     }
   } finally {
     manageSaveLock.current = false;
@@ -3658,7 +3715,7 @@ useEffect(() => {
             <Text style={styles.heroQuote}>„{TXT.quote}“</Text>
           </View>
 
-          <Pressable onPress={() => setAddModalOpen(true)} style={({ pressed }) => [styles.heroPlus, pressed && { opacity: 0.9 }]}>
+          <Pressable onPress={openQuickCreate} style={({ pressed }) => [styles.heroPlus, pressed && { opacity: 0.9 }]}>
             <Ionicons name="add" size={26} color="#0B1220" />
           </Pressable>
 
@@ -3776,43 +3833,40 @@ useEffect(() => {
   visible={addModalOpen}
   transparent
   animationType="fade"
-  onRequestClose={() => {
-    setAddModalOpen(false);
-    setAddModalText("");
-  }}
->
-  <KeyboardAvoidingView
-    style={{ flex: 1 }}
-    behavior="height"
-    keyboardVerticalOffset={0}
-  >
-    <Pressable style={styles.keyboardBackdrop}>
-          <Pressable style={[styles.sheet, styles.keyboardSheet]} onPress={() => {}}>
-            <View style={styles.sheetHeader}>
+  onRequestClose={closeQuickCreate}
+ >
+   <KeyboardAvoidingView
+     style={{ flex: 1 }}
+     behavior={Platform.OS === "ios" ? "padding" : "height"}
+     keyboardVerticalOffset={0}
+     enabled={addKeyboardVisible}
+   >
+     <View style={[styles.quickCreateBackdrop, addKeyboardVisible && styles.quickCreateBackdropKeyboard]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeQuickCreate} />
+          <View style={styles.quickCreateSheet}>
+             <View style={styles.sheetHeader}>
               <Text style={[styles.sheetTitle, { color: UI.accent }]}>{TXT.addTitle}</Text>
               <Pressable
-                onPress={() => {
-                  setAddModalOpen(false);
-                  setAddModalText("");
-                }}
+                onPress={closeQuickCreate}
                 style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.88 }]}
               >
                 <Text style={styles.closeText}>{TXT.close}</Text>
               </Pressable>
             </View>
 
-            <ScrollView
-              ref={addScrollRef}
-              keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={false}
-            >
+             <ScrollView
+              style={styles.quickCreateScroll}
+              contentContainerStyle={styles.quickCreateContent}
+               keyboardShouldPersistTaps="handled"
+               automaticallyAdjustKeyboardInsets={false}
+             >
               <TextInput
                 value={addModalText}
                 onChangeText={setAddModalText}
-                placeholder={TXT.namePlaceholder}
-                placeholderTextColor={UI.sub}
-                style={[styles.input, { color: UI.text, borderColor: UI.stroke }]}
-                onFocus={() => requestAnimationFrame(() => addScrollRef.current?.scrollTo({ y: 0, animated: true }))}
+                 placeholder={TXT.namePlaceholder}
+                 placeholderTextColor={UI.sub}
+                 style={[styles.input, { color: UI.text, borderColor: UI.stroke }]}
+                autoFocus={false}
                 autoCapitalize="sentences"
                 returnKeyType="done"
                 onSubmitEditing={() => {
@@ -3831,11 +3885,11 @@ useEffect(() => {
               >
                 <Text style={styles.primaryBtnText}>{TXT.add}</Text>
               </Pressable>
-            </ScrollView>
-          </Pressable>
-           </Pressable>
-  </KeyboardAvoidingView>
-</Modal>
+             </ScrollView>
+          </View>
+     </View>
+   </KeyboardAvoidingView>
+ </Modal>
 
       <Modal visible={manageOpen} transparent animationType="fade" onRequestClose={manageSaving ? () => {} : closeManage}>
         <KeyboardAvoidingView
