@@ -42,6 +42,7 @@
         }
       ],
       "./plugins/withOneMoreAndroidCompatibility",
+      "./plugins/withOneMoreIosJsc",
       "./plugins/withOneMoreIosWidget"
     ],
     "version": "1.0.7",

@@ -2,13 +2,42 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+const iosJscPlugin = require("../plugins/withOneMoreIosJsc");
+
 const read = (path: string) => readFileSync(path, "utf8");
 
 test("iOS release uses JSC while Android keeps Hermes", () => {
   const config = JSON.parse(read("app.json"));
+  const packageJson = JSON.parse(read("package.json"));
   assert.equal(config.expo.jsEngine, "jsc");
   assert.equal(config.expo.ios.jsEngine, undefined);
   assert.equal(config.expo.android.jsEngine, "hermes");
+  assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], "0.2.0");
+  assert.ok(config.expo.plugins.includes("./plugins/withOneMoreIosJsc"));
+});
+
+test("iOS native generation opts into community JSC idempotently", () => {
+  const podfile = 'require "react_native_pods"\n';
+  const patchedPodfile = iosJscPlugin._test.patchPodfile(podfile);
+  assert.match(patchedPodfile, /ENV\['USE_THIRD_PARTY_JSC'\] = '1'/);
+  assert.match(patchedPodfile, /ENV\['USE_HERMES'\] = '0'/);
+  assert.equal(iosJscPlugin._test.patchPodfile(patchedPodfile), patchedPodfile);
+
+  const appDelegate = [
+    "import Expo",
+    "import React",
+    "import ReactAppDependencyProvider",
+    "",
+    "class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {",
+    "  // Extension point for config-plugins",
+    "}",
+    "",
+  ].join("\n");
+  const patchedDelegate = iosJscPlugin._test.patchAppDelegate(appDelegate);
+  assert.match(patchedDelegate, /import ReactJSC/);
+  assert.match(patchedDelegate, /override func createJSRuntimeFactory\(\) -> JSRuntimeFactoryRef/);
+  assert.match(patchedDelegate, /jsrt_create_jsc_factory\(\)/);
+  assert.equal(iosJscPlugin._test.patchAppDelegate(patchedDelegate), patchedDelegate);
 });
 
 test("the one-off iOS hotfix profile reuses build 38 instead of creating build 39", () => {
