@@ -55,7 +55,7 @@
  "ios": {
   "supportsTablet": false,
   "bundleIdentifier": "eu.desigame.onemore",
-  "buildNumber": "38",
+  "buildNumber": "39",
  "googleServicesFile": "./GoogleService-Info.plist",
   "entitlements": {
     "com.apple.security.application-groups": [

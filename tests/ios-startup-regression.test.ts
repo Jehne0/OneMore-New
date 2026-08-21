@@ -40,15 +40,16 @@ test("iOS native generation opts into community JSC idempotently", () => {
   assert.equal(iosJscPlugin._test.patchAppDelegate(patchedDelegate), patchedDelegate);
 });
 
-test("the one-off iOS hotfix profile reuses build 38 instead of creating build 39", () => {
+test("the one-off iOS JSC hotfix profile creates build 39", () => {
   const config = JSON.parse(read("app.json"));
   const eas = JSON.parse(read("eas.json"));
 
   assert.equal(config.expo.version, "1.0.7");
-  assert.equal(config.expo.ios.buildNumber, "38");
+  assert.equal(config.expo.ios.buildNumber, "39");
   assert.equal(eas.cli.appVersionSource, "remote");
-  assert.equal(eas.build["production-ios-build38-hotfix"].extends, "production");
-  assert.equal(eas.build["production-ios-build38-hotfix"].autoIncrement, false);
+  assert.equal(eas.build["production-ios-build39-jsc-hotfix"].extends, "production");
+  assert.equal(eas.build["production-ios-build39-jsc-hotfix"].autoIncrement, true);
+  assert.equal(eas.build["production-ios-build38-hotfix"], undefined);
 });
 
 test("notification diagnostics do not add an eager Expo clipboard module", () => {
