@@ -377,21 +377,23 @@ export function startReminderNotificationRecovery(): void {
       void recoverReminderNotificationOperations({ uid: user.uid }).catch(() => undefined);
     }
   });
-  void import("react-native").then(({ AppState }) => {
-    AppState.addEventListener("change", (state) => {
-      const uid = auth.currentUser?.uid;
-      if (state === "active" && uid) {
-        const planningContext = reminderPlanningContext();
-        const planningContextChanged = planningContext !== lastReminderPlanningContext;
-        lastReminderPlanningContext = planningContext;
-        if (planningContextChanged) {
-          void refreshRemindersAfterForeground(uid).catch(() => undefined);
-        } else {
-          void recoverReminderNotificationOperations({ uid }).catch(() => undefined);
+  void import("react-native")
+    .then(({ AppState }) => {
+      AppState.addEventListener("change", (state) => {
+        const uid = auth.currentUser?.uid;
+        if (state === "active" && uid) {
+          const planningContext = reminderPlanningContext();
+          const planningContextChanged = planningContext !== lastReminderPlanningContext;
+          lastReminderPlanningContext = planningContext;
+          if (planningContextChanged) {
+            void refreshRemindersAfterForeground(uid).catch(() => undefined);
+          } else {
+            void recoverReminderNotificationOperations({ uid }).catch(() => undefined);
+          }
         }
-      }
-    });
-  });
+      });
+    })
+    .catch(() => undefined);
 }
 
 let handlerSet = false;

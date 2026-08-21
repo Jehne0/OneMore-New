@@ -30,7 +30,7 @@
     "production": {
       "autoIncrement": true
     },
-    "production-ios-build39-startup-hotfix": {
+    "production-ios-build40-startup-hotfix": {
       "extends": "production",
       "autoIncrement": false
     }

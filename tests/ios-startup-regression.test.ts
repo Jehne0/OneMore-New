@@ -4,6 +4,12 @@ import test from "node:test";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const turboModulePatch = require("../scripts/patch-react-native-ios-turbomodule");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const hermesSourceBundlePatch = require("../scripts/patch-react-native-ios-hermes-source-bundle");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const xcode = require("xcode");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { __test: iosReactNativePlugin } = require("../plugins/withOneMoreIosReactNativeSource");
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -34,15 +40,54 @@ test("iOS async void TurboModule exceptions never touch Hermes off-thread", () =
   assert.equal(turboModulePatch.patchTurboModuleSource(patched), patched);
 });
 
-test("the one-off iOS startup hotfix profile creates build 39", () => {
+test("iOS release keeps Hermes but loads Metro source instead of Hermes bytecode", () => {
+  const packageJson = JSON.parse(read("package.json"));
+  const plugin = read("plugins/withOneMoreIosReactNativeSource.js");
+  const xcodeScript = `
+if [[ $USE_HERMES == false ]]; then
+  cp "$BUNDLE_FILE" "$DEST/"
+else
+  "$HERMES_CLI_PATH" -emit-binary -O -out "$DEST/main.jsbundle" "$BUNDLE_FILE"
+fi`;
+  const patched = hermesSourceBundlePatch.patchReactNativeXcodeScript(xcodeScript);
+
+  assert.match(
+    packageJson.scripts.postinstall,
+    /patch-react-native-ios-hermes-source-bundle\.js/,
+  );
+  assert.match(plugin, /ONEMORE_IOS_HERMES_SOURCE_BUNDLE/);
+  assert.match(patched, /USE_HERMES == false \|\| \$ONEMORE_IOS_HERMES_SOURCE_BUNDLE == 1/);
+  assert.match(patched, /cp "\$BUNDLE_FILE" "\$DEST\/"/);
+  assert.match(patched, /-emit-binary/);
+  assert.equal(hermesSourceBundlePatch.patchReactNativeXcodeScript(patched), patched);
+});
+
+test("the Hermes source-bundle flag is scoped to the main iOS target", () => {
+  const project = xcode.project("tests/fixtures/minimal-ios-project.pbxproj").parseSync();
+  iosReactNativePlugin.enableHermesSourceBundle(project);
+  iosReactNativePlugin.enableHermesSourceBundle(project);
+
+  const target = project.pbxNativeTargetSection()[project.getFirstTarget().uuid];
+  const list = project.hash.project.objects.XCConfigurationList[target.buildConfigurationList];
+  const configurations = project.pbxXCBuildConfigurationSection();
+  for (const { value } of list.buildConfigurations) {
+    assert.equal(
+      configurations[value].buildSettings[iosReactNativePlugin.SOURCE_BUNDLE_BUILD_SETTING],
+      "1",
+    );
+  }
+});
+
+test("the one-off iOS startup hotfix profile creates build 40", () => {
   const config = JSON.parse(read("app.json"));
   const eas = JSON.parse(read("eas.json"));
 
   assert.equal(config.expo.version, "1.0.7");
-  assert.equal(config.expo.ios.buildNumber, "39");
+  assert.equal(config.expo.ios.buildNumber, "40");
   assert.equal(eas.cli.appVersionSource, "local");
-  assert.equal(eas.build["production-ios-build39-startup-hotfix"].extends, "production");
-  assert.equal(eas.build["production-ios-build39-startup-hotfix"].autoIncrement, false);
+  assert.equal(eas.build["production-ios-build40-startup-hotfix"].extends, "production");
+  assert.equal(eas.build["production-ios-build40-startup-hotfix"].autoIncrement, false);
+  assert.equal(eas.build["production-ios-build39-startup-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build38-hotfix"], undefined);
 });
 
@@ -73,4 +118,5 @@ test("cold-start background work never leaves an unhandled rejection", () => {
     reminders,
     /recoverReminderNotificationOperations\(\{ uid: user\.uid \}\)\.catch\(\(\) => undefined\)/,
   );
+  assert.match(reminders, /import\("react-native"\)[\s\S]*\.catch\(\(\) => undefined\)/);
 });
