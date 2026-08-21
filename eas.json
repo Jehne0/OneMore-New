@@ -29,6 +29,10 @@
     },
     "production": {
       "autoIncrement": true
+    },
+    "production-ios-build38-hotfix": {
+      "extends": "production",
+      "autoIncrement": false
     }
   },
   "submit": {

@@ -6,8 +6,20 @@ const read = (path: string) => readFileSync(path, "utf8");
 
 test("iOS release uses JSC while Android keeps Hermes", () => {
   const config = JSON.parse(read("app.json"));
-  assert.equal(config.expo.jsEngine, "hermes");
-  assert.equal(config.expo.ios.jsEngine, "jsc");
+  assert.equal(config.expo.jsEngine, "jsc");
+  assert.equal(config.expo.ios.jsEngine, undefined);
+  assert.equal(config.expo.android.jsEngine, "hermes");
+});
+
+test("the one-off iOS hotfix profile reuses build 38 instead of creating build 39", () => {
+  const config = JSON.parse(read("app.json"));
+  const eas = JSON.parse(read("eas.json"));
+
+  assert.equal(config.expo.version, "1.0.7");
+  assert.equal(config.expo.ios.buildNumber, "38");
+  assert.equal(eas.cli.appVersionSource, "remote");
+  assert.equal(eas.build["production-ios-build38-hotfix"].extends, "production");
+  assert.equal(eas.build["production-ios-build38-hotfix"].autoIncrement, false);
 });
 
 test("notification diagnostics do not add an eager Expo clipboard module", () => {
