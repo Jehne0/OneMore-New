@@ -2,54 +2,47 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const iosJscPlugin = require("../plugins/withOneMoreIosJsc");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const turboModulePatch = require("../scripts/patch-react-native-ios-turbomodule");
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-test("iOS release uses JSC while Android keeps Hermes", () => {
+test("both mobile platforms use the supported Hermes engine", () => {
   const config = JSON.parse(read("app.json"));
   const packageJson = JSON.parse(read("package.json"));
-  assert.equal(config.expo.jsEngine, "jsc");
+  assert.equal(config.expo.jsEngine, "hermes");
   assert.equal(config.expo.ios.jsEngine, undefined);
   assert.equal(config.expo.android.jsEngine, "hermes");
-  assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], "0.2.0");
-  assert.ok(config.expo.plugins.includes("./plugins/withOneMoreIosJsc"));
+  assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], undefined);
+  assert.ok(!config.expo.plugins.includes("./plugins/withOneMoreIosJsc"));
+  assert.ok(config.expo.plugins.includes("./plugins/withOneMoreIosReactNativeSource"));
 });
 
-test("iOS native generation opts into community JSC idempotently", () => {
-  const podfile = 'require "react_native_pods"\n';
-  const patchedPodfile = iosJscPlugin._test.patchPodfile(podfile);
-  assert.match(patchedPodfile, /ENV\['USE_THIRD_PARTY_JSC'\] = '1'/);
-  assert.match(patchedPodfile, /ENV\['USE_HERMES'\] = '0'/);
-  assert.match(patchedPodfile, /ENV\['RCT_USE_RN_DEP'\] = '0'/);
-  assert.equal(iosJscPlugin._test.patchPodfile(patchedPodfile), patchedPodfile);
-
-  const appDelegate = [
-    "import Expo",
-    "import React",
-    "import ReactAppDependencyProvider",
-    "",
-    "class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {",
-    "  // Extension point for config-plugins",
-    "}",
-    "",
-  ].join("\n");
-  const patchedDelegate = iosJscPlugin._test.patchAppDelegate(appDelegate);
-  assert.match(patchedDelegate, /import ReactJSC/);
-  assert.match(patchedDelegate, /override func createJSRuntimeFactory\(\) -> JSRuntimeFactoryRef/);
-  assert.match(patchedDelegate, /jsrt_create_jsc_factory\(\)/);
-  assert.equal(iosJscPlugin._test.patchAppDelegate(patchedDelegate), patchedDelegate);
+test("iOS async void TurboModule exceptions never touch Hermes off-thread", () => {
+  const source = `void ObjCTurboModule::performVoidMethodInvocation() {
+    @try {
+      [inv invokeWithTarget:strongModule];
+    } @catch (NSException *exception) {
+      throw convertNSExceptionToJSError(runtime, exception, std::string{moduleName}, methodNameStr);
+    } @finally {
+      [retainedObjectsForInvocation removeAllObjects];
+    }
+  }`;
+  const patched = turboModulePatch.patchTurboModuleSource(source);
+  assert.doesNotMatch(patched, /throw convertNSExceptionToJSError/);
+  assert.match(patched, /@throw exception/);
+  assert.equal(turboModulePatch.patchTurboModuleSource(patched), patched);
 });
 
-test("the one-off iOS JSC hotfix profile creates build 39", () => {
+test("the one-off iOS startup hotfix profile creates build 39", () => {
   const config = JSON.parse(read("app.json"));
   const eas = JSON.parse(read("eas.json"));
 
   assert.equal(config.expo.version, "1.0.7");
   assert.equal(config.expo.ios.buildNumber, "39");
   assert.equal(eas.cli.appVersionSource, "local");
-  assert.equal(eas.build["production-ios-build39-jsc-hotfix"].extends, "production");
-  assert.equal(eas.build["production-ios-build39-jsc-hotfix"].autoIncrement, false);
+  assert.equal(eas.build["production-ios-build39-startup-hotfix"].extends, "production");
+  assert.equal(eas.build["production-ios-build39-startup-hotfix"].autoIncrement, false);
   assert.equal(eas.build["production-ios-build38-hotfix"], undefined);
 });
 
@@ -71,8 +64,10 @@ test("cold-start background work never leaves an unhandled rejection", () => {
   const rootLayout = read("app/_layout.tsx");
   const reminders = read("lib/reminders.ts");
 
+  assert.doesNotMatch(widgetEntry, /^import .*firebase/m);
   assert.match(widgetEntry, /syncIosWidgetState\(\)\.catch\(\(\) => \{\}\)/);
-  assert.doesNotMatch(widgetEntry, /authStateReady\(\)\.finally/);
+  assert.match(rootLayout, /BACKGROUND_START_DELAY_MS = 750/);
+  assert.doesNotMatch(rootLayout, /^Notifications\.setNotificationHandler/m);
   assert.match(rootLayout, /initClock\(\)\.catch\(\(\) => \{\}\)/);
   assert.match(
     reminders,

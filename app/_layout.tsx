@@ -2,7 +2,7 @@ import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { StatusBar } from "expo-status-bar";
-import { AppState, View } from "react-native";
+import { AppState, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ThemeProvider, useTheme } from "../lib/theme";
 import { LanguageProvider } from "../lib/i18n";
@@ -18,16 +18,22 @@ import { AppAlertHost } from "../lib/appAlert";
 import { UpdateGate } from "../lib/UpdateGate";
 import { WhatsNewPopup } from "../lib/WhatsNewPopup";
 import { restorePremium } from "../lib/premium";
-import * as Notifications from "expo-notifications";
 import { startReminderNotificationRecovery } from "../lib/reminders";
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+import { startIosBackgroundStartup } from "../lib/iosBackgroundStartup";
+
+const BACKGROUND_START_DELAY_MS = 750;
+
+async function setForegroundNotificationHandler(): Promise<void> {
+  const Notifications = await import("expo-notifications");
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 function RootStack() {
   const { UI, isDark } = useTheme();
@@ -47,7 +53,7 @@ function RootStack() {
 }
 
 function AppShell() {
-  const { isReady, UI } = useTheme();
+  const { isReady } = useTheme();
 
   if (!isReady) {
     return <View style={{ flex: 1, backgroundColor: "#0B1220" }} />;
@@ -72,12 +78,37 @@ export default function RootLayout() {
 
   useEffect(() => {
     void initClock().catch(() => {});
-    startReminderNotificationRecovery();
 
-    try {
-      initRevenueCatAuth();
-    } catch {}
+    let cancelled = false;
+    let stopIosWidgetRegistration: (() => void) | undefined;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
 
+      void setForegroundNotificationHandler().catch(() => {});
+      try {
+        startReminderNotificationRecovery();
+      } catch {}
+      try {
+        initRevenueCatAuth();
+      } catch {}
+      if (Platform.OS === "ios") {
+        void startIosBackgroundStartup()
+          .then((stopRegistration) => {
+            if (cancelled) {
+              stopRegistration();
+              return;
+            }
+            stopIosWidgetRegistration = stopRegistration;
+          })
+          .catch(() => {});
+      }
+    }, BACKGROUND_START_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      stopIosWidgetRegistration?.();
+    };
   }, []);
 
   useEffect(() => {

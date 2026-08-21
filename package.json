@@ -3,6 +3,7 @@
   "main": "index.ts",
   "version": "1.0.7",
   "scripts": {
+    "postinstall": "node ./scripts/patch-react-native-ios-turbomodule.js",
     "test": "tsx --test tests/android-compatibility.test.ts tests/challenge-editor-regression.test.ts tests/completion-outbox.test.ts tests/flexible-weekly-reminders.test.ts tests/flexible-weekly.test.ts tests/ios-startup-regression.test.ts tests/ios-widget-plugin.test.ts tests/ios-widget.test.ts tests/localization.test.ts tests/notification-exhaustive-matrix.test.ts tests/notification-runtime.test.ts tests/notification-transaction.test.ts tests/notification-workflow-exhaustive.test.ts tests/personal-challenge-pause-history.test.ts tests/premium-cold-start.test.ts tests/premium-offering-flow.test.ts tests/premium-offering-selection.test.ts tests/profile-routes.test.ts tests/quick-create-modal.test.ts tests/safe-modal-layout.test.ts tests/shared-challenge-permissions.test.ts tests/shared-widget-regression.test.ts tests/update-startup.test.ts tests/username-cloud-gate.test.ts tests/version-consistency.test.ts tests/whats-new.test.ts tests/widget.test.ts tests/widget-configuration.test.ts tests/widget-entry.test.ts tests/widget-premium.test.ts tests/widget-production.test.ts tests/widget-provider-metadata.test.ts tests/widget-row-layout.test.ts tests/widget-selection-regression.test.ts",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -20,7 +21,6 @@
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
-    "@react-native-community/javascriptcore": "0.2.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
