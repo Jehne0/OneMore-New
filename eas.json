@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 18.8.1",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -32,7 +32,7 @@
     },
     "production-ios-build39-jsc-hotfix": {
       "extends": "production",
-      "autoIncrement": true
+      "autoIncrement": false
     }
   },
   "submit": {

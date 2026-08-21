@@ -47,9 +47,9 @@ test("the one-off iOS JSC hotfix profile creates build 39", () => {
 
   assert.equal(config.expo.version, "1.0.7");
   assert.equal(config.expo.ios.buildNumber, "39");
-  assert.equal(eas.cli.appVersionSource, "remote");
+  assert.equal(eas.cli.appVersionSource, "local");
   assert.equal(eas.build["production-ios-build39-jsc-hotfix"].extends, "production");
-  assert.equal(eas.build["production-ios-build39-jsc-hotfix"].autoIncrement, true);
+  assert.equal(eas.build["production-ios-build39-jsc-hotfix"].autoIncrement, false);
   assert.equal(eas.build["production-ios-build38-hotfix"], undefined);
 });
 
