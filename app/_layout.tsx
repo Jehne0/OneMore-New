@@ -71,7 +71,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    void initClock();
+    void initClock().catch(() => {});
     startReminderNotificationRecovery();
 
     try {

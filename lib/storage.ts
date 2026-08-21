@@ -545,7 +545,11 @@ function normalizeInactivePeriods(raw: unknown): { startDate: string; endDate?: 
     if (!DATE_KEY_RE.test(startDate) || (endDate && !DATE_KEY_RE.test(endDate))) return [];
     if (endDate && endDate <= startDate) return [];
     const reason = value?.reason === "disabled" || value?.reason === "planLock" ? value.reason : undefined;
-    return [endDate ? { startDate, endDate, reason } : { startDate, reason }];
+    return [{
+      startDate,
+      ...(endDate ? { endDate } : {}),
+      ...(reason ? { reason } : {}),
+    }];
   }).sort((a, b) => a.startDate.localeCompare(b.startDate));
 }
 

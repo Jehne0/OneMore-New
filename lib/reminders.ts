@@ -373,7 +373,9 @@ export function startReminderNotificationRecovery(): void {
   if (recoveryStarted) return;
   recoveryStarted = true;
   onAuthStateChanged(auth, (user) => {
-    if (user?.uid) void recoverReminderNotificationOperations({ uid: user.uid });
+    if (user?.uid) {
+      void recoverReminderNotificationOperations({ uid: user.uid }).catch(() => undefined);
+    }
   });
   void import("react-native").then(({ AppState }) => {
     AppState.addEventListener("change", (state) => {

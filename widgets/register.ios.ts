@@ -4,6 +4,22 @@ import { auth } from "../lib/firebase";
 import { syncIosWidgetState } from "../lib/iosWidgetService";
 
 let authReady = false;
-void auth.authStateReady().finally(() => { authReady = true; void syncIosWidgetState(); });
-onAuthStateChanged(auth, () => { if (authReady) void syncIosWidgetState(); });
-AppState.addEventListener("change", (state) => { if (state === "active" && authReady) void syncIosWidgetState(); });
+
+function requestWidgetSync(): void {
+  void syncIosWidgetState().catch(() => {});
+}
+
+void (async () => {
+  try {
+    await auth.authStateReady();
+  } catch {}
+  authReady = true;
+  requestWidgetSync();
+})();
+
+onAuthStateChanged(auth, () => {
+  if (authReady) requestWidgetSync();
+});
+AppState.addEventListener("change", (state) => {
+  if (state === "active" && authReady) requestWidgetSync();
+});

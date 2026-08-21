@@ -123,7 +123,7 @@ export function applyChallengeCompletion(
       challengeId: id,
       challengeText: challenge.text,
       status: "completed",
-      eventType: flexible ? "flexibleWeeklyCompleted" : undefined,
+      ...(flexible ? { eventType: "flexibleWeeklyCompleted" as const } : {}),
       partial: flexible ? false : !completedDay,
     }, ...history],
     lastCompletedDate: completedDay && !isChallengeEasyMode(challenge) ? date : state.lastCompletedDate,

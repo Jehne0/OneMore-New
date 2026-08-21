@@ -33,6 +33,21 @@ test("CNG Android compatibility plugin removes restrictions and enables producti
   assert.doesNotMatch(plugin, /-keep class \*\*/);
 });
 
+test("Android CNG widget templates are versioned and not hidden by the generated-project ignore", () => {
+  const ignore = readFileSync(".gitignore", "utf8");
+  assert.match(ignore, /^\/android\/$/m);
+  assert.doesNotMatch(ignore, /^android\/$/m);
+  for (const name of [
+    "WidgetSessionContract.kt",
+    "WidgetSessionModule.kt",
+    "WidgetSessionPackage.kt",
+    "WidgetConfigurationActivity.kt",
+    "OneMore.java",
+  ]) {
+    assert.equal(existsSync(`plugins/android/${name}`), true, name);
+  }
+});
+
 test("generated Android manifest is resizable and preserves widget lifecycle integration", () => {
   const manifest = readFileSync("android/app/src/main/AndroidManifest.xml", "utf8");
   assert.doesNotMatch(manifest, /android:screenOrientation|android:maxAspectRatio|android:minAspectRatio/);

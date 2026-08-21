@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -27,6 +26,7 @@ import {
   Animated,
   AppState as RNAppState,
   Alert as NativeAlert,
+  Clipboard,
   FlatList,
   Image,
   Keyboard,
@@ -2432,18 +2432,18 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
 
     if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
       Alert.alert(TXT.notifications, TXT.expoGoNotifications, [
-        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
+        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => Clipboard.setString(formatNotificationFailureDetails(e)) },
         { text: TXT.close, style: "cancel" },
       ]);
     } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
       Alert.alert(TXT.notifications, TXT.notificationPermissionDenied, [
         { text: TXT.close, style: "cancel" },
-        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
+        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => Clipboard.setString(formatNotificationFailureDetails(e)) },
         { text: lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings", onPress: () => void Linking.openSettings() },
       ]);
     } else {
       Alert.alert(TXT.notifications, t.flexibleWeekly.notificationSaveFailed, [
-        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => void Clipboard.setStringAsync(formatNotificationFailureDetails(e)) },
+        { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => Clipboard.setString(formatNotificationFailureDetails(e)) },
         { text: TXT.close, style: "cancel" },
       ]);
     }
