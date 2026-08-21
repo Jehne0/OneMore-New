@@ -21,6 +21,7 @@ test("iOS native generation opts into community JSC idempotently", () => {
   const patchedPodfile = iosJscPlugin._test.patchPodfile(podfile);
   assert.match(patchedPodfile, /ENV\['USE_THIRD_PARTY_JSC'\] = '1'/);
   assert.match(patchedPodfile, /ENV\['USE_HERMES'\] = '0'/);
+  assert.match(patchedPodfile, /ENV\['RCT_USE_RN_DEP'\] = '0'/);
   assert.equal(iosJscPlugin._test.patchPodfile(patchedPodfile), patchedPodfile);
 
   const appDelegate = [
