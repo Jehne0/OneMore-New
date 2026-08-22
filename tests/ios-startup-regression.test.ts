@@ -62,14 +62,14 @@ test("iOS community JSC integration disables every Hermes and prebuilt RN path",
   assert.equal(jscPodsPatch.patchReactNativePods(patchedRnPods), patchedRnPods);
 });
 
-test("React Native 0.81.5 has the complete upstream community JSC backports", () => {
+test("React Native 0.81.5 has the complete community JSC backports and flag fix", () => {
   const packageJson = JSON.parse(read("package.json"));
   const communityJscPodspec = read(
     "node_modules/@react-native-community/javascriptcore/React-jsc.podspec",
   );
 
   assert.equal(packageJson.dependencies?.["react-native"], "0.81.5");
-  assert.equal(jscPodsPatch.backportDefinitions.length, 12);
+  assert.equal(jscPodsPatch.backportDefinitions.length, 13);
 
   for (const definition of jscPodsPatch.backportDefinitions) {
     const installedSource = read(`node_modules/react-native/${definition.relativePath}`);
@@ -123,7 +123,14 @@ test("React Native 0.81.5 has the complete upstream community JSC backports", ()
     /#if USE_THIRD_PARTY_JSC != 1\s+executorFactory = std::make_shared<HermesExecutorFactory>/,
   );
   assert.doesNotMatch(legacyBridge, /#if !defined\(USE_HERMES\)[\s\S]*HermesExecutorFactory/);
-  assert.match(appDelegatePodspec, /other_cflags = "\$\(inherited\) " \+ new_arch_enabled_flag \+ js_engine_flags\(\)/);
+  assert.match(
+    appDelegatePodspec,
+    /other_cflags = "\$\(inherited\) " \+ new_arch_enabled_flag \+ " " \+ js_engine_flags\(\)/,
+  );
+  assert.doesNotMatch(
+    appDelegatePodspec,
+    /new_arch_enabled_flag \+ js_engine_flags\(\)/,
+  );
   assert.match(reactCorePodspec, /s\.compiler_flags\s+= js_engine_flags\(\)/);
   assert.match(communityJscPodspec, /s\.dependency "React-cxxreact"/);
   assert.doesNotMatch(reactUtils, /depend_on_js_engine\(s\)/);

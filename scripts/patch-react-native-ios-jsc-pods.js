@@ -6,6 +6,8 @@ const path = require("node:path");
 //   third-party JSC runtime factory is supplied by the application
 // - 1033dbd1: break the React-jsc -> React-cxxreact -> React-utils -> React-jsc cycle
 // - 2d814379: exclude Hermes and make the default runtime factory compile with JSC
+// React-RCTAppDelegate also needs a separator between its new-architecture and
+// JS-engine compiler flags so USE_THIRD_PARTY_JSC is actually defined by Clang.
 const expectedReactNativeVersion = "0.81.5";
 const reactNativeRoot = path.resolve("node_modules/react-native");
 const reactUtilsDependency =
@@ -17,6 +19,14 @@ const backportDefinitions = [
     relativePath: "scripts/react_native_pods.rb",
     before: "  hermes_enabled= true",
     after: "  hermes_enabled= !use_third_party_jsc()",
+  },
+  {
+    name: "AppDelegate JSC compiler flag separator",
+    relativePath: "Libraries/AppDelegate/React-RCTAppDelegate.podspec",
+    before:
+      'other_cflags = "$(inherited) " + new_arch_enabled_flag + js_engine_flags()',
+    after:
+      'other_cflags = "$(inherited) " + new_arch_enabled_flag + " " + js_engine_flags()',
   },
   {
     name: "third-party JSC runtime factory fallback",
