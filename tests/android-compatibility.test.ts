@@ -23,7 +23,7 @@ test("CNG Android compatibility plugin removes restrictions and enables producti
   const plugin = readFileSync("plugins/withOneMoreAndroidCompatibility.js", "utf8");
   const app = JSON.parse(readFileSync("app.json", "utf8"));
   assert.equal(app.expo.orientation, "default");
-  assert.equal(app.expo.android.edgeToEdgeEnabled, true);
+  assert.equal(app.expo.android.edgeToEdgeEnabled, undefined);
   assert.equal(app.expo.androidStatusBar, undefined);
   assert.ok(app.expo.plugins.includes("./plugins/withOneMoreAndroidCompatibility"));
   assert.match(plugin, /delete attrs\["android:screenOrientation"\]/);
