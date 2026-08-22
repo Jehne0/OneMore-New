@@ -7,6 +7,8 @@ const turboModulePatch = require("../scripts/patch-react-native-ios-turbomodule"
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const jscPodsPatch = require("../scripts/patch-react-native-ios-jsc-pods");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+const expoModulesCorePatch = require("../scripts/patch-expo-modules-core-ios-jsc");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { __test: iosJscPlugin } = require("../plugins/withOneMoreIosJsc");
 
 const read = (path: string) => readFileSync(path, "utf8");
@@ -48,6 +50,10 @@ test("iOS community JSC integration disables every Hermes and prebuilt RN path",
   const patchedRnPods = jscPodsPatch.patchReactNativePods(rnPods);
 
   assert.match(packageJson.scripts.postinstall, /patch-react-native-ios-jsc-pods\.js/);
+  assert.match(
+    packageJson.scripts.postinstall,
+    /patch-expo-modules-core-ios-jsc\.js/,
+  );
   assert.doesNotMatch(packageJson.scripts.postinstall, /hermes-source-bundle/);
   assert.match(patchedPodfile, /ENV\['USE_THIRD_PARTY_JSC'\] = '1'/);
   assert.match(patchedPodfile, /ENV\['USE_HERMES'\] = '0'/);
@@ -60,6 +66,35 @@ test("iOS community JSC integration disables every Hermes and prebuilt RN path",
   assert.equal(iosJscPlugin.patchAppDelegate(patchedDelegate), patchedDelegate);
   assert.match(patchedRnPods, /hermes_enabled= !use_third_party_jsc\(\)/);
   assert.equal(jscPodsPatch.patchReactNativePods(patchedRnPods), patchedRnPods);
+});
+
+test("Expo Modules Core imports the runtime for the selected iOS JS engine", () => {
+  const packageJson = JSON.parse(read("node_modules/expo-modules-core/package.json"));
+  const runtimeSource = read(
+    "node_modules/expo-modules-core/ios/JSI/EXJavaScriptRuntime.mm",
+  );
+  const originalImports = `#import <jsi/jsi.h>
+#import <hermes/hermes.h>`;
+
+  assert.equal(packageJson.version, "3.0.30");
+  assert.equal(
+    expoModulesCorePatch.patchExpoModulesCoreSource(originalImports),
+    expoModulesCorePatch.engineSpecificImports,
+  );
+  assert.equal(
+    expoModulesCorePatch.patchExpoModulesCoreSource(
+      expoModulesCorePatch.engineSpecificImports,
+    ),
+    expoModulesCorePatch.engineSpecificImports,
+  );
+  assert.match(
+    runtimeSource,
+    /#if __has_include\(<reacthermes\/HermesExecutorFactory\.h>\)\s+#import <hermes\/hermes\.h>\s+#else\s+#import <ReactJSC\/JSCRuntime\.h>\s+#endif/,
+  );
+  assert.doesNotMatch(
+    runtimeSource,
+    /#import <jsi\/jsi\.h>\s+#import <hermes\/hermes\.h>/,
+  );
 });
 
 test("React Native 0.81.5 has the complete community JSC backports and flag fix", () => {
