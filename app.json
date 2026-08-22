@@ -43,6 +43,7 @@
       ],
       "./plugins/withOneMoreAndroidCompatibility",
       "./plugins/withOneMoreIosReactNativeSource",
+      "./plugins/withOneMoreIosJsc",
       "./plugins/withOneMoreIosWidget"
     ],
     "version": "1.0.7",
@@ -51,11 +52,11 @@
     "scheme": "onemore",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "jsEngine": "hermes",
+    "jsEngine": "jsc",
  "ios": {
   "supportsTablet": false,
   "bundleIdentifier": "eu.desigame.onemore",
-  "buildNumber": "40",
+  "buildNumber": "41",
  "googleServicesFile": "./GoogleService-Info.plist",
   "entitlements": {
     "com.apple.security.application-groups": [

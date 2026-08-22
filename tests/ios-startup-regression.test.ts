@@ -5,22 +5,20 @@ import test from "node:test";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const turboModulePatch = require("../scripts/patch-react-native-ios-turbomodule");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const hermesSourceBundlePatch = require("../scripts/patch-react-native-ios-hermes-source-bundle");
+const jscPodsPatch = require("../scripts/patch-react-native-ios-jsc-pods");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const xcode = require("xcode");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { __test: iosReactNativePlugin } = require("../plugins/withOneMoreIosReactNativeSource");
+const { __test: iosJscPlugin } = require("../plugins/withOneMoreIosJsc");
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-test("both mobile platforms use the supported Hermes engine", () => {
+test("iOS uses community JSC while Android keeps Hermes", () => {
   const config = JSON.parse(read("app.json"));
   const packageJson = JSON.parse(read("package.json"));
-  assert.equal(config.expo.jsEngine, "hermes");
+  assert.equal(config.expo.jsEngine, "jsc");
   assert.equal(config.expo.ios.jsEngine, undefined);
   assert.equal(config.expo.android.jsEngine, "hermes");
-  assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], undefined);
-  assert.ok(!config.expo.plugins.includes("./plugins/withOneMoreIosJsc"));
+  assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], "0.2.0");
+  assert.ok(config.expo.plugins.includes("./plugins/withOneMoreIosJsc"));
   assert.ok(config.expo.plugins.includes("./plugins/withOneMoreIosReactNativeSource"));
 });
 
@@ -40,53 +38,40 @@ test("iOS async void TurboModule exceptions never touch Hermes off-thread", () =
   assert.equal(turboModulePatch.patchTurboModuleSource(patched), patched);
 });
 
-test("iOS release keeps Hermes but loads Metro source instead of Hermes bytecode", () => {
+test("iOS community JSC integration disables every Hermes and prebuilt RN path", () => {
   const packageJson = JSON.parse(read("package.json"));
-  const plugin = read("plugins/withOneMoreIosReactNativeSource.js");
-  const xcodeScript = `
-if [[ $USE_HERMES == false ]]; then
-  cp "$BUNDLE_FILE" "$DEST/"
-else
-  "$HERMES_CLI_PATH" -emit-binary -O -out "$DEST/main.jsbundle" "$BUNDLE_FILE"
-fi`;
-  const patched = hermesSourceBundlePatch.patchReactNativeXcodeScript(xcodeScript);
+  const podfile = `require "react_native_pods"\ntarget 'OneMore' do\nend\n`;
+  const appDelegate = `import Expo\nimport ReactAppDependencyProvider\n\nclass ReactNativeDelegate {\n  // Extension point for config-plugins\n}\n`;
+  const patchedPodfile = iosJscPlugin.patchPodfile(podfile);
+  const patchedDelegate = iosJscPlugin.patchAppDelegate(appDelegate);
+  const rnPods = "def use_react_native!\n  hermes_enabled= true\nend\n";
+  const patchedRnPods = jscPodsPatch.patchReactNativePods(rnPods);
 
-  assert.match(
-    packageJson.scripts.postinstall,
-    /patch-react-native-ios-hermes-source-bundle\.js/,
-  );
-  assert.match(plugin, /ONEMORE_IOS_HERMES_SOURCE_BUNDLE/);
-  assert.match(patched, /USE_HERMES == false \|\| \$ONEMORE_IOS_HERMES_SOURCE_BUNDLE == 1/);
-  assert.match(patched, /cp "\$BUNDLE_FILE" "\$DEST\/"/);
-  assert.match(patched, /-emit-binary/);
-  assert.equal(hermesSourceBundlePatch.patchReactNativeXcodeScript(patched), patched);
+  assert.match(packageJson.scripts.postinstall, /patch-react-native-ios-jsc-pods\.js/);
+  assert.doesNotMatch(packageJson.scripts.postinstall, /hermes-source-bundle/);
+  assert.match(patchedPodfile, /ENV\['USE_THIRD_PARTY_JSC'\] = '1'/);
+  assert.match(patchedPodfile, /ENV\['USE_HERMES'\] = '0'/);
+  assert.match(patchedPodfile, /ENV\['RCT_USE_RN_DEP'\] = '0'/);
+  assert.match(patchedPodfile, /ENV\['RCT_USE_PREBUILT_RNCORE'\] = '0'/);
+  assert.equal(iosJscPlugin.patchPodfile(patchedPodfile), patchedPodfile);
+  assert.match(patchedDelegate, /import ReactJSC/);
+  assert.match(patchedDelegate, /override func createJSRuntimeFactory\(\) -> JSRuntimeFactoryRef/);
+  assert.match(patchedDelegate, /jsrt_create_jsc_factory\(\)/);
+  assert.equal(iosJscPlugin.patchAppDelegate(patchedDelegate), patchedDelegate);
+  assert.match(patchedRnPods, /hermes_enabled= !use_third_party_jsc\(\)/);
+  assert.equal(jscPodsPatch.patchReactNativePods(patchedRnPods), patchedRnPods);
 });
 
-test("the Hermes source-bundle flag is scoped to the main iOS target", () => {
-  const project = xcode.project("tests/fixtures/minimal-ios-project.pbxproj").parseSync();
-  iosReactNativePlugin.enableHermesSourceBundle(project);
-  iosReactNativePlugin.enableHermesSourceBundle(project);
-
-  const target = project.pbxNativeTargetSection()[project.getFirstTarget().uuid];
-  const list = project.hash.project.objects.XCConfigurationList[target.buildConfigurationList];
-  const configurations = project.pbxXCBuildConfigurationSection();
-  for (const { value } of list.buildConfigurations) {
-    assert.equal(
-      configurations[value].buildSettings[iosReactNativePlugin.SOURCE_BUNDLE_BUILD_SETTING],
-      "1",
-    );
-  }
-});
-
-test("the one-off iOS startup hotfix profile creates build 40", () => {
+test("the one-off iOS JSC startup hotfix profile creates build 41", () => {
   const config = JSON.parse(read("app.json"));
   const eas = JSON.parse(read("eas.json"));
 
   assert.equal(config.expo.version, "1.0.7");
-  assert.equal(config.expo.ios.buildNumber, "40");
+  assert.equal(config.expo.ios.buildNumber, "41");
   assert.equal(eas.cli.appVersionSource, "local");
-  assert.equal(eas.build["production-ios-build40-startup-hotfix"].extends, "production");
-  assert.equal(eas.build["production-ios-build40-startup-hotfix"].autoIncrement, false);
+  assert.equal(eas.build["production-ios-build41-jsc-hotfix"].extends, "production");
+  assert.equal(eas.build["production-ios-build41-jsc-hotfix"].autoIncrement, false);
+  assert.equal(eas.build["production-ios-build40-startup-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build39-startup-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build38-hotfix"], undefined);
 });
