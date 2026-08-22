@@ -1,0 +1,64 @@
+name: Legacy iOS crash symbolication
+
+on:
+  push:
+    branches:
+      - codex/legacy-ios-crash-symbolication
+
+permissions:
+  contents: read
+
+jobs:
+  symbolicate-build-40:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ea797b4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx expo prebuild --clean --platform ios --no-install
+      - run: pod install --project-directory=ios --repo-update
+      - name: Rebuild build 40 source with symbols
+        run: |
+          xcodebuild \
+            -workspace ios/OneMore.xcworkspace \
+            -scheme OneMore \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/build-legacy \
+            CODE_SIGNING_ALLOWED=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf-with-dsym \
+            build
+      - name: Symbolicate build 40 crash offsets
+        run: |
+          BINARY=ios/build-legacy/Build/Products/Release-iphoneos/OneMore.app/OneMore
+          DWARF=ios/build-legacy/Build/Products/Release-iphoneos/OneMore.app.dSYM/Contents/Resources/DWARF/OneMore
+          {
+            echo 'Crash UUID: 0f2cfe21-571d-30a2-b1bb-07ed7a20e187'
+            xcrun dwarfdump --uuid "$BINARY"
+            echo 'Symbolicated offsets:'
+            xcrun atos -arch arm64 -o "$DWARF" -l 0x100000000 \
+              0x10032c694 0x10039c228 0x10039cc64 0x10045f8fc 0x100464348
+            echo 'Nearest linked symbols:'
+            xcrun nm -arch arm64 -n "$BINARY" | ruby -e '
+              targets = [0x10032c694, 0x10039c228, 0x10039cc64, 0x10045f8fc, 0x100464348]
+              symbols = STDIN.each_line.filter_map do |line|
+                match = line.match(/^([0-9a-fA-F]+)\s+\S\s+(.+)$/)
+                match && [match[1].to_i(16), match[2]]
+              end
+              targets.each do |target|
+                before = symbols.select { |address, _| address <= target }.last
+                puts format("0x%x -> 0x%x +0x%x %s", target, before[0], target - before[0], before[1]) if before
+              end
+            '
+          } | tee legacy-build40-symbolication.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: legacy-build40-symbolication
+          path: legacy-build40-symbolication.txt
+          if-no-files-found: error
