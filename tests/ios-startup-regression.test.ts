@@ -77,14 +77,24 @@ test("notification diagnostics do not add an eager Expo clipboard module", () =>
   }
 });
 
-test("cold-start background work never leaves an unhandled rejection", () => {
+test("iOS cold start does not invoke optional native TurboModules", () => {
   const widgetEntry = read("widgets/register.ios.ts");
   const rootLayout = read("app/_layout.tsx");
+  const tabsLayout = read("app/(tabs)/_layout.tsx");
   const reminders = read("lib/reminders.ts");
 
   assert.doesNotMatch(widgetEntry, /^import .*firebase/m);
   assert.match(widgetEntry, /syncIosWidgetState\(\)\.catch\(\(\) => \{\}\)/);
   assert.match(rootLayout, /BACKGROUND_START_DELAY_MS = 750/);
+  assert.doesNotMatch(rootLayout, /^import .*revenuecat/m);
+  assert.doesNotMatch(rootLayout, /startIosBackgroundStartup/);
+  assert.match(rootLayout, /if \(Platform\.OS === "ios"\) return;/);
+  assert.ok(
+    rootLayout.indexOf('if (Platform.OS === "ios") return;') <
+      rootLayout.lastIndexOf("setForegroundNotificationHandler"),
+  );
+  assert.doesNotMatch(tabsLayout, /^import .*revenuecat/m);
+  assert.match(tabsLayout, /if \(Platform\.OS === "ios"\) return;/);
   assert.doesNotMatch(rootLayout, /^Notifications\.setNotificationHandler/m);
   assert.match(rootLayout, /initClock\(\)\.catch\(\(\) => \{\}\)/);
   assert.match(

@@ -89,17 +89,17 @@ jobs:
             -workspace ios/OneMore.xcworkspace \
             -scheme OneMore \
             -configuration Release \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath ios/build \
             CODE_SIGNING_ALLOWED=NO \
             build
       - name: Verify compiled app and widget
         run: |
-          test -d ios/build/Build/Products/Release-iphonesimulator/OneMore.app
-          test -d ios/build/Build/Products/Release-iphonesimulator/OneMore.app/PlugIns/OneMoreWidget.appex
-          shasum -a 256 ios/build/Build/Products/Release-iphonesimulator/OneMore.app/OneMore > native-sha256.txt
-          shasum -a 256 ios/build/Build/Products/Release-iphonesimulator/OneMore.app/PlugIns/OneMoreWidget.appex/OneMoreWidget >> native-sha256.txt
+          test -d ios/build/Build/Products/Release-iphoneos/OneMore.app
+          test -d ios/build/Build/Products/Release-iphoneos/OneMore.app/PlugIns/OneMoreWidget.appex
+          shasum -a 256 ios/build/Build/Products/Release-iphoneos/OneMore.app/OneMore > native-sha256.txt
+          shasum -a 256 ios/build/Build/Products/Release-iphoneos/OneMore.app/PlugIns/OneMoreWidget.appex/OneMoreWidget >> native-sha256.txt
           cat native-sha256.txt
       - uses: actions/upload-artifact@v4
         with:
