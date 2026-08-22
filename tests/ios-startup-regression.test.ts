@@ -4,16 +4,18 @@ import test from "node:test";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-test("SDK 57 uses the supported Hermes runtime on both platforms", () => {
+test("SDK 57 uses its supported Hermes-only runtime on both platforms", () => {
   const config = JSON.parse(read("app.json"));
   const packageJson = JSON.parse(read("package.json"));
   assert.equal(packageJson.dependencies?.expo, "~57.0.15");
   assert.equal(packageJson.dependencies?.["react-native"], "0.86.2");
   assert.equal(packageJson.dependencies?.react, "19.2.3");
-  assert.equal(config.expo.jsEngine, "hermes");
+  assert.equal(config.expo.jsEngine, undefined);
   assert.equal(config.expo.ios.jsEngine, undefined);
   assert.equal(config.expo.android.jsEngine, undefined);
   assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], undefined);
+  assert.equal(config.expo.newArchEnabled, undefined);
+  assert.equal(config.expo.android.edgeToEdgeEnabled, undefined);
 });
 
 test("startup no longer patches React Native, Expo Modules Core, or JSC", () => {
@@ -55,6 +57,7 @@ test("audio is loaded lazily and uses the SDK 57 audio module", () => {
 
   assert.equal(packageJson.dependencies?.["expo-av"], undefined);
   assert.equal(packageJson.dependencies?.["expo-audio"], "~57.0.4");
+  assert.equal(packageJson.dependencies?.["expo-asset"], "~57.0.13");
   assert.doesNotMatch(sound, /^import .*expo-audio/m);
   assert.match(sound, /await import\("expo-audio"\)/);
   assert.match(sound, /await sound\.seekTo\(0\)/);
