@@ -3,6 +3,7 @@
   "compilerOptions": {},
   "exclude": [
     "functions/**",
+    "push/**",
     "node_modules/**"
   ],
   "include": [

@@ -49,7 +49,7 @@ test("an old 900ms confirmation timer cannot close a newly opened editor", async
   const secondSession = controller.beginSession();
   assert.equal(await first, false);
   for (const callback of [...timers.values()]) callback();
-  assert.deepEqual(closed, []);
+  assert.equal(closed.length, 0);
 
   const second = controller.confirm({
     session: secondSession, message: "saved", showConfirmation: () => {}, closeEditor: () => closed.push("second"),

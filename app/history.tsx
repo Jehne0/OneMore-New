@@ -527,7 +527,7 @@ const p = HISTORY_STRINGS[historyLang];
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  gradient: { ...StyleSheet.absoluteFillObject },
+  gradient: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
 
   header: {
     paddingTop: 52,

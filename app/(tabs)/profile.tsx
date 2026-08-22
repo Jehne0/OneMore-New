@@ -3063,7 +3063,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         onRequestClose={closeDeleteAccountModal}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={closeDeleteAccountModal}
         />
         <KeyboardAvoidingView
@@ -3170,7 +3170,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         onRequestClose={() => setPwdOpen(false)}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={() => setPwdOpen(false)}
         />
         <View
@@ -3249,7 +3249,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         onRequestClose={() => setUsernameOpen(false)}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={() => !usernameBusy && setUsernameOpen(false)}
         />
         <View
@@ -3337,7 +3337,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         onDismiss={handleAccountModalDismiss}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={() => setAccountOpen(false)}
         />
         <View
@@ -3582,7 +3582,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         onRequestClose={() => setNotificationsOpen(false)}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={() => setNotificationsOpen(false)}
         />
 
@@ -3711,7 +3711,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         onRequestClose={closeInfo}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={closeInfo}
         />
         <View
@@ -4950,7 +4950,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         onDismiss={handleFriendsModalDismiss}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={() => {
             setAddFriendOpen(false);
             setFriendsOpen(false);
@@ -5637,7 +5637,7 @@ const incomingCount = incoming.length;
         onRequestClose={closeChallengeInvite}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={closeChallengeInvite}
         />
         <View
@@ -5919,7 +5919,7 @@ const incomingCount = incoming.length;
         onRequestClose={() => setFriendStatsOpen(false)}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={() => setFriendStatsOpen(false)}
         />
         <View
@@ -6276,7 +6276,7 @@ const incomingCount = incoming.length;
         onRequestClose={() => setPwdPopupOpen(false)}
       >
         <Pressable
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]}
           onPress={() => setPwdPopupOpen(false)}
         />
         <View style={styles.popupWrap}>
@@ -6314,7 +6314,7 @@ function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight
   const safeModal = getSafeModalMetrics({ windowHeight, topInset, bottomInset });
   return StyleSheet.create({
     screen: { flex: 1 },
-    gradient: { ...StyleSheet.absoluteFillObject },
+    gradient: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
 
     content: { paddingHorizontal: 18, gap: 12 },
 

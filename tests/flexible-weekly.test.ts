@@ -51,13 +51,13 @@ test("2x weekly accepts one completion per day and at most two fires per period"
   const first = applyChallengeCompletion(state(), "flex-1", "2026-03-23", new Date(2026, 2, 23, 8));
   assert.equal(first.status, "completed");
   if (first.status !== "completed") return;
-  assert.equal(first.state.challengeStats["flex-1"].currentStreak, 1);
+  assert.equal(first.state.challengeStats!["flex-1"].currentStreak, 1);
   assert.equal(flexibleWeeklyProgress(first.state.challenges[0], first.state.history, "2026-03-23").done, 1);
   assert.equal(applyChallengeCompletion(first.state, "flex-1", "2026-03-23").status, "already-completed");
   const second = applyChallengeCompletion(first.state, "flex-1", "2026-03-25", new Date(2026, 2, 25, 8));
   assert.equal(second.status, "completed");
   if (second.status !== "completed") return;
-  assert.equal(second.state.challengeStats["flex-1"].currentStreak, 2);
+  assert.equal(second.state.challengeStats!["flex-1"].currentStreak, 2);
   assert.equal(flexibleWeeklyProgress(second.state.challenges[0], second.state.history, "2026-03-27").done, 2);
   assert.equal(applyChallengeCompletion(second.state, "flex-1", "2026-03-27").status, "already-completed");
 });
@@ -69,13 +69,13 @@ test("fires continue across successful periods", () => {
     assert.equal(result.status, "completed");
     current = result.state;
   }
-  assert.equal(current.challengeStats["flex-1"].currentStreak, 4);
+  assert.equal(current.challengeStats!["flex-1"].currentStreak, 4);
 });
 
 test("a closed 0/2 period resets once and produces one failure audit entry", () => {
   const initial = state({ challengeStats: { "flex-1": { completedCount: 2, skippedCount: 0, currentStreak: 2, bestStreak: 2, skipCredits: 0 } } });
   const first = reconcileFlexibleWeeklyPeriods(initial, "2026-03-30");
-  assert.equal(first.next.challengeStats["flex-1"].currentStreak, 0);
+  assert.equal(first.next.challengeStats!["flex-1"].currentStreak, 0);
   assert.equal(first.next.history.filter((entry: any) => entry.flexibleWeeklyPeriodStart === "2026-03-23").length, 1);
   const again = reconcileFlexibleWeeklyPeriods(first.next, "2026-03-30");
   assert.equal(again.changed, false);
@@ -86,7 +86,7 @@ test("a closed 1/2 period resets but preserves the real completion", () => {
   const completed = applyChallengeCompletion(state(), "flex-1", "2026-03-24", new Date(2026, 2, 24, 8));
   assert.equal(completed.status, "completed");
   const evaluated = reconcileFlexibleWeeklyPeriods(completed.state, "2026-03-30").next;
-  assert.equal(evaluated.challengeStats["flex-1"].currentStreak, 0);
+  assert.equal(evaluated.challengeStats!["flex-1"].currentStreak, 0);
   assert.equal(evaluated.history.filter((entry: any) => entry.status === "completed").length, 1);
   assert.equal(evaluated.history.filter((entry: any) => entry.flexibleWeeklyPeriodStart === "2026-03-23").length, 1);
 });
@@ -117,7 +117,7 @@ test("local date arithmetic crosses month, year and DST without UTC drift", () =
 test("several missed periods after a long closure are each evaluated once", () => {
   const initial = state({ challengeStats: { "flex-1": { completedCount: 4, skippedCount: 0, currentStreak: 4, bestStreak: 4, skipCredits: 0 } } });
   const evaluated = reconcileFlexibleWeeklyPeriods(initial, "2026-04-13").next;
-  assert.equal(evaluated.challengeStats["flex-1"].currentStreak, 0);
+  assert.equal(evaluated.challengeStats!["flex-1"].currentStreak, 0);
   assert.equal(evaluated.history.filter((entry: any) => entry.flexibleWeeklyPeriodStart).length, 3);
   assert.equal(reconcileFlexibleWeeklyPeriods(evaluated, "2026-04-13").changed, false);
 });
@@ -245,8 +245,8 @@ test("saveStateForUid and loadStateForUid preserve a 2-fire weekly streak", asyn
   await saveStateForUid(current, uid);
   const loaded = await loadStateForUid(uid);
   assert.equal(loaded.challenges[0].period, "flexibleWeekly");
-  assert.equal(loaded.challengeStats["flex-1"].currentStreak, 2);
-  assert.equal(loaded.challengeStats["flex-1"].bestStreak, 2);
+  assert.equal(loaded.challengeStats!["flex-1"].currentStreak, 2);
+  assert.equal(loaded.challengeStats!["flex-1"].bestStreak, 2);
   assert.equal(loaded.history.filter((entry) => entry.eventType === "flexibleWeeklyCompleted").length, 2);
   assert.deepEqual(loaded.challenges[0].flexibleReminderRows, [
     { weekday: 4, hour: 18, minute: 0 },
@@ -254,12 +254,12 @@ test("saveStateForUid and loadStateForUid preserve a 2-fire weekly streak", asyn
   ]);
   const afterCloudPolicy = preserveUnknownFlexibleWeeklyFields(loaded, {
     ...loaded,
-    challengeStats: { ...loaded.challengeStats, "flex-1": { ...loaded.challengeStats["flex-1"] } },
+    challengeStats: { ...loaded.challengeStats, "flex-1": { ...loaded.challengeStats!["flex-1"] } },
   }, 2, "2026-03-25");
   await replaceStateForUid(afterCloudPolicy, uid, "2026-03-25T09:00:00.000Z");
   const afterCloudLoad = await loadStateForUid(uid);
-  assert.equal(afterCloudLoad.challengeStats["flex-1"].currentStreak, 2);
-  assert.equal(afterCloudLoad.challengeStats["flex-1"].bestStreak, 2);
+  assert.equal(afterCloudLoad.challengeStats!["flex-1"].currentStreak, 2);
+  assert.equal(afterCloudLoad.challengeStats!["flex-1"].bestStreak, 2);
   assert.deepEqual(afterCloudLoad.challenges[0].flexibleReminderRows, loaded.challenges[0].flexibleReminderRows);
   await clearDebugTodayISO();
 });
@@ -292,14 +292,14 @@ test("disabled weeks are neutral and re-enable starts at the next whole period",
   const disabled = transitionChallengeEnabled(withStreak.challenges[0], false, "2026-03-26");
   const duringPause = reconcileFlexibleWeeklyPeriods({ ...withStreak, challenges: [disabled] }, "2026-04-20").next;
   assert.equal(duringPause.history.length, 0);
-  assert.equal(duringPause.challengeStats["flex-1"].currentStreak, 2);
-  assert.equal(duringPause.challengeStats["flex-1"].skippedCount, 0);
+  assert.equal(duringPause.challengeStats!["flex-1"].currentStreak, 2);
+  assert.equal(duringPause.challengeStats!["flex-1"].skippedCount, 0);
 
   const enabled = transitionChallengeEnabled(duringPause.challenges[0], true, "2026-04-21");
   assert.equal(enabled.flexibleWeeklyFirstPeriodStart, "2026-04-27");
   const beforeStart = reconcileFlexibleWeeklyPeriods({ ...duringPause, challenges: [enabled] }, "2026-04-27").next;
   assert.equal(beforeStart.history.length, 0);
-  assert.equal(beforeStart.challengeStats["flex-1"].currentStreak, 2);
+  assert.equal(beforeStart.challengeStats!["flex-1"].currentStreak, 2);
 });
 
 test("archive interval and restore do not create failed weekly audits", () => {
@@ -332,7 +332,7 @@ test("Premium lock is neutral and unlock resumes at the next whole period", () =
   assert.equal(locked.next.challenges[2].inactivePeriods?.[0]?.reason, "planLock");
   const later = reconcileFlexibleWeeklyPeriods(locked.next, "2026-05-04", { challengeIds: locked.accessibleIds }).next;
   assert.equal(later.history.length, 0);
-  assert.equal(later.challengeStats["flex-3"].currentStreak, 3);
+  assert.equal(later.challengeStats!["flex-3"].currentStreak, 3);
 
   const unlocked = applyPlanAccessToFlexibleWeeklyState(later, true, "2026-05-05").next;
   assert.equal(unlocked.challenges[2].flexibleWeeklyFirstPeriodStart, "2026-05-11");
@@ -346,15 +346,15 @@ test("Easy mode tracks progress without competitive streaks, medals or missed-we
   });
   const result = applyChallengeCompletion(easyState, "flex-1", "2026-03-23", new Date("2026-03-23T08:00:00"));
   assert.equal(result.status, "completed");
-  assert.equal(result.state.challengeStats["flex-1"].completedCount, 1);
-  assert.equal(result.state.challengeStats["flex-1"].currentStreak, 7);
-  assert.equal(result.state.challengeStats["flex-1"].bestStreak, 9);
+  assert.equal(result.state.challengeStats!["flex-1"].completedCount, 1);
+  assert.equal(result.state.challengeStats!["flex-1"].currentStreak, 7);
+  assert.equal(result.state.challengeStats!["flex-1"].bestStreak, 9);
   const missed = reconcileFlexibleWeeklyPeriods(result.state, "2026-03-30", {
     isEasyMode: () => true,
   }).next;
-  assert.equal(missed.challengeStats["flex-1"].currentStreak, 7);
-  assert.equal(missed.challengeStats["flex-1"].bestStreak, 9);
-  assert.equal(missed.challengeStats["flex-1"].skippedCount, 0);
+  assert.equal(missed.challengeStats!["flex-1"].currentStreak, 7);
+  assert.equal(missed.challengeStats!["flex-1"].bestStreak, 9);
+  assert.equal(missed.challengeStats!["flex-1"].skippedCount, 0);
   const model = createWidgetModel(missed, "en", "2026-03-30", [], "u1", true, ["flex-1"]);
   assert.equal(model.challenges[0].competitiveStreakEnabled, false);
   const snapshot = createIosWidgetSnapshot(model, "u1", "2026-03-30");
