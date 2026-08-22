@@ -1138,6 +1138,9 @@ const runtimeText = PROFILE_RUNTIME_STRINGS[profileLang];
 const accountText = PROFILE_ACCOUNT_STRINGS[profileLang];
 const accessText = PROFILE_ACCESS_STRINGS[profileLang];
 const [currentUserUid, setCurrentUserUid] = useState(auth.currentUser?.uid ?? "");
+const [myUsername, setMyUsername] = useState(
+  (auth.currentUser?.displayName ?? "").trim()
+);
 
 useEffect(() => onAuthStateChanged(auth, (user) => {
   setCurrentUserUid(user?.uid ?? "");
@@ -1175,11 +1178,6 @@ const unknownUserText =
   const [usernameOpen, setUsernameOpen] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [usernameBusy, setUsernameBusy] = useState(false);
-
-  // ✅ Username pro header (bere se z profilu ve Firestore)
-  const [myUsername, setMyUsername] = useState(
-    (auth.currentUser?.displayName ?? "").trim()
-  );
 
   // ✅ Premium sjednocené s OneMore
   const [premium, setPremium] = useState(false);

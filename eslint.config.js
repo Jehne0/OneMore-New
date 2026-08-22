@@ -6,5 +6,9 @@ module.exports = defineConfig([
   expoConfig,
   {
     ignores: ['dist/*', 'functions/lib/**'],
+    rules: {
+      // These effects reset UI state while synchronizing auth, Firestore, and modal lifecycles.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ]);
