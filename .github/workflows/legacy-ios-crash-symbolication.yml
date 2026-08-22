@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   symbolicate-build-40:
-    runs-on: macos-26
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
