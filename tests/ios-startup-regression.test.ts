@@ -62,15 +62,61 @@ test("iOS community JSC integration disables every Hermes and prebuilt RN path",
   assert.equal(jscPodsPatch.patchReactNativePods(patchedRnPods), patchedRnPods);
 });
 
-test("the one-off iOS JSC startup hotfix profile creates build 41", () => {
+test("React Native 0.81.5 has the complete upstream community JSC backports", () => {
+  const packageJson = JSON.parse(read("package.json"));
+  const communityJscPodspec = read(
+    "node_modules/@react-native-community/javascriptcore/React-jsc.podspec",
+  );
+
+  assert.equal(packageJson.dependencies?.["react-native"], "0.81.5");
+  assert.equal(jscPodsPatch.backportDefinitions.length, 9);
+
+  for (const definition of jscPodsPatch.backportDefinitions) {
+    const installedSource = read(`node_modules/react-native/${definition.relativePath}`);
+    assert.equal(
+      jscPodsPatch.applyBackport(definition.before, definition),
+      definition.after,
+    );
+    assert.equal(
+      jscPodsPatch.applyBackport(definition.after, definition),
+      definition.after,
+    );
+    assert.ok(installedSource.includes(definition.after));
+    assert.equal(jscPodsPatch.applyBackport(installedSource, definition), installedSource);
+  }
+
+  const defaultFactory = read(
+    "node_modules/react-native/Libraries/AppDelegate/RCTDefaultReactNativeFactoryDelegate.mm",
+  );
+  const reactUtils = read(
+    "node_modules/react-native/ReactCommon/react/utils/React-utils.podspec",
+  );
+  assert.match(defaultFactory, /createJSRuntimeFactory must be overridden when using third-party JSC/);
+  assert.match(communityJscPodspec, /s\.dependency "React-cxxreact"/);
+  assert.doesNotMatch(reactUtils, /depend_on_js_engine\(s\)/);
+  assert.doesNotMatch(reactUtils, /React-jsc/);
+  assert.match(
+    reactUtils,
+    /if use_hermes\(\)\s+s\.dependency "hermes-engine"\s+end/,
+  );
+});
+
+test("the one-off iOS JSC CocoaPods hotfix profile creates build 42", () => {
   const config = JSON.parse(read("app.json"));
   const eas = JSON.parse(read("eas.json"));
 
   assert.equal(config.expo.version, "1.0.7");
-  assert.equal(config.expo.ios.buildNumber, "41");
+  assert.equal(config.expo.ios.buildNumber, "42");
   assert.equal(eas.cli.appVersionSource, "local");
-  assert.equal(eas.build["production-ios-build41-jsc-hotfix"].extends, "production");
-  assert.equal(eas.build["production-ios-build41-jsc-hotfix"].autoIncrement, false);
+  assert.equal(
+    eas.build["production-ios-build42-jsc-cocoapods-hotfix"].extends,
+    "production",
+  );
+  assert.equal(
+    eas.build["production-ios-build42-jsc-cocoapods-hotfix"].autoIncrement,
+    false,
+  );
+  assert.equal(eas.build["production-ios-build41-jsc-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build40-startup-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build39-startup-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build38-hotfix"], undefined);
