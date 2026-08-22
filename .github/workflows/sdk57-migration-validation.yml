@@ -46,6 +46,8 @@ jobs:
         run: |
           npx expo install --check
           npx expo-doctor@latest
+      - name: Generate clean Android project for regression fixtures
+        run: npx expo prebuild --clean --platform android --no-install
       - name: Run full test suite
         run: npm test
       - name: TypeScript
