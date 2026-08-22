@@ -1,0 +1,124 @@
+name: SDK 57 Hermes migration validation
+
+on:
+  push:
+    branches:
+      - codex/sdk57-hermes-validation
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve SDK 57 dependency graph
+        run: npm install --package-lock-only --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk57-lockfile
+          path: package-lock.json
+          if-no-files-found: error
+
+  validate-javascript:
+    needs: resolve-lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk57-lockfile
+          path: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check Expo dependency compatibility
+        run: |
+          npx expo install --check
+          npx expo-doctor@latest
+      - name: Run full test suite
+        run: npm test
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Clean iOS prebuild
+        run: npx expo prebuild --clean --platform ios --no-install
+      - name: Export iOS JavaScript bundle
+        run: npx expo export --platform ios --output-dir dist-ios --clear
+      - name: Validate patch whitespace
+        run: git diff --check
+
+  validate-ios-native:
+    needs: resolve-lockfile
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk57-lockfile
+          path: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Clean iOS prebuild
+        run: npx expo prebuild --clean --platform ios --no-install
+      - name: Install CocoaPods
+        run: pod install --project-directory=ios --repo-update
+      - name: Compile app and widget without signing
+        run: |
+          xcodebuild \
+            -workspace ios/OneMore.xcworkspace \
+            -scheme OneMore \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Verify compiled app and widget
+        run: |
+          test -d ios/build/Build/Products/Release-iphonesimulator/OneMore.app
+          test -d ios/build/Build/Products/Release-iphonesimulator/OneMore.app/PlugIns/OneMoreWidget.appex
+          shasum -a 256 ios/build/Build/Products/Release-iphonesimulator/OneMore.app/OneMore > native-sha256.txt
+          shasum -a 256 ios/build/Build/Products/Release-iphonesimulator/OneMore.app/PlugIns/OneMoreWidget.appex/OneMoreWidget >> native-sha256.txt
+          cat native-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk57-native-sha256
+          path: native-sha256.txt
+          if-no-files-found: error
+
+  persist-lockfile:
+    needs:
+      - validate-javascript
+      - validate-ios-native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/sdk57-hermes-validation
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk57-lockfile
+          path: .
+      - name: Commit validated lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add package-lock.json
+          git commit -m "Update SDK 57 lockfile [skip ci]"
+          git push origin HEAD:codex/sdk57-hermes-validation

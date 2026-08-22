@@ -1,10 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 
-// NOTE: používáme expo-av. Pokud přidáš tenhle soubor do projektu poprvé,
-// ujisti se, že máš nainstalované: npx expo install expo-av
-import { Audio } from "expo-av";
-
 const KEY_SOUND_ENABLED = "onemore_sound_enabled";
 
 export async function getSoundEnabled(): Promise<boolean> {
@@ -44,17 +40,16 @@ export function useSoundEnabled(): [boolean, (v: boolean) => void] {
   return [enabled, set];
 }
 
-let cached: Audio.Sound | null = null;
+let cached: import("expo-audio").AudioPlayer | null = null;
 
-async function getOrCreateSound(): Promise<Audio.Sound> {
+async function getOrCreateSound(): Promise<import("expo-audio").AudioPlayer> {
   if (cached) return cached;
-  const { sound } = await Audio.Sound.createAsync(
+  const { createAudioPlayer } = await import("expo-audio");
+  cached = createAudioPlayer(
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     require("../assets/sfx/success.wav"),
-    { shouldPlay: false }
   );
-  cached = sound;
-  return sound;
+  return cached;
 }
 
 export async function playSuccessIfEnabled(): Promise<void> {
@@ -63,8 +58,8 @@ export async function playSuccessIfEnabled(): Promise<void> {
 
   try {
     const sound = await getOrCreateSound();
-    await sound.setPositionAsync(0);
-    await sound.playAsync();
+    await sound.seekTo(0);
+    sound.play();
   } catch {
     // ignore – zvuk nesmí nikdy rozbít flow
   }
