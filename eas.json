@@ -30,7 +30,7 @@
     "production": {
       "autoIncrement": true
     },
-    "production-ios-build42-jsc-cocoapods-hotfix": {
+    "production-ios-build43-jsc-source-hotfix": {
       "extends": "production",
       "autoIncrement": false
     }

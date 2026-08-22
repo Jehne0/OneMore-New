@@ -69,7 +69,7 @@ test("React Native 0.81.5 has the complete upstream community JSC backports", ()
   );
 
   assert.equal(packageJson.dependencies?.["react-native"], "0.81.5");
-  assert.equal(jscPodsPatch.backportDefinitions.length, 9);
+  assert.equal(jscPodsPatch.backportDefinitions.length, 12);
 
   for (const definition of jscPodsPatch.backportDefinitions) {
     const installedSource = read(`node_modules/react-native/${definition.relativePath}`);
@@ -88,10 +88,43 @@ test("React Native 0.81.5 has the complete upstream community JSC backports", ()
   const defaultFactory = read(
     "node_modules/react-native/Libraries/AppDelegate/RCTDefaultReactNativeFactoryDelegate.mm",
   );
+  const appSetupHeader = read(
+    "node_modules/react-native/Libraries/AppDelegate/RCTAppSetupUtils.h",
+  );
+  const appSetupImplementation = read(
+    "node_modules/react-native/Libraries/AppDelegate/RCTAppSetupUtils.mm",
+  );
+  const legacyBridge = read(
+    "node_modules/react-native/React/CxxBridge/RCTCxxBridge.mm",
+  );
+  const appDelegatePodspec = read(
+    "node_modules/react-native/Libraries/AppDelegate/React-RCTAppDelegate.podspec",
+  );
+  const reactCorePodspec = read("node_modules/react-native/React-Core.podspec");
   const reactUtils = read(
     "node_modules/react-native/ReactCommon/react/utils/React-utils.podspec",
   );
   assert.match(defaultFactory, /createJSRuntimeFactory must be overridden when using third-party JSC/);
+  assert.match(
+    appSetupHeader,
+    /#if USE_THIRD_PARTY_JSC != 1\s+#import <reacthermes\/HermesExecutorFactory\.h>\s+#endif/,
+  );
+  assert.equal(
+    (appSetupImplementation.match(/throw std::runtime_error\("No JSExecutorFactory specified\."\);/g) ?? [])
+      .length,
+    2,
+  );
+  assert.match(
+    legacyBridge,
+    /#if USE_THIRD_PARTY_JSC != 1\s+#import <reacthermes\/HermesExecutorFactory\.h>\s+#endif/,
+  );
+  assert.match(
+    legacyBridge,
+    /#if USE_THIRD_PARTY_JSC != 1\s+executorFactory = std::make_shared<HermesExecutorFactory>/,
+  );
+  assert.doesNotMatch(legacyBridge, /#if !defined\(USE_HERMES\)[\s\S]*HermesExecutorFactory/);
+  assert.match(appDelegatePodspec, /other_cflags = "\$\(inherited\) " \+ new_arch_enabled_flag \+ js_engine_flags\(\)/);
+  assert.match(reactCorePodspec, /s\.compiler_flags\s+= js_engine_flags\(\)/);
   assert.match(communityJscPodspec, /s\.dependency "React-cxxreact"/);
   assert.doesNotMatch(reactUtils, /depend_on_js_engine\(s\)/);
   assert.doesNotMatch(reactUtils, /React-jsc/);
@@ -101,21 +134,22 @@ test("React Native 0.81.5 has the complete upstream community JSC backports", ()
   );
 });
 
-test("the one-off iOS JSC CocoaPods hotfix profile creates build 42", () => {
+test("the one-off iOS JSC source hotfix profile creates build 43", () => {
   const config = JSON.parse(read("app.json"));
   const eas = JSON.parse(read("eas.json"));
 
   assert.equal(config.expo.version, "1.0.7");
-  assert.equal(config.expo.ios.buildNumber, "42");
+  assert.equal(config.expo.ios.buildNumber, "43");
   assert.equal(eas.cli.appVersionSource, "local");
   assert.equal(
-    eas.build["production-ios-build42-jsc-cocoapods-hotfix"].extends,
+    eas.build["production-ios-build43-jsc-source-hotfix"].extends,
     "production",
   );
   assert.equal(
-    eas.build["production-ios-build42-jsc-cocoapods-hotfix"].autoIncrement,
+    eas.build["production-ios-build43-jsc-source-hotfix"].autoIncrement,
     false,
   );
+  assert.equal(eas.build["production-ios-build42-jsc-cocoapods-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build41-jsc-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build40-startup-hotfix"], undefined);
   assert.equal(eas.build["production-ios-build39-startup-hotfix"], undefined);

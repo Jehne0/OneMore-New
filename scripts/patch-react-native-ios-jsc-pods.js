@@ -1,7 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// React Native 0.81.5 predates the upstream JSC fixes in these commits:
+// React Native 0.81.5 needs targeted iOS JSC backports derived from these commits:
+// - 176bed79: compile React Native without Hermes or the built-in JSC when a
+//   third-party JSC runtime factory is supplied by the application
 // - 1033dbd1: break the React-jsc -> React-cxxreact -> React-utils -> React-jsc cycle
 // - 2d814379: exclude Hermes and make the default runtime factory compile with JSC
 const expectedReactNativeVersion = "0.81.5";
@@ -33,6 +35,138 @@ const backportDefinitions = [
   [NSException raise:@"JSRuntimeFactory"
               format:@"createJSRuntimeFactory must be overridden when using third-party JSC"];
   return nil;
+#endif
+}`,
+  },
+  {
+    name: "third-party JSC legacy bridge Hermes import guard",
+    relativePath: "React/CxxBridge/RCTCxxBridge.mm",
+    before: `#if !defined(USE_HERMES) || USE_HERMES == 1
+#import <reacthermes/HermesExecutorFactory.h>
+#endif`,
+    after: `#if USE_THIRD_PARTY_JSC != 1
+#import <reacthermes/HermesExecutorFactory.h>
+#endif`,
+  },
+  {
+    name: "third-party JSC legacy bridge factory guard",
+    relativePath: "React/CxxBridge/RCTCxxBridge.mm",
+    before: `#if !defined(USE_HERMES) || USE_HERMES == 1
+      executorFactory = std::make_shared<HermesExecutorFactory>(installBindings);
+#endif`,
+    after: `#if USE_THIRD_PARTY_JSC != 1
+      executorFactory = std::make_shared<HermesExecutorFactory>(installBindings);
+#else
+      throw std::runtime_error("No JSExecutorFactory specified.");
+#endif`,
+  },
+  {
+    name: "third-party JSC app setup factory fallbacks",
+    relativePath: "Libraries/AppDelegate/RCTAppSetupUtils.mm",
+    before: `std::unique_ptr<facebook::react::JSExecutorFactory> RCTAppSetupDefaultJsExecutorFactory(
+    RCTBridge *bridge,
+    RCTTurboModuleManager *turboModuleManager,
+    const std::shared_ptr<facebook::react::RuntimeScheduler> &runtimeScheduler)
+{
+  // Necessary to allow NativeModules to lookup TurboModules
+  [bridge setRCTTurboModuleRegistry:turboModuleManager];
+
+#if RCT_DEV
+  /**
+   * Instantiating DevMenu has the side-effect of registering
+   * shortcuts for CMD + d, CMD + i,  and CMD + n via RCTDevMenu.
+   * Therefore, when TurboModules are enabled, we must manually create this
+   * NativeModule.
+   */
+  [turboModuleManager moduleForName:"RCTDevMenu"];
+#endif // end RCT_DEV
+
+  auto runtimeInstallerLambda = [turboModuleManager, bridge, runtimeScheduler](facebook::jsi::Runtime &runtime) {
+    if (!bridge || !turboModuleManager) {
+      return;
+    }
+    if (runtimeScheduler) {
+      facebook::react::RuntimeSchedulerBinding::createAndInstallIfNeeded(runtime, runtimeScheduler);
+    }
+    [turboModuleManager installJSBindings:runtime];
+  };
+#if USE_THIRD_PARTY_JSC != 1
+  return std::make_unique<facebook::react::HermesExecutorFactory>(
+      facebook::react::RCTJSIExecutorRuntimeInstaller(runtimeInstallerLambda));
+#endif
+}
+
+std::unique_ptr<facebook::react::JSExecutorFactory> RCTAppSetupJsExecutorFactoryForOldArch(
+    RCTBridge *bridge,
+    const std::shared_ptr<facebook::react::RuntimeScheduler> &runtimeScheduler)
+{
+  auto runtimeInstallerLambda = [bridge, runtimeScheduler](facebook::jsi::Runtime &runtime) {
+    if (!bridge) {
+      return;
+    }
+    if (runtimeScheduler) {
+      facebook::react::RuntimeSchedulerBinding::createAndInstallIfNeeded(runtime, runtimeScheduler);
+    }
+  };
+#if USE_THIRD_PARTY_JSC != 1
+  return std::make_unique<facebook::react::HermesExecutorFactory>(
+      facebook::react::RCTJSIExecutorRuntimeInstaller(runtimeInstallerLambda));
+#endif
+}`,
+    after: `std::unique_ptr<facebook::react::JSExecutorFactory> RCTAppSetupDefaultJsExecutorFactory(
+    RCTBridge *bridge,
+    RCTTurboModuleManager *turboModuleManager,
+    const std::shared_ptr<facebook::react::RuntimeScheduler> &runtimeScheduler)
+{
+  // Necessary to allow NativeModules to lookup TurboModules
+  [bridge setRCTTurboModuleRegistry:turboModuleManager];
+
+#if RCT_DEV
+  /**
+   * Instantiating DevMenu has the side-effect of registering
+   * shortcuts for CMD + d, CMD + i,  and CMD + n via RCTDevMenu.
+   * Therefore, when TurboModules are enabled, we must manually create this
+   * NativeModule.
+   */
+  [turboModuleManager moduleForName:"RCTDevMenu"];
+#endif // end RCT_DEV
+
+  auto runtimeInstallerLambda = [turboModuleManager, bridge, runtimeScheduler](facebook::jsi::Runtime &runtime) {
+    if (!bridge || !turboModuleManager) {
+      return;
+    }
+    if (runtimeScheduler) {
+      facebook::react::RuntimeSchedulerBinding::createAndInstallIfNeeded(runtime, runtimeScheduler);
+    }
+    [turboModuleManager installJSBindings:runtime];
+  };
+#if USE_THIRD_PARTY_JSC != 1
+  return std::make_unique<facebook::react::HermesExecutorFactory>(
+      facebook::react::RCTJSIExecutorRuntimeInstaller(runtimeInstallerLambda));
+#else
+  throw std::runtime_error("No JSExecutorFactory specified.");
+  return nullptr;
+#endif
+}
+
+std::unique_ptr<facebook::react::JSExecutorFactory> RCTAppSetupJsExecutorFactoryForOldArch(
+    RCTBridge *bridge,
+    const std::shared_ptr<facebook::react::RuntimeScheduler> &runtimeScheduler)
+{
+  auto runtimeInstallerLambda = [bridge, runtimeScheduler](facebook::jsi::Runtime &runtime) {
+    if (!bridge) {
+      return;
+    }
+    if (runtimeScheduler) {
+      facebook::react::RuntimeSchedulerBinding::createAndInstallIfNeeded(runtime, runtimeScheduler);
+    }
+  };
+#if USE_THIRD_PARTY_JSC != 1
+  return std::make_unique<facebook::react::HermesExecutorFactory>(
+      facebook::react::RCTJSIExecutorRuntimeInstaller(runtimeInstallerLambda));
+#else
+  throw std::runtime_error("No JSExecutorFactory specified.");
+  return nullptr;
 #endif
 }`,
   },
