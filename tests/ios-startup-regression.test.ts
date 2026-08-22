@@ -29,19 +29,19 @@ test("startup no longer patches React Native, Expo Modules Core, or JSC", () => 
   assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], undefined);
 });
 
-test("the SDK 57 Hermes profile remains pinned to build 43", () => {
+test("the SDK 57 Hermes profile remains pinned to build 44", () => {
   const config = JSON.parse(read("app.json"));
   const eas = JSON.parse(read("eas.json"));
 
   assert.equal(config.expo.version, "1.0.7");
-  assert.equal(config.expo.ios.buildNumber, "43");
+  assert.equal(config.expo.ios.buildNumber, "44");
   assert.equal(eas.cli.appVersionSource, "local");
   assert.equal(
-    eas.build["production-ios-build43-hermes-sdk57"].extends,
+    eas.build["production-ios-build44-hermes-sdk57"].extends,
     "production",
   );
   assert.equal(
-    eas.build["production-ios-build43-hermes-sdk57"].autoIncrement,
+    eas.build["production-ios-build44-hermes-sdk57"].autoIncrement,
     false,
   );
   assert.equal(eas.build["production-ios-build42-jsc-cocoapods-hotfix"], undefined);
