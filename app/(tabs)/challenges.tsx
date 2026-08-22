@@ -93,7 +93,7 @@ function makeStyles(UI: any, isDark: boolean, topInset: number, bottomInset: num
   return StyleSheet.create({
     // ✅ musí být transparentní, gradient dělá pozadí (stejně jako OneMore/Settings)
     screen: { flex: 1, backgroundColor: "transparent" },
-    gradient: { ...StyleSheet.absoluteFillObject },
+    gradient: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
 
     center: {
       flex: 1,
@@ -1350,7 +1350,7 @@ export default function ChallengesScreen() {
                             locations={isDark ? ([0, 0.55, 1] as any) : ([0, 1] as any)}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={[StyleSheet.absoluteFillObject, { borderRadius: 22 }]}
+                            style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}
                           />
 
                           <View style={styles.rowLeft}>

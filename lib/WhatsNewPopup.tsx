@@ -37,7 +37,7 @@ export function WhatsNewPopup() {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <View style={[styles.wrap, { paddingTop: safe.paddingTop, paddingBottom: safe.paddingBottom }]}>
-        <Pressable style={[StyleSheet.absoluteFillObject, { backgroundColor: UI.backdrop }]} onPress={close} />
+        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: UI.backdrop }]} onPress={close} />
         <View style={[styles.card, { width: responsive.modalWidth, maxHeight: safe.maxHeight, backgroundColor: isDark ? UI.sheetBg : "#FFF2E4", borderColor: isDark ? UI.sheetStroke : "#FF8A1F" }]}>
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <View style={[styles.icon, { backgroundColor: UI.card2, borderColor: UI.stroke }]}><Ionicons name="sparkles" size={27} color={UI.accent} /></View>

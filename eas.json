@@ -30,7 +30,7 @@
     "production": {
       "autoIncrement": true
     },
-    "production-ios-build43-jsc-source-hotfix": {
+    "production-ios-build43-hermes-sdk57": {
       "extends": "production",
       "autoIncrement": false
     }

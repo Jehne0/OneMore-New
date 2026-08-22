@@ -114,10 +114,11 @@ export function WidgetConfigurationContent({ widgetInfo, renderWidget, setResult
         });
         if (!active) return;
         setAuthState(resolved);
-        if (!("uid" in resolved)) return;
+        if (!("uid" in resolved) || !resolved.uid) return;
+        const resolvedUid = resolved.uid;
 
         // Render the UID-scoped local cache first; a missing cache is a valid empty state.
-        const cached = await loadConfigurationData(widgetInfo.widgetId, resolved.uid);
+        const cached = await loadConfigurationData(widgetInfo.widgetId, resolvedUid);
         if (!active) return;
         setRows(cached.rows);
         const configuredIds = cached.config?.orderedChallengeIds ?? [];
@@ -125,7 +126,7 @@ export function WidgetConfigurationContent({ widgetInfo, renderWidget, setResult
         setSelected(configuredIds);
         setMode(cached.config?.mode ?? "manual");
         setActiveFreeId(globalActiveId);
-        const effectiveCachedPremium = accountSnapshot?.activeUid === resolved.uid
+        const effectiveCachedPremium = accountSnapshot?.activeUid === resolvedUid
           ? isAccountSnapshotPremiumAt(accountSnapshot)
           : cached.premium;
         setPremium(effectiveCachedPremium);
@@ -133,21 +134,21 @@ export function WidgetConfigurationContent({ widgetInfo, renderWidget, setResult
         setPremiumState(bootstrapPremiumState === "checking" ? "checkingPremium" : bootstrapPremiumState);
 
         if (resolved.kind === "authenticated") try {
-          await revenueCatLogin(resolved.uid);
-          const verified = await isPremiumConfirmedForUid(resolved.uid);
+          await revenueCatLogin(resolvedUid);
+          const verified = await isPremiumConfirmedForUid(resolvedUid);
           if (!active) return;
           setPremium(verified);
           setPremiumState(verified ? "premium" : "free");
         } catch (error) {
           if (!active) return;
           setPremiumState(effectiveCachedPremium ? "errorWithValidCache" : "errorWithoutCache");
-          if (__DEV__) console.log("[Widget Premium verification error]", { uid: `${resolved.uid.slice(0, 3)}***`, cachedPremium: effectiveCachedPremium, error: String((error as Error)?.message ?? error) });
+          if (__DEV__) console.log("[Widget Premium verification error]", { uid: `${resolvedUid.slice(0, 3)}***`, cachedPremium: effectiveCachedPremium, error: String((error as Error)?.message ?? error) });
         }
 
         // Refresh opportunistically. Offline/error conditions keep the safe local cache.
-        void syncNow(resolved.uid).then(async () => {
-          const refreshed = await loadConfigurationData(widgetInfo.widgetId, resolved.uid);
-          if (!active || auth.currentUser?.uid !== resolved.uid) return;
+        void syncNow(resolvedUid).then(async () => {
+          const refreshed = await loadConfigurationData(widgetInfo.widgetId, resolvedUid);
+          if (!active || auth.currentUser?.uid !== resolvedUid) return;
           setRows(refreshed.rows);
           setSelected(refreshed.config?.orderedChallengeIds ?? []);
           setMode(refreshed.config?.mode ?? "manual");

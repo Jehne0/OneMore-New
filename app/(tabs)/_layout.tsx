@@ -2,13 +2,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React, { useEffect } from "react";
-import { AppState, InteractionManager } from "react-native";
+import { AppState, InteractionManager, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../lib/theme";
 import { ensureFastKeys } from "../../lib/storage";
 import { useI18n } from "../../lib/i18n";
-import { auth } from "../../lib/firebase";
-import { syncPremiumFromRevenueCat } from "../../lib/revenuecat";
 
 
 export default function TabsLayout() {
@@ -24,18 +22,24 @@ export default function TabsLayout() {
   }, []);
 
   useEffect(() => {
-    const refreshPremium = () => {
+    if (Platform.OS === "ios") return;
+
+    const refreshPremium = async () => {
+      const [{ auth }, { syncPremiumFromRevenueCat }] = await Promise.all([
+        import("../../lib/firebase"),
+        import("../../lib/revenuecat"),
+      ]);
       if (!auth.currentUser?.uid) return;
 
-      void syncPremiumFromRevenueCat().catch(() => {
+      await syncPremiumFromRevenueCat().catch(() => {
         // Keep the expiration-limited local cache while offline.
       });
     };
 
-    refreshPremium();
+    void refreshPremium();
 
     const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") refreshPremium();
+      if (nextState === "active") void refreshPremium();
     });
 
     return () => subscription.remove();

@@ -173,7 +173,7 @@ export default function RegisterScreen() {
         colors={gradientColors as any}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
 
       <KeyboardAvoidingView
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   },
 
   primaryBtnGradient: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
   },
 
   primaryBtnText: {

@@ -187,7 +187,7 @@ export default function LoginScreen() {
         colors={gradientColors as any}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
 
       <KeyboardAvoidingView
@@ -215,7 +215,7 @@ export default function LoginScreen() {
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFillObject}
+                style={StyleSheet.absoluteFill}
               />
 
               <Image source={APP_LOGO} style={styles.logoImg} resizeMode="contain" />
@@ -655,7 +655,7 @@ langDropdownWrap: {
   },
 
   loginBtnGradient: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
   },
 
   loginBtnText: {

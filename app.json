@@ -42,8 +42,6 @@
         }
       ],
       "./plugins/withOneMoreAndroidCompatibility",
-      "./plugins/withOneMoreIosReactNativeSource",
-      "./plugins/withOneMoreIosJsc",
       "./plugins/withOneMoreIosWidget"
     ],
     "version": "1.0.7",
@@ -51,8 +49,6 @@
     "icon": "./assets/icon/icon.png",
     "scheme": "onemore",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "jsEngine": "jsc",
  "ios": {
   "supportsTablet": false,
   "bundleIdentifier": "eu.desigame.onemore",
@@ -71,14 +67,12 @@
   }
 },
     "android": {
-      "jsEngine": "hermes",
       "versionCode": 85,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/icon/icon.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.OneMore",
       "blockedPermissions": [
@@ -92,9 +86,6 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "splash": {
-      "backgroundColor": "#0B1220"
     },
     "extra": {
       "router": {},

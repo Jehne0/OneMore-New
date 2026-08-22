@@ -274,7 +274,7 @@ function SparkleBurst({ progress }: { progress: Animated.Value }) {
   );
 
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {sparkles.map((s) => {
         const opacity = progress.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0] });
         const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, s.driftY] });
@@ -305,7 +305,7 @@ function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight
   const safeModal = getSafeModalMetrics({ windowHeight, topInset, bottomInset });
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: "transparent" },
-    gradient: { ...StyleSheet.absoluteFillObject },
+    gradient: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
 
     topWrap: {
       paddingHorizontal: 18,
@@ -560,7 +560,7 @@ function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight
       minHeight: 155,
     },
     heroGradient: {
-      ...StyleSheet.absoluteFillObject,
+      position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
     },
     heroContent: {
       padding: 18,
@@ -634,7 +634,7 @@ function makeStyles(UI: any, topInset: number, bottomInset: number, windowHeight
     scroll: { paddingTop: 12, paddingBottom: 24 },
 
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
       backgroundColor: UI.backdrop,
     },
     sheet: {
@@ -4346,7 +4346,7 @@ useEffect(() => {
               onRequestClose={() => setPeriodPickerOpen(false)}
             >
               <Pressable
-                style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+                style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.5)" }]}
                 onPress={() => setPeriodPickerOpen(false)}
               />
               <View style={styles.pickerSheet}>
@@ -4963,7 +4963,7 @@ try {
               colors={[UI.accent, "#FF8A1F", "#FF7A00"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
+              style={StyleSheet.absoluteFill}
             />
             <Ionicons name="search" size={54} color="#FFFFFF" />
           </View>

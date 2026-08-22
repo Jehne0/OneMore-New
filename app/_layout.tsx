@@ -13,13 +13,9 @@ import {
   setCloudAccessStatus,
   type CloudAccessStatus,
 } from "../lib/cloudAccessGate";
-import { initRevenueCatAuth, syncPremiumFromRevenueCat } from "../lib/revenuecat";
 import { AppAlertHost } from "../lib/appAlert";
 import { UpdateGate } from "../lib/UpdateGate";
 import { WhatsNewPopup } from "../lib/WhatsNewPopup";
-import { restorePremium } from "../lib/premium";
-import { startReminderNotificationRecovery } from "../lib/reminders";
-import { startIosBackgroundStartup } from "../lib/iosBackgroundStartup";
 
 const BACKGROUND_START_DELAY_MS = 750;
 
@@ -33,6 +29,28 @@ async function setForegroundNotificationHandler(): Promise<void> {
       shouldShowList: true,
     }),
   });
+}
+
+async function startAndroidBackgroundServices(): Promise<void> {
+  const [{ startReminderNotificationRecovery }, { initRevenueCatAuth }] = await Promise.all([
+    import("../lib/reminders"),
+    import("../lib/revenuecat"),
+  ]);
+  try {
+    startReminderNotificationRecovery();
+  } catch {}
+  try {
+    initRevenueCatAuth();
+  } catch {}
+}
+
+async function refreshAndroidPremium(): Promise<void> {
+  const [{ restorePremium }, { syncPremiumFromRevenueCat }] = await Promise.all([
+    import("../lib/premium"),
+    import("../lib/revenuecat"),
+  ]);
+  await restorePremium();
+  await syncPremiumFromRevenueCat();
 }
 
 function RootStack() {
@@ -79,42 +97,24 @@ export default function RootLayout() {
   useEffect(() => {
     void initClock().catch(() => {});
 
-    let cancelled = false;
-    let stopIosWidgetRegistration: (() => void) | undefined;
-    const timer = setTimeout(() => {
-      if (cancelled) return;
+    // The failed iOS builds aborted from an asynchronous TurboModule call during
+    // cold start. Keep optional native services out of the iOS launch path; their
+    // feature screens load them on demand. Android retains its existing startup.
+    if (Platform.OS === "ios") return;
 
+    const timer = setTimeout(() => {
       void setForegroundNotificationHandler().catch(() => {});
-      try {
-        startReminderNotificationRecovery();
-      } catch {}
-      try {
-        initRevenueCatAuth();
-      } catch {}
-      if (Platform.OS === "ios") {
-        void startIosBackgroundStartup()
-          .then((stopRegistration) => {
-            if (cancelled) {
-              stopRegistration();
-              return;
-            }
-            stopIosWidgetRegistration = stopRegistration;
-          })
-          .catch(() => {});
-      }
+      void startAndroidBackgroundServices().catch(() => {});
     }, BACKGROUND_START_DELAY_MS);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      stopIosWidgetRegistration?.();
-    };
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
+    if (Platform.OS === "ios") return;
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
-      void restorePremium().then(() => syncPremiumFromRevenueCat()).catch(() => {});
+      void refreshAndroidPremium().catch(() => {});
     });
     return () => subscription.remove();
   }, []);
