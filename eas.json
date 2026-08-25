@@ -30,7 +30,7 @@
     "production": {
       "autoIncrement": true
     },
-    "production-ios-build44-hermes-sdk57": {
+    "production-ios-build45-hermes-sdk57": {
       "extends": "production",
       "autoIncrement": false
     }
