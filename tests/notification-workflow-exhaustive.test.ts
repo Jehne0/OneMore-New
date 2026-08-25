@@ -89,6 +89,7 @@ type HarnessOptions = {
   newChallenge?: boolean;
   newChallengePersisted?: boolean;
   reminderEnabled?: boolean;
+  challengeEnabled?: boolean;
   oldIds?: string[];
   permission?: "granted" | "denied" | "undetermined";
   failScheduleAt?: number;
@@ -103,11 +104,16 @@ function workflowHarness(period: Period, options: HarnessOptions = {}) {
   const events: string[] = [];
   const store = memoryStore(events);
   const challengeId = options.newChallenge ? createChallengeId() : `existing-${period}`;
-  const config = periodConfiguration(period, options.newChallenge === true);
+  const baseConfig = periodConfiguration(period, options.newChallenge === true);
+  const config = {
+    ...baseConfig,
+    schedule: { ...baseConfig.schedule, enabled: options.challengeEnabled !== false },
+  };
   const challenge = {
     ...(options.newChallenge
       ? createQuickChallenge(`${period} challenge`, localISO(new Date()), challengeId)
-      : { id: challengeId, text: `${period} challenge`, enabled: true }),
+      : { id: challengeId, text: `${period} challenge`, enabled: options.challengeEnabled !== false }),
+    enabled: options.challengeEnabled !== false,
     period,
     targetPerDay: 3,
     reminderEnabled: options.reminderEnabled === true,
@@ -276,6 +282,28 @@ test("production request content is persistence-safe for every period, platform,
           assert.equal(request.trigger.channelId, platform === "android" ? "reminders_high_v1" : undefined, context);
         }
       }
+    }
+  }
+});
+
+test("an inactive challenge keeps its reminder configuration without scheduling an iOS or Android notification", async () => {
+  for (const period of PERIODS) {
+    for (const platform of ["ios", "android"] as const) {
+      const oldId = `${period}-${platform}-old`;
+      const run = workflowHarness(period, {
+        platform,
+        challengeEnabled: false,
+        reminderEnabled: true,
+        oldIds: [oldId],
+      });
+      await run.save();
+      assert.equal(run.requests.length, 0, `${period}/${platform}: no native schedule while inactive`);
+      assert.equal(run.events.includes("preflight"), false, `${period}/${platform}: no native trigger preflight while inactive`);
+      assert.equal(run.events.includes("permission"), false, `${period}/${platform}: no permission prompt while inactive`);
+      assert.equal(run.state().challenges[0].enabled, false, `${period}/${platform}: inactive persisted`);
+      assert.equal(run.state().challenges[0].reminderEnabled, true, `${period}/${platform}: reminder preference preserved`);
+      assert.deepEqual(canonicalIds(run), [], `${period}/${platform}: stale system IDs removed`);
+      assert.equal(run.scheduled.has(oldId), false, `${period}/${platform}: old native reminder cleaned`);
     }
   }
 });

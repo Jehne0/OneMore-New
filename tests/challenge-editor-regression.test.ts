@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createEditorConfirmationController, createEditorDraft, finishSuccessfulNotificationSave, NOTIFICATION_CONFIRMATION_MS } from "../lib/notificationSaveFlow";
+import { applyPersonalChallengeEditorDraft, type PersonalChallengePeriod } from "../lib/personalChallengeEditor";
 
 test("successful notification save confirms briefly and then closes the editor", async () => {
   const events: string[] = [];
@@ -137,4 +138,51 @@ test("notification save actions live in fixed editor footers", () => {
   const challenges = readFileSync(join(process.cwd(), "app/(tabs)/challenges.tsx"), "utf8");
   assert.match(home, /<\/ScrollView>\s*<View style=\{styles\.editorFooter\}>/);
   assert.match(challenges, /<\/ScrollView>\s*<View style=\{\[styles\.modalBtns, styles\.modalFooter\]\}>/);
+});
+
+test("inactive easy-mode drafts preserve every period and are applied as one transition", () => {
+  for (const period of ["daily", "every2", "custom", "flexibleWeekly"] as PersonalChallengePeriod[]) {
+    const result = applyPersonalChallengeEditorDraft({
+      id: `challenge-${period}`,
+      text: "Old name",
+      enabled: true,
+      targetPerDay: 1,
+    }, {
+      text: "Updated name",
+      enabled: false,
+      easyMode: true,
+      target: period === "flexibleWeekly" ? 5 : 12,
+      period,
+      customDays: [6, 2, 2, -1, 9],
+      periodAnchor: "2026-08-20",
+      flexibleStartDay: 4,
+    }, "2026-08-22");
+
+    assert.equal(result.text, "Updated name", period);
+    assert.equal(result.enabled, false, period);
+    assert.equal(result.easyMode, true, period);
+    assert.ok(result.inactivePeriods?.some((item) => item.startDate === "2026-08-22"), period);
+    assert.equal(result.period, period);
+    if (period === "flexibleWeekly") {
+      assert.equal(result.flexibleWeeklyTarget, 5);
+      assert.equal(result.flexibleWeeklyStartDay, 4);
+    } else {
+      assert.equal(result.targetPerDay, 12);
+      assert.deepEqual(result.customDays, period === "custom" ? [2, 6] : []);
+      assert.equal(result.periodAnchor, period === "every2" ? "2026-08-20" : undefined);
+    }
+  }
+});
+
+test("the personal editor avoids iOS native alerts, nested period modals and eager native reminder mutations", () => {
+  const home = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
+  const profile = readFileSync(join(process.cwd(), "app/(tabs)/profile.tsx"), "utf8");
+  const updateGate = readFileSync(join(process.cwd(), "lib/UpdateGate.tsx"), "utf8");
+  assert.doesNotMatch(home, /NativeAlert|Alert as NativeAlert/);
+  assert.doesNotMatch(profile, /NativeAlert|Alert as NativeAlert/);
+  assert.doesNotMatch(updateGate, /import \{[^\n]*\bAlert\b[^\n]*\} from "react-native"/);
+  assert.doesNotMatch(home, /<Modal\s+visible=\{periodPickerOpen\}/);
+  assert.match(home, /editorInlineOverlay/);
+  assert.doesNotMatch(home, /saveBasicsImmediate|savePeriodImmediate|saveFlexibleStartDayImmediate/);
+  assert.match(home, /savePersonalReminderWorkflow\(/);
 });

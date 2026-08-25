@@ -48,7 +48,7 @@ test("opening quick-create neither focuses the input nor performs an automatic s
 
 test("quick-create persists a stable production challenge before registering it for notification editing", () => {
   const createStart = home.indexOf("const addChallengeFromHero");
-  const createEnd = home.indexOf("const saveBasicsImmediate", createStart);
+  const createEnd = home.indexOf("const showManageDialog", createStart);
   const createFlow = home.slice(createStart, createEnd);
   assert.match(createFlow, /const newChallenge = createQuickChallenge\(trimmed, todayISO\)/);
   assert.match(createFlow, /await persist\([\s\S]*?challenges: \[newChallenge,/);

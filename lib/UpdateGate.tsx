@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { AppState, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useI18n } from "./i18n";
@@ -8,6 +8,7 @@ import { checkRemoteAppVersion, type VersionCheckDecision, type VersionCheckResu
 import { getSafeModalMetrics } from "./safeModalLayout";
 import { createVersionGateController, type VersionGateController } from "./updateStartupPolicy";
 import type { CloudAccessStatus } from "./cloudAccessGate";
+import { Alert } from "./appAlert";
 
 const UNVERIFIED_RETRY_MS = 15_000;
 

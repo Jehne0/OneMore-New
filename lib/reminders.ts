@@ -604,7 +604,7 @@ export async function prepareChallengeReminders(
     if (otherActive) throw new Error("NOTIFICATION_FREE_LIMIT");
   }
   const notificationSettings = await runtime.loadNotificationSettings();
-  const shouldSchedule = enabled && notificationSettings.challengeReminders;
+  const shouldSchedule = enabled && schedule.enabled !== false && notificationSettings.challengeReminders;
   const newIds: string[] = [];
   let Notifications: NotificationsModule | null = null;
   let journal: ReminderOperationJournal | null = null;
