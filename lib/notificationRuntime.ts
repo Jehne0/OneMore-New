@@ -170,6 +170,7 @@ export function validateExpoNotificationContent(value: unknown, platform: string
 const ALLOWED_TRIGGER_KEYS: Record<string, Set<string>> = {
   date: new Set(["type", "date", "channelId"]),
   daily: new Set(["type", "hour", "minute", "channelId"]),
+  weekly: new Set(["type", "weekday", "hour", "minute", "channelId"]),
 };
 
 function invalidTrigger(message: string): never {
@@ -194,7 +195,7 @@ function validateChannel(platform: string, value: unknown): string | undefined {
   return value;
 }
 
-/** Validates the exact trigger object that is subsequently passed to Expo SDK 54. */
+/** Validates the exact trigger object that is subsequently passed to the installed Expo SDK 57. */
 export function validateExpoNotificationTrigger(
   value: unknown,
   platform: string,
@@ -205,16 +206,24 @@ export function validateExpoNotificationTrigger(
   }
   const trigger = value as Record<string, unknown>;
   const type = trigger.type;
-  if (type !== "date" && type !== "daily") invalidTrigger("unsupported or missing type");
+  if (type !== "date" && type !== "daily" && type !== "weekly") {
+    invalidTrigger("unsupported or missing type");
+  }
   const allowed = ALLOWED_TRIGGER_KEYS[type];
   const unexpected = Object.keys(trigger).filter((key) => !allowed.has(key));
   if (unexpected.length) invalidTrigger(`unexpected field(s): ${unexpected.join(", ")}`);
   if (Object.values(trigger).some((item) => item === undefined)) invalidTrigger("undefined field");
   const channelId = validateChannel(platform, trigger.channelId);
 
-  if (type === "daily") {
+  if (type === "daily" || type === "weekly") {
     const hour = finiteInteger(trigger.hour, 0, 23, "hour");
     const minute = finiteInteger(trigger.minute, 0, 59, "minute");
+    if (type === "weekly") {
+      const weekday = finiteInteger(trigger.weekday, 1, 7, "weekday");
+      return (platform === "android"
+        ? { type: "weekly" as const, weekday, hour, minute, channelId: channelId! }
+        : { type: "weekly" as const, weekday, hour, minute }) as unknown as SchedulableNotificationTriggerInput;
+    }
     return (platform === "android"
       ? { type: "daily" as const, hour, minute, channelId: channelId! }
       : { type: "daily" as const, hour, minute }) as unknown as SchedulableNotificationTriggerInput;

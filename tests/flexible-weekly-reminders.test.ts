@@ -74,7 +74,7 @@ function runtimeHarness(initialState: any, oldIds: string[] = [], platformOS = "
     content: { data: { oneMoreReminderKey: "flex-1", oneMoreReminderKind: "challenge" } },
   }]));
   const Notifications = {
-    SchedulableTriggerInputTypes: { DAILY: "daily", DATE: "date" },
+    SchedulableTriggerInputTypes: { DAILY: "daily", DATE: "date", WEEKLY: "weekly" },
     AndroidNotificationPriority: { HIGH: "high" },
     getAllScheduledNotificationsAsync: async () => [...scheduled.values()],
     scheduleNotificationAsync: async (request: any) => {
@@ -301,6 +301,36 @@ test("legacy time-only flexible reminder is rejected while enabled and can be di
   assert.deepEqual([...run.scheduled.keys()], []);
 });
 
+test("an inactive legacy reminder can be cleaned even when another Free reminder is active", async () => {
+  setRemindersPremiumEnabled(false);
+  const inactive = flexibleChallenge({
+    enabled: false,
+    reminderEnabled: true,
+    flexibleReminderRows: [],
+    reminderDays: undefined,
+    reminderTimes: [],
+  });
+  const other = {
+    id: "other-active", text: "Other", enabled: true,
+    reminderEnabled: true, reminderTimes: ["09:00"], period: "daily",
+  };
+  const run = runtimeHarness({
+    challenges: [inactive, other], history: [], challengeStats: {},
+    reminderNotifIds: { "flex-1": ["old-inactive"] },
+  }, ["old-inactive"]);
+  const prepared = await prepareChallengeReminders(
+    "flex-1", "Run", [], true,
+    reminderScheduleForChallenge(inactive as any), run.runtime,
+  );
+  assert.equal(run.requests.length, 0);
+  await run.runtime.updateState((state) => prepared.applyToState(state));
+  await prepared.finalize();
+  assert.equal(run.state().challenges[0].enabled, false);
+  assert.equal(run.state().challenges[0].reminderEnabled, true);
+  assert.deepEqual(run.state().reminderNotifIds?.["flex-1"] ?? [], []);
+  assert.deepEqual([...run.scheduled.keys()], []);
+});
+
 test("Free limit applies per challenge and does not truncate flexible reminder rows", async () => {
   setRemindersPremiumEnabled(false);
   const rows = [1, 2, 3, 4].map((weekday) => ({ weekday, hour: 8 + weekday, minute: 0 }));
@@ -311,11 +341,12 @@ test("Free limit applies per challenge and does not truncate flexible reminder r
     reminderScheduleForChallenge(challenge as any), run.runtime,
   );
   assert.equal(prepared.reminderRows.length, 4);
-  assert.ok(run.requests.length >= 16);
+  assert.equal(run.requests.length, 4);
+  assert.ok(run.requests.every((request) => request.trigger.type === "weekly"));
   await prepared.rollback();
 });
 
-test("flexible weekly uses date triggers on Android and iOS", async () => {
+test("flexible weekly uses bounded recurring weekly triggers on Android and iOS", async () => {
   setRemindersPremiumEnabled(true);
   for (const platform of ["android", "ios"]) {
     const challenge = flexibleChallenge({ reminderDays: [0] });
@@ -326,8 +357,8 @@ test("flexible weekly uses date triggers on Android and iOS", async () => {
       "flex-1", "Run", ["18:00"], true,
       reminderScheduleForChallenge(challenge as any), run.runtime,
     );
-    assert.ok(run.requests.length > 0, platform);
-    assert.ok(run.requests.every((request) => request.trigger.type === "date"), platform);
+    assert.equal(run.requests.length, 1, platform);
+    assert.ok(run.requests.every((request) => request.trigger.type === "weekly"), platform);
     assert.ok(run.requests.every((request) =>
       platform === "android" ? request.trigger.channelId === "reminders_high_v1" : request.trigger.channelId === undefined), platform);
     assert.ok(run.requests.every((request) => request.content.channelId === undefined), platform);
@@ -350,8 +381,8 @@ test("production prepare accepts daily, every2, custom and flexibleWeekly trigge
     },
     {
       period: "custom",
-      schedule: { period: "custom", enabled: true, isActiveOnDate: () => true },
-      expectedType: "date",
+      schedule: { period: "custom", enabled: true, activeWeekdays: [0, 2], isActiveOnDate: () => true },
+      expectedType: "weekly",
     },
     {
       period: "flexibleWeekly",
@@ -360,7 +391,7 @@ test("production prepare accepts daily, every2, custom and flexibleWeekly trigge
         reminderRows: [{ weekday: 4, hour: 18, minute: 0 }],
         isActiveOnDate: (dateISO: string) => new Date(`${dateISO}T12:00:00`).getDay() === 4,
       },
-      expectedType: "date",
+      expectedType: "weekly",
     },
   ] as const;
 

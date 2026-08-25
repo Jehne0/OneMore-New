@@ -34,7 +34,7 @@ import {
   getFreeActiveReminderChallengeId,
   isFlexibleReminderRowSelectionValid,
   reminderScheduleForChallenge,
-  setDailyRemindersForChallenge,
+  savePersonalReminderWorkflow,
   setRemindersPremiumEnabled,
 } from "../../lib/reminders";
 import {
@@ -43,13 +43,18 @@ import {
   normalizeFlexibleWeeklyReminderRows,
   type FlexibleWeeklyReminderRow,
 } from "../../lib/flexibleReminderRows";
-import { AppState, challengeDisplayText, ensureDailyPick, loadState, renameChallenge, saveState, transitionChallengeEnabled } from "../../lib/storage";
-import { FLEXIBLE_WEEKLY_PERIOD, clampFlexibleWeeklyTarget, scheduleFlexibleWeeklySettings } from "../../lib/flexibleWeekly";
+import { AppState, challengeDisplayText, ensureDailyPick, loadState, renameChallenge, saveState } from "../../lib/storage";
+import { FLEXIBLE_WEEKLY_PERIOD, clampFlexibleWeeklyTarget } from "../../lib/flexibleWeekly";
 import { useTheme } from "../../lib/theme";
 import { useI18n, type Lang } from "../../lib/i18n";
 import { acquireNotificationSaveGuard, finishSuccessfulNotificationSave, runNotificationEditorSave } from "../../lib/notificationSaveFlow";
 import { createChallengeId } from "../../lib/challengeIds";
 import { formatNotificationFailureDetails } from "../../lib/notificationRuntime";
+import {
+  applyPersonalChallengeEditorDraft,
+  personalChallengeEditorDraftFromChallenge,
+  type PersonalChallengeEditorDraft,
+} from "../../lib/personalChallengeEditor";
 
 const FREE_MAX = FREE_MAX_CHALLENGES;
 
@@ -381,7 +386,7 @@ export default function ChallengesScreen() {
   const openedFromParams = useRef<string | null>(null);
 
   // Unified tab transition (same feel as other screens)
-  const enter = useRef(new Animated.Value(0)).current;
+  const [enter] = useState(() => new Animated.Value(0));
 
   useFocusEffect(
     useCallback(() => {
@@ -412,7 +417,13 @@ export default function ChallengesScreen() {
   const [remStep, setRemStep] = useState<1 | 2>(1);
   const [remSaving, setRemSaving] = useState(false);
   const [remConfirmation, setRemConfirmation] = useState("");
+  const [remError, setRemError] = useState<{
+    message: string;
+    details?: string;
+    canOpenSettings?: boolean;
+  } | null>(null);
   const remSaveLock = useRef(false);
+  const challengeSaveLocks = useRef(new Set<string>());
   const reminderScrollRef = useRef<ScrollView>(null);
 
   // time picker
@@ -422,16 +433,26 @@ export default function ChallengesScreen() {
 
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState("");
+  const renameSaveLock = useRef(false);
 
   // akční modal (přejmenovat / smazat)
   const [actionsOpen, setActionsOpen] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [actionLabel, setActionLabel] = useState("");
+  const pendingActionDestination = useRef<
+    | { type: "rename"; id: string; label: string }
+    | { type: "delete"; id: string }
+    | null
+  >(null);
 
   // target per day picker (1×..20×)
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [targetValue, setTargetValue] = useState(1);
+  const [targetSaving, setTargetSaving] = useState(false);
+  const [targetError, setTargetError] = useState("");
 
   // ✅ vždy načti aktuální stav při návratu na screen
   const refresh = useCallback(async () => {
@@ -469,7 +490,7 @@ export default function ChallengesScreen() {
     if (c?.period === FLEXIBLE_WEEKLY_PERIOD) return 7;
     const freq = Number(c?.period === FLEXIBLE_WEEKLY_PERIOD ? c?.flexibleWeeklyPending?.target ?? c?.flexibleWeeklyTarget ?? 1 : c?.targetPerDay ?? 1);
     const freqSafe = Number.isFinite(freq) && freq > 0 ? Math.min(20, Math.floor(freq)) : 1;
-    return premium ? freqSafe : Math.min(3, freqSafe);
+    return premium ? Math.min(10, freqSafe) : Math.min(3, freqSafe);
   }, [state, reminderId, premium]);
 
   const isFlexibleReminder = useMemo(() => {
@@ -526,30 +547,87 @@ export default function ChallengesScreen() {
       };
     }
 
-    setState(updated2);
     await saveState(updated2);
+    setState(updated2);
+  }
+
+  async function saveChallengeConfiguration(
+    challengeId: string,
+    updateDraft: (draft: PersonalChallengeEditorDraft) => PersonalChallengeEditorDraft,
+  ): Promise<boolean> {
+    const id = String(challengeId);
+    if (!id || challengeSaveLocks.current.has(id)) return false;
+    challengeSaveLocks.current.add(id);
+    try {
+      const latest = await loadState();
+      const source = (latest.challenges ?? []).find((challenge) => String(challenge.id) === id);
+      if (!source) throw new Error("CHALLENGE_EDITOR_STALE");
+      const todayISO = getTodayISO();
+      const draft = updateDraft(personalChallengeEditorDraftFromChallenge(source, todayISO));
+      const configure = (challenge: any, stateForHistory: AppState) => applyPersonalChallengeEditorDraft(
+        challenge,
+        draft,
+        todayISO,
+        {
+          hasFlexibleHistory: (stateForHistory.history ?? [])
+            .some((entry) => String(entry.challengeId ?? "") === id),
+        },
+      );
+      const preview = configure(source, latest);
+      const reminderRows = preview.period === FLEXIBLE_WEEKLY_PERIOD
+        ? migrateFlexibleWeeklyReminderRows(
+            source.flexibleReminderRows,
+            source.reminderDays,
+            source.reminderTimes,
+          )
+        : [];
+      const maxTimes = preview.period === FLEXIBLE_WEEKLY_PERIOD
+        ? 7
+        : Math.min(10, Math.max(1, Number(preview.targetPerDay ?? 1)));
+      const times = preview.period === FLEXIBLE_WEEKLY_PERIOD
+        ? reminderRows.map(flexibleReminderRowTime)
+        : (source.reminderTimes ?? [])
+            .filter((time) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(String(time)))
+            .slice(0, maxTimes);
+      const reminderEnabled = source.reminderEnabled === true;
+      const hasNativeIds = ((latest.reminderNotifIds ?? {})[id] ?? []).length > 0;
+
+      if (!reminderEnabled && !hasNativeIds) {
+        await persist((current) => ({
+          ...current,
+          challenges: (current.challenges ?? []).map((challenge) =>
+            String(challenge.id) === id ? configure(challenge, current) : challenge),
+        }));
+        return true;
+      }
+
+      await savePersonalReminderWorkflow({
+        challengeId: id,
+        challengeText: String(preview.text ?? "OneMore"),
+        timesHHMM: times,
+        enabled: reminderEnabled,
+        scheduleOverride: reminderScheduleForChallenge(preview, reminderRows),
+        persist: (prepared) => persist((current) => prepared.applyToState(
+          current,
+          (challenge) => configure(challenge, current),
+        )),
+      });
+      return true;
+    } finally {
+      challengeSaveLocks.current.delete(id);
+      await refresh();
+    }
   }
 
   async function toggleEnabled(id: string): Promise<void> {
-    await persist((latest) => {
-      const nextChallenges = (latest.challenges ?? []).map((c: any) => {
-        if (String(c.id) !== String(id)) return c;
-        return transitionChallengeEnabled(c, c.enabled === false, getTodayISO());
-      });
-      return { ...latest, challenges: nextChallenges };
-    });
-
+    const current = (state?.challenges ?? []).find((challenge) => String(challenge.id) === String(id));
+    if (!current) return;
+    const nextEnabled = current.enabled === false;
     try {
-      const latest = await loadState();
-      const c = (latest.challenges ?? []).find((x: any) => String(x.id) === String(id)) as any;
-      const times = Array.isArray(c?.reminderTimes) ? (c.reminderTimes as string[]) : [];
-      const filled = times.filter((t) => String(t ?? "").trim());
-      if (c?.reminderEnabled && c?.enabled !== false && filled.length) {
-        await setDailyRemindersForChallenge(String(id), String(c?.text ?? "OneMore"), filled);
-      } else {
-        await clearDailyRemindersForChallenge(String(id));
-      }
-    } catch {}
+      await saveChallengeConfiguration(String(id), (draft) => ({ ...draft, enabled: nextEnabled }));
+    } catch (error: any) {
+      Alert.alert(tx.notifications, error?.message ?? tx.notificationsFailed);
+    }
   }
 
   async function addChallenge(): Promise<void> {
@@ -599,7 +677,7 @@ export default function ChallengesScreen() {
     // Free: max 3 notifikace/den a jen u 1 výzvy.
     const maxAllowed = (c as any).period === FLEXIBLE_WEEKLY_PERIOD
       ? 1
-      : premium ? freqSafe : Math.min(3, freqSafe);
+      : premium ? Math.min(10, freqSafe) : Math.min(3, freqSafe);
 
     // Kolik notifikací chceme v UI zobrazit (preferuj uložené, jinak 1)
     const desiredCount = Math.min(
@@ -625,6 +703,7 @@ export default function ChallengesScreen() {
     // už rovnou na časy (počty řešíme přes pillky níže)
     setRemStep(2);
     setRemConfirmation("");
+    setRemError(null);
     setRemSaving(false);
     remSaveLock.current = false;
     setReminderOpen(true);
@@ -667,6 +746,7 @@ export default function ChallengesScreen() {
     if (!state || !reminderId || !acquireNotificationSaveGuard(remSaveLock)) return;
     setRemSaving(true);
     setRemConfirmation("");
+    setRemError(null);
 
     const id = String(reminderId);
 
@@ -677,7 +757,7 @@ export default function ChallengesScreen() {
 
     const maxAllowed = c0?.period === FLEXIBLE_WEEKLY_PERIOD
       ? 1
-      : premium ? freqSafe : Math.min(3, freqSafe);
+      : premium ? Math.min(10, freqSafe) : Math.min(3, freqSafe);
     const desiredCount = Math.min(Math.max(1, Number(tempTarget) || 1), maxAllowed);
 
     let times = (tempTimes ?? [])
@@ -689,32 +769,28 @@ export default function ChallengesScreen() {
 
     // ✅ Povolené je mít MÍŇ notifikací než je frekvence.
     // Jediná podmínka: když jsou notifikace zapnuté, musí být nastavený aspoň 1 čas.
-    if (remEnabled && c0?.period !== FLEXIBLE_WEEKLY_PERIOD && times.length === 0) {
-      Alert.alert(tx.missingTimeTitle, tx.missingTime);
+    if (remEnabled && c0?.enabled !== false && c0?.period !== FLEXIBLE_WEEKLY_PERIOD && times.length === 0) {
+      setRemError({ message: `${tx.missingTimeTitle}: ${tx.missingTime}` });
       remSaveLock.current = false;
       setRemSaving(false);
       return;
     }
 
-    if (!isFlexibleReminderRowSelectionValid(c0?.period, remEnabled, reminderRows)) {
-      Alert.alert(
-        t.flexibleWeekly.notificationDayRequiredTitle,
-        t.flexibleWeekly.notificationDayRequired,
-      );
+    if (!isFlexibleReminderRowSelectionValid(c0?.period, remEnabled && c0?.enabled !== false, reminderRows)) {
+      setRemError({
+        message: `${t.flexibleWeekly.notificationDayRequiredTitle}: ${t.flexibleWeekly.notificationDayRequired}`,
+      });
       remSaveLock.current = false;
       setRemSaving(false);
       return;
     }
 
     // Free: jen 1 výzva může mít zapnuté notifikace
-    if (!premium && remEnabled) {
+    if (!premium && remEnabled && c0?.enabled !== false) {
       const activeId = getFreeActiveReminderChallengeId(state);
       const anySharedActive = await hasAnyActiveSharedNotification();
       if ((activeId && String(activeId) !== id) || anySharedActive) {
-        Alert.alert(
-          tx.freeNotificationsTitle,
-          tx.freeNotifications
-        );
+        setRemError({ message: `${tx.freeNotificationsTitle}: ${tx.freeNotifications}` });
         remSaveLock.current = false;
         setRemSaving(false);
         return;
@@ -724,21 +800,24 @@ export default function ChallengesScreen() {
     try {
       await runNotificationEditorSave({
         save: async () => {
-          if (remEnabled && (c0?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows.length > 0 : times.length > 0)) {
-            const latest = await loadState();
-            const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
-            await setDailyRemindersForChallenge(
-              id,
-              String(c?.text ?? "OneMore"),
-              times,
-              reminderScheduleForChallenge(
-                c,
-                c?.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows : undefined,
-              ),
-            );
-          } else {
-            await clearDailyRemindersForChallenge(id);
-          }
+          const latest = await loadState();
+          const challenge = (latest.challenges ?? []).find((item) => String(item.id) === id);
+          if (!challenge) throw new Error("CHALLENGE_EDITOR_STALE");
+          return savePersonalReminderWorkflow({
+            challengeId: id,
+            challengeText: String(challenge.text ?? "OneMore"),
+            timesHHMM: times,
+            enabled: remEnabled,
+            scheduleOverride: reminderScheduleForChallenge(
+              challenge,
+              challenge.period === FLEXIBLE_WEEKLY_PERIOD ? reminderRows : undefined,
+            ),
+            persist: (prepared) => persist((current) => prepared.applyToState(current)),
+          });
+        },
+        onSaved: (prepared) => {
+          setTempTimes(prepared.times);
+          setTempReminderRows(prepared.reminderRows);
         },
         confirm: () => finishSuccessfulNotificationSave({
           message: NOTIFICATION_SAVED[lang],
@@ -755,14 +834,7 @@ export default function ChallengesScreen() {
       const msg = String(e?.message ?? "");
       if (__DEV__) console.error("[PersonalReminders] save failed", { code: msg || "unknown", period: c0?.period });
       if (msg.includes("NOTIFICATIONS_EXPO_GO_UNSUPPORTED")) {
-        Alert.alert(
-          tx.expoGoTitle,
-          tx.expoGoText,
-          [
-            { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => Clipboard.setString(formatNotificationFailureDetails(e)) },
-            { text: tx.cancel, style: "cancel" },
-          ],
-        );
+        setRemError({ message: `${tx.expoGoTitle}: ${tx.expoGoText}`, details: formatNotificationFailureDetails(e) });
       } else if (msg.includes("NOTIFICATIONS_PERMISSION_DENIED")) {
         const permissionText = lang === "cs"
           ? "Oznámení jsou vypnutá v nastavení telefonu. Povol je, aby bylo možné připomínku uložit."
@@ -771,16 +843,16 @@ export default function ChallengesScreen() {
             : lang === "pl"
               ? "Powiadomienia są wyłączone w ustawieniach telefonu. Włącz je, aby zapisać przypomnienie."
               : "Notifications are disabled in system settings. Enable them to save the reminder.";
-        Alert.alert(tx.notifications, permissionText, [
-          { text: tx.cancel, style: "cancel" },
-          { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => Clipboard.setString(formatNotificationFailureDetails(e)) },
-          { text: lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings", onPress: () => void Linking.openSettings() },
-        ]);
+        setRemError({
+          message: permissionText,
+          details: formatNotificationFailureDetails(e),
+          canOpenSettings: true,
+        });
       } else {
-        Alert.alert(tx.notifications, t.flexibleWeekly.notificationSaveFailed, [
-          { text: lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details", onPress: () => Clipboard.setString(formatNotificationFailureDetails(e)) },
-          { text: tx.cancel, style: "cancel" },
-        ]);
+        setRemError({
+          message: t.flexibleWeekly.notificationSaveFailed,
+          details: formatNotificationFailureDetails(e),
+        });
       }
       remSaveLock.current = false;
       setRemSaving(false);
@@ -796,6 +868,9 @@ export default function ChallengesScreen() {
   function openRename(id: string, currentText: string) {
     setRenameId(id);
     setRenameText(currentText);
+    setRenameSaving(false);
+    setRenameError("");
+    renameSaveLock.current = false;
     setRenameOpen(true);
   }
 
@@ -826,60 +901,53 @@ export default function ChallengesScreen() {
     const safe = Number.isFinite(cur) && cur > 0 ? Math.min(20, Math.floor(cur || 1)) : 1;
     setTargetId(String(id));
     setTargetValue(safe);
+    setTargetSaving(false);
+    setTargetError("");
     setTargetOpen(true);
   }
 
   async function saveTargetPicker(v: number): Promise<void> {
-    if (!targetId) return;
+    if (!targetId || targetSaving) return;
     const currentChallenge = (state?.challenges ?? []).find((challenge) => String(challenge.id) === String(targetId));
     const flexible = currentChallenge?.period === FLEXIBLE_WEEKLY_PERIOD;
     const value = flexible ? clampFlexibleWeeklyTarget(v) : Math.min(20, Math.max(1, Math.floor(v || 1)));
     const id = String(targetId);
 
-    await persist((latest) => {
-      const nextChallenges = (latest.challenges ?? []).map((c: any) => {
-        if (String(c.id) !== id) return c;
-        const prevTimes = Array.isArray(c.reminderTimes) ? (c.reminderTimes as string[]) : [];
-        const trimmed = prevTimes.slice(0, value);
-        return flexible
-          ? { ...scheduleFlexibleWeeklySettings(c, value, c.flexibleWeeklyPending?.startDay ?? c.flexibleWeeklyStartDay ?? 0, getTodayISO()), reminderTimes: trimmed }
-          : { ...c, targetPerDay: value, reminderTimes: trimmed };
-      });
-      return { ...latest, challenges: nextChallenges };
-    });
-
+    setTargetSaving(true);
+    setTargetError("");
     try {
-      const latest = await loadState();
-      const c = (latest.challenges ?? []).find((x: any) => String(x.id) === id) as any;
-      const enabled = !!c?.reminderEnabled;
-      const times = Array.isArray(c?.reminderTimes) ? (c.reminderTimes as string[]) : [];
-      const filled = times.filter((t) => String(t ?? "").trim());
-      if (enabled && filled.length) {
-        await setDailyRemindersForChallenge(id, String(c?.text ?? "OneMore"), filled);
-      } else {
-        await clearDailyRemindersForChallenge(id);
-      }
-    } catch {}
-
-    setTargetOpen(false);
-    await refresh();
+      const saved = await saveChallengeConfiguration(id, (draft) => ({ ...draft, target: value }));
+      if (saved) setTargetOpen(false);
+    } catch (error: any) {
+      setTargetError(error?.message ?? tx.notificationsFailed);
+    } finally {
+      setTargetSaving(false);
+    }
   }
 
   async function saveRename(): Promise<void> {
-    if (!renameId) return;
+    if (!renameId || renameSaveLock.current) return;
     const v = renameText.trim();
     if (!v) {
-      Alert.alert(tx.renameTitle, tx.renameMissing);
+      setRenameError(tx.renameMissing);
       return;
     }
-
-    const next = await renameChallenge(renameId, v);
-    const next2 = ensureDaily(next);
-    setState(next2);
-    await saveState(next2);
-
-    setRenameOpen(false);
-    setRenameId(null);
+    renameSaveLock.current = true;
+    setRenameSaving(true);
+    setRenameError("");
+    try {
+      const next = await renameChallenge(renameId, v);
+      const next2 = ensureDaily(next);
+      setState(next2);
+      await saveState(next2);
+      setRenameOpen(false);
+      setRenameId(null);
+    } catch (error: any) {
+      setRenameError(error?.message ?? tx.notificationsFailed);
+    } finally {
+      renameSaveLock.current = false;
+      setRenameSaving(false);
+    }
   }
 
   async function deleteChallengeNow(id: string): Promise<void> {
@@ -976,7 +1044,22 @@ export default function ChallengesScreen() {
 
       <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
         {/* ACTIONS MODAL */}
-        <Modal visible={actionsOpen} transparent animationType="fade" onRequestClose={() => setActionsOpen(false)}>
+        <Modal
+          visible={actionsOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActionsOpen(false)}
+          onDismiss={() => {
+            const pending = pendingActionDestination.current;
+            pendingActionDestination.current = null;
+            if (pending?.type === "rename") openRename(pending.id, pending.label);
+            if (pending?.type === "delete") {
+              void deleteChallengeNow(pending.id).catch((error: any) => {
+                Alert.alert(tx.notifications, error?.message ?? tx.notificationsFailed);
+              });
+            }
+          }}
+        >
           <Pressable style={styles.modalBackdrop} onPress={() => setActionsOpen(false)}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
               <View style={styles.modalBtns}>
@@ -986,6 +1069,11 @@ export default function ChallengesScreen() {
                     if (!actionId) return;
                     const id = actionId;
                     const label = actionLabel;
+                    if (Platform.OS === "ios") {
+                      pendingActionDestination.current = { type: "rename", id, label };
+                      setActionsOpen(false);
+                      return;
+                    }
                     setActionsOpen(false);
                     openRename(id, label);
                   }}
@@ -998,8 +1086,15 @@ export default function ChallengesScreen() {
                   onPress={() => {
                     if (!actionId) return;
                     const id = String(actionId);
+                    if (Platform.OS === "ios") {
+                      pendingActionDestination.current = { type: "delete", id };
+                      setActionsOpen(false);
+                      return;
+                    }
                     setActionsOpen(false);
-                    void deleteChallengeNow(id);
+                    void deleteChallengeNow(id).catch((error: any) => {
+                      Alert.alert(tx.notifications, error?.message ?? tx.notificationsFailed);
+                    });
                   }}
                 >
                   <Text style={styles.modalBtnText}>{tx.delete}</Text>
@@ -1010,8 +1105,8 @@ export default function ChallengesScreen() {
         </Modal>
 
         {/* TARGET MODAL */}
-        <Modal visible={targetOpen} transparent animationType="fade" onRequestClose={() => setTargetOpen(false)}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setTargetOpen(false)}>
+        <Modal visible={targetOpen} transparent animationType="fade" onRequestClose={() => { if (!targetSaving) setTargetOpen(false); }}>
+          <Pressable style={styles.modalBackdrop} onPress={() => { if (!targetSaving) setTargetOpen(false); }}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
               <Text style={styles.modalTitle}>{tx.targetTitle}</Text>
 
@@ -1019,6 +1114,7 @@ export default function ChallengesScreen() {
                 {Array.from({ length: ((state?.challenges ?? []).find((c) => String(c.id) === String(targetId))?.period === FLEXIBLE_WEEKLY_PERIOD ? 7 : 20) }, (_, i) => i + 1).map((n) => (
                   <Pressable
                     key={n}
+                    disabled={targetSaving}
                     onPress={() => setTargetValue(n)}
                     style={({ pressed }) => [
                       styles.pill,
@@ -1031,12 +1127,14 @@ export default function ChallengesScreen() {
                 ))}
               </View>
 
+              {!!targetError && <Text style={[styles.modalHint, { color: "#D64545" }]}>{targetError}</Text>}
+
               <View style={styles.modalBtns}>
-                <Pressable style={styles.modalBtn} onPress={() => setTargetOpen(false)}>
+                <Pressable disabled={targetSaving} style={[styles.modalBtn, targetSaving && { opacity: 0.5 }]} onPress={() => setTargetOpen(false)}>
                   <Text style={styles.modalBtnText}>{tx.cancel}</Text>
                 </Pressable>
-                <Pressable style={styles.modalBtnPrimary} onPress={() => void saveTargetPicker(targetValue)}>
-                  <Text style={styles.modalBtnText}>{tx.save}</Text>
+                <Pressable disabled={targetSaving} style={[styles.modalBtnPrimary, targetSaving && { opacity: 0.5 }]} onPress={() => void saveTargetPicker(targetValue)}>
+                  <Text style={styles.modalBtnText}>{targetSaving ? "…" : tx.save}</Text>
                 </Pressable>
               </View>
             </Pressable>
@@ -1044,18 +1142,19 @@ export default function ChallengesScreen() {
         </Modal>
 
         {/* RENAME MODAL */}
-        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
+        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => { if (!renameSaving) setRenameOpen(false); }}>
           <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === "ios" ? "height" : undefined}
           >
-            <Pressable style={styles.modalBackdrop} onPress={() => setRenameOpen(false)}>
+            <Pressable style={styles.modalBackdrop} onPress={() => { if (!renameSaving) setRenameOpen(false); }}>
               <Pressable style={styles.modalCard} onPress={() => {}}>
               <Text style={styles.modalTitle}>{tx.renameTitle}</Text>
 
               <TextInput
                 value={renameText}
                 onChangeText={setRenameText}
+                editable={!renameSaving}
                 placeholder={tx.challengeNamePlaceholder}
                 placeholderTextColor={UI.sub}
                 style={styles.modalInput}
@@ -1064,13 +1163,15 @@ export default function ChallengesScreen() {
                 onSubmitEditing={() => void saveRename()}
               />
 
+              {!!renameError && <Text style={[styles.modalHint, { color: "#D64545" }]}>{renameError}</Text>}
+
               <View style={styles.modalBtns}>
-                <Pressable style={styles.modalBtn} onPress={() => setRenameOpen(false)}>
+                <Pressable disabled={renameSaving} style={[styles.modalBtn, renameSaving && { opacity: 0.5 }]} onPress={() => setRenameOpen(false)}>
                   <Text style={styles.modalBtnText}>{tx.cancel}</Text>
                 </Pressable>
 
-                <Pressable style={styles.modalBtnPrimary} onPress={() => void saveRename()}>
-                  <Text style={styles.modalBtnText}>{tx.save}</Text>
+                <Pressable disabled={renameSaving} style={[styles.modalBtnPrimary, renameSaving && { opacity: 0.5 }]} onPress={() => void saveRename()}>
+                  <Text style={styles.modalBtnText}>{renameSaving ? "…" : tx.save}</Text>
                 </Pressable>
               </View>
               </Pressable>
@@ -1084,6 +1185,7 @@ export default function ChallengesScreen() {
           transparent
           animationType="fade"
           onRequestClose={() => {
+            if (remSaving) return;
             if (timePickerOpen) {
               setTimePickerOpen(false);
               return;
@@ -1097,7 +1199,12 @@ export default function ChallengesScreen() {
           }}
         >
           <View style={styles.modalBackdrop}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setReminderOpen(false)} />
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => {
+                if (!remSaving) setReminderOpen(false);
+              }}
+            />
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>{tx.notifications}</Text>
 
@@ -1268,6 +1375,36 @@ export default function ChallengesScreen() {
                     <Text style={[styles.modalHint, { color: UI.accent, textAlign: "center" }]}>{remConfirmation}</Text>
                   )}
 
+                  {!!remError && (
+                    <View style={{ marginTop: 12, gap: 8 }}>
+                      <Text style={[styles.modalHint, { color: "#FF8A80", textAlign: "center" }]}>
+                        {remError.message}
+                      </Text>
+                      <View style={[styles.modalBtns, { justifyContent: "center" }]}>
+                        {!!remError.details && (
+                          <Pressable
+                            style={styles.modalBtn}
+                            onPress={() => Clipboard.setString(remError.details ?? "")}
+                          >
+                            <Text style={styles.modalBtnText}>
+                              {lang === "cs" ? "Kopírovat podrobnosti" : lang === "de" ? "Details kopieren" : lang === "pl" ? "Kopiuj szczegóły" : "Copy details"}
+                            </Text>
+                          </Pressable>
+                        )}
+                        {remError.canOpenSettings && (
+                          <Pressable style={styles.modalBtn} onPress={() => void Linking.openSettings()}>
+                            <Text style={styles.modalBtnText}>
+                              {lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings"}
+                            </Text>
+                          </Pressable>
+                        )}
+                        <Pressable style={styles.modalBtn} onPress={() => setRemError(null)}>
+                          <Text style={styles.modalBtnText}>{tx.cancel}</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+
                 </View>
               )}
               {timePickerOpen && (
@@ -1277,7 +1414,11 @@ export default function ChallengesScreen() {
                   )}
               </ScrollView>
               <View style={[styles.modalBtns, styles.modalFooter]}>
-                <Pressable style={styles.modalBtn} onPress={() => setReminderOpen(false)}>
+                <Pressable
+                  disabled={remSaving}
+                  style={[styles.modalBtn, remSaving && { opacity: 0.5 }]}
+                  onPress={() => setReminderOpen(false)}
+                >
                   <Text style={styles.modalBtnText}>{tx.cancel}</Text>
                 </Pressable>
                 <Pressable disabled={remSaving} style={[styles.modalBtnPrimary, remSaving && { opacity: 0.5 }]} onPress={() => void saveReminderConfig()}>
@@ -1482,7 +1623,8 @@ export default function ChallengesScreen() {
 
                     <View style={styles.rightTop}>
                       <Pressable
-                        onPress={() => {
+                        onPress={(event) => {
+                          event.stopPropagation();
                           if (freeLocked) {
                             Alert.alert(
                               tx.freeNotificationsTitle,
@@ -1514,13 +1656,18 @@ export default function ChallengesScreen() {
                       </Pressable>
 
                       <Pressable
-                        onPress={() => openTargetPicker(String(c.id))}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          openTargetPicker(String(c.id));
+                        }}
                         style={({ pressed }) => [styles.badgeSquare, pressed && { opacity: 0.85 }]}
                       >
                         <Text style={styles.badgeText}>{target}×</Text>
                       </Pressable>
 
-                      <Switch value={!!c.enabled} onValueChange={() => void toggleEnabled(String(c.id))} />
+                      <View onTouchStart={(event) => event.stopPropagation()}>
+                        <Switch value={!!c.enabled} onValueChange={() => void toggleEnabled(String(c.id))} />
+                      </View>
                     </View>
                   </View>
 

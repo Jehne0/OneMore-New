@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { NotificationContentInput } from "expo-notifications";
 import { onAuthStateChanged } from "firebase/auth";
-import { getTodayISO } from "./clock";
 import { auth } from "./firebase";
 import { loadNotificationSettings } from "./notificationSettings";
 import { commitPreparedNotificationChange } from "./notificationSaveFlow";
@@ -11,8 +10,6 @@ import {
   createReminderOperationJournal,
   enqueueReminderCleanup,
   readReminderCleanupQueue,
-  readReminderOperationJournals,
-  removeReminderCleanup,
   removeReminderOperationJournal,
   updateReminderOperationJournal,
   writeReminderOperationJournal,
@@ -108,6 +105,7 @@ let _premiumEnabled = false;
 const FREE_MAX_TIMES = 3;
 const PREMIUM_MAX_TIMES = 10;
 const REMINDER_CHANNEL_ID = "reminders_high_v1";
+export const IOS_SAFE_TRIGGER_LIMIT_PER_CHALLENGE = 48;
 const REMINDER_DATA_KEY = "oneMoreReminderKey";
 const REMINDER_DATA_KIND = "oneMoreReminderKind";
 const SHARED_REMINDER_PREFIX = "shared_";
@@ -120,6 +118,8 @@ export type ReminderSchedule = {
   /** Notification weekdays only (0=Monday … 6=Sunday), independent of challenge cadence. */
   reminderDays?: number[];
   reminderRows?: FlexibleWeeklyReminderRow[];
+  /** Stable challenge weekdays in ISO order (0=Monday … 6=Sunday). */
+  activeWeekdays?: number[];
   isNewChallenge?: boolean;
   isActiveOnDate: (dateISO: string) => boolean;
 };
@@ -221,6 +221,7 @@ export function reminderScheduleForChallenge(
     enabled: !!challenge && challenge.enabled !== false && !challenge.deletedAt,
     reminderDays,
     reminderRows,
+    activeWeekdays: period === "custom" ? normalizeReminderDays(challenge?.customDays) : undefined,
     isActiveOnDate: period === "flexibleWeekly"
       ? (dateISO) => reminderRows.some((row) => row.weekday === weekdayMon0(dateISO) + 1)
       : (dateISO) => isChallengeActiveOnDate(challenge ?? null, dateISO),
@@ -282,7 +283,7 @@ export function buildReminderTriggerInputs(
   schedule: ReminderSchedule,
   timesHHMM: string[],
   platform: string,
-  triggerTypes: Pick<NotificationsModule["SchedulableTriggerInputTypes"], "DAILY" | "DATE">,
+  triggerTypes: Pick<NotificationsModule["SchedulableTriggerInputTypes"], "DAILY" | "DATE" | "WEEKLY">,
   now = new Date(),
   horizonDays = ROLLING_SCHEDULE_DAYS,
 ): ReturnType<typeof validateExpoNotificationTrigger>[] {
@@ -301,14 +302,48 @@ export function buildReminderTriggerInputs(
     }), platform, now));
   }
 
+  const weeklyTriggers: Record<string, unknown>[] = [];
+  if (schedule.enabled !== false && schedule.period === "custom") {
+    for (const weekdayMon0 of normalizeReminderDays(schedule.activeWeekdays)) {
+      // Expo/Apple use 1=Sunday … 7=Saturday; OneMore stores 0=Monday … 6=Sunday.
+      const expoWeekday = ((weekdayMon0 + 1) % 7) + 1;
+      for (const { parsed } of parsedTimes) {
+        weeklyTriggers.push(withAndroidChannel({
+          type: triggerTypes.WEEKLY,
+          weekday: expoWeekday,
+          hour: parsed.hour,
+          minute: parsed.minute,
+        }));
+      }
+    }
+  } else if (schedule.enabled !== false && schedule.period === "flexibleWeekly") {
+    for (const row of normalizeFlexibleWeeklyReminderRows(schedule.reminderRows)) {
+      weeklyTriggers.push(withAndroidChannel({
+        type: triggerTypes.WEEKLY,
+        weekday: (row.weekday % 7) + 1,
+        hour: row.hour,
+        minute: row.minute,
+      }));
+    }
+  }
+  if (weeklyTriggers.length > 0) {
+    const safe = platform === "ios"
+      ? weeklyTriggers.slice(0, IOS_SAFE_TRIGGER_LIMIT_PER_CHALLENGE)
+      : weeklyTriggers;
+    return safe.map((trigger) => validateExpoNotificationTrigger(trigger, platform, now));
+  }
+
   const planningTimes = schedule.period === "flexibleWeekly"
     ? normalizeFlexibleWeeklyReminderRows(schedule.reminderRows).map(flexibleReminderRowTime)
     : parsedTimes.map(({ time }) => time);
-  return plannedReminderDates(schedule, planningTimes, now, horizonDays).map((date) =>
+  const dateTriggers = plannedReminderDates(schedule, planningTimes, now, horizonDays).map((date) =>
     validateExpoNotificationTrigger(withAndroidChannel({
       type: triggerTypes.DATE,
       date,
     }), platform, now));
+  return platform === "ios"
+    ? dateTriggers.slice(0, IOS_SAFE_TRIGGER_LIMIT_PER_CHALLENGE)
+    : dateTriggers;
 }
 
 export function buildReminderNotificationContent(
@@ -576,10 +611,10 @@ export async function prepareChallengeReminders(
     .filter((x) => !!x.p)
     .slice(0, maxTimes) as { t: string; p: { hour: number; minute: number } }[];
 
-  if (enabled && schedule.period === "flexibleWeekly" && reminderRows.length === 0) {
+  if (enabled && schedule.enabled !== false && schedule.period === "flexibleWeekly" && reminderRows.length === 0) {
     throw new Error("NOTIFICATIONS_FLEXIBLE_ROWS_REQUIRED");
   }
-  if (enabled && schedule.period !== "flexibleWeekly" && parsed.length === 0) {
+  if (enabled && schedule.enabled !== false && schedule.period !== "flexibleWeekly" && parsed.length === 0) {
     throw new Error("NOTIFICATIONS_TIME_REQUIRED");
   }
 
@@ -598,9 +633,13 @@ export async function prepareChallengeReminders(
     ? reminderRows.map((row) => row.weekday - 1)
     : [];
   const oldIds = [...(latest.reminderNotifIds?.[reminderKey] ?? [])];
-  if (enabled && !_premiumEnabled && reminderKindForId(reminderKey) === "challenge") {
+  if (
+    enabled && schedule.enabled !== false && !_premiumEnabled &&
+    reminderKindForId(reminderKey) === "challenge"
+  ) {
     const otherActive = (latest.challenges ?? []).some((challenge) =>
-      String(challenge.id) !== reminderKey && challenge.reminderEnabled === true);
+      String(challenge.id) !== reminderKey && challenge.enabled !== false &&
+      !challenge.deletedAt && challenge.reminderEnabled === true);
     if (otherActive) throw new Error("NOTIFICATION_FREE_LIMIT");
   }
   const notificationSettings = await runtime.loadNotificationSettings();
@@ -982,7 +1021,7 @@ export function getFreeActiveReminderChallengeId(state: any): string | null {
   if (_premiumEnabled) return null;
 
   const ch = (state?.challenges ?? []) as any[];
-  const active = ch.find((c) => c?.reminderEnabled);
+  const active = ch.find((c) => c?.enabled !== false && !c?.deletedAt && c?.reminderEnabled);
 
   return active ? String(active.id) : null;
 }

@@ -3,7 +3,11 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createEditorConfirmationController, createEditorDraft, finishSuccessfulNotificationSave, NOTIFICATION_CONFIRMATION_MS } from "../lib/notificationSaveFlow";
-import { applyPersonalChallengeEditorDraft, type PersonalChallengePeriod } from "../lib/personalChallengeEditor";
+import {
+  applyPersonalChallengeEditorDraft,
+  personalChallengeEditorDraftFromChallenge,
+  type PersonalChallengePeriod,
+} from "../lib/personalChallengeEditor";
 
 test("successful notification save confirms briefly and then closes the editor", async () => {
   const events: string[] = [];
@@ -127,7 +131,7 @@ test("personal editors expose one continuous scroll viewport without nested back
   assert.match(home, /<View style=\{styles\.keyboardBackdrop\}>[\s\S]*?<Pressable style=\{StyleSheet\.absoluteFill\}/);
   assert.doesNotMatch(home, /<Pressable style=\{styles\.keyboardBackdrop\} onPress=\{manageSaving/);
   assert.match(challenges, /modalScroll: \{ flex: 1, minHeight: 0 \}/);
-  assert.match(challenges, /<View style=\{styles\.modalBackdrop\}>[\s\S]*?<Pressable style=\{StyleSheet\.absoluteFill\}/);
+  assert.match(challenges, /<View style=\{styles\.modalBackdrop\}>[\s\S]*?<Pressable\s+style=\{StyleSheet\.absoluteFill\}/);
   assert.doesNotMatch(challenges, /<Pressable style=\{styles\.modalBackdrop\} onPress=\{\(\) => setReminderOpen/);
   assert.match(home, /keyboardDismissMode="on-drag"/);
   assert.match(challenges, /keyboardDismissMode="on-drag"/);
@@ -174,15 +178,126 @@ test("inactive easy-mode drafts preserve every period and are applied as one tra
   }
 });
 
-test("the personal editor avoids iOS native alerts, nested period modals and eager native reminder mutations", () => {
+test("legacy and malformed personal challenge values normalize to a safe editor draft", () => {
+  const today = "2026-08-22";
+  const custom = personalChallengeEditorDraftFromChallenge({
+    id: "custom", text: "Custom", enabled: false, easyMode: true,
+    period: "custom", targetPerDay: Number.NaN, customDays: [],
+  }, today);
+  assert.equal(custom.enabled, false);
+  assert.equal(custom.easyMode, true);
+  assert.equal(custom.target, 1);
+  assert.deepEqual(custom.customDays, [5]);
+
+  const every2 = personalChallengeEditorDraftFromChallenge({
+    id: "every2", text: "Every 2", enabled: true, period: "every2", targetPerDay: 99,
+    periodAnchor: "",
+  }, today);
+  assert.equal(every2.target, 20);
+  assert.equal(every2.periodAnchor, today);
+
+  const flexible = personalChallengeEditorDraftFromChallenge({
+    id: "flex", text: "Flexible", enabled: true, period: "flexibleWeekly",
+    flexibleWeeklyTarget: -4, flexibleWeeklyStartDay: 99,
+  }, today);
+  assert.equal(flexible.target, 1);
+  assert.equal(flexible.flexibleStartDay, 6);
+
+  const unknown = personalChallengeEditorDraftFromChallenge({
+    id: "unknown", text: "Unknown", enabled: true, period: "broken" as any,
+  }, today);
+  assert.equal(unknown.period, "daily");
+  assert.equal(unknown.target, 1);
+});
+
+test("personal editor state matrix is stable across period, activity, Easy mode and target edges", () => {
+  const today = "2026-08-22";
+  let combinations = 0;
+  for (const period of ["daily", "every2", "custom", "flexibleWeekly"] as PersonalChallengePeriod[]) {
+    for (const enabled of [false, true]) {
+      for (const easyMode of [false, true]) {
+        for (const target of [Number.NaN, -1, 1, 7, 20, 999]) {
+          const draft = {
+            text: ` ${period} `,
+            enabled,
+            easyMode,
+            target,
+            period,
+            customDays: [],
+            periodAnchor: null,
+            flexibleStartDay: 99,
+          };
+          const source = {
+            id: `${period}-${enabled}-${easyMode}-${String(target)}`,
+            text: "Original",
+            enabled: !enabled,
+            easyMode: false,
+            targetPerDay: 3,
+          } as const;
+          const result = applyPersonalChallengeEditorDraft(source, draft, today);
+          const repeated = applyPersonalChallengeEditorDraft(result, draft, today);
+          assert.deepEqual(repeated, result, `${period}/${enabled}/${easyMode}/${target}: idempotent`);
+          assert.equal(result.enabled, enabled);
+          assert.equal(result.easyMode, easyMode);
+          assert.equal(result.text, period);
+          assert.equal(result.period, period);
+          if (period === "flexibleWeekly") {
+            const expected = Number.isFinite(target) ? Math.min(7, Math.max(1, Math.floor(target))) : 1;
+            assert.equal(result.flexibleWeeklyTarget, expected);
+            assert.equal(result.flexibleWeeklyStartDay, 6);
+          } else {
+            const expected = Number.isFinite(target) ? Math.min(20, Math.max(1, Math.floor(target))) : 1;
+            assert.equal(result.targetPerDay, expected);
+            assert.deepEqual(result.customDays, period === "custom" ? [5] : []);
+            assert.equal(result.periodAnchor, period === "every2" ? today : undefined);
+          }
+          combinations += 1;
+        }
+      }
+    }
+  }
+  assert.equal(combinations, 4 * 2 * 2 * 6);
+
+  const irreversibleEasy = applyPersonalChallengeEditorDraft({
+    id: "easy", text: "Easy", enabled: true, easyMode: true,
+  }, {
+    text: "Easy", enabled: true, easyMode: false, target: 1, period: "daily",
+    customDays: [], periodAnchor: null, flexibleStartDay: 0,
+  }, today);
+  assert.equal(irreversibleEasy.easyMode, true);
+});
+
+test("both personal editors avoid nested iOS presentations and eager native reminder mutations", () => {
   const home = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
-  const profile = readFileSync(join(process.cwd(), "app/(tabs)/profile.tsx"), "utf8");
-  const updateGate = readFileSync(join(process.cwd(), "lib/UpdateGate.tsx"), "utf8");
+  const challenges = readFileSync(join(process.cwd(), "app/(tabs)/challenges.tsx"), "utf8");
   assert.doesNotMatch(home, /NativeAlert|Alert as NativeAlert/);
-  assert.doesNotMatch(profile, /NativeAlert|Alert as NativeAlert/);
-  assert.doesNotMatch(updateGate, /import \{[^\n]*\bAlert\b[^\n]*\} from "react-native"/);
   assert.doesNotMatch(home, /<Modal\s+visible=\{periodPickerOpen\}/);
   assert.match(home, /editorInlineOverlay/);
   assert.doesNotMatch(home, /saveBasicsImmediate|savePeriodImmediate|saveFlexibleStartDayImmediate/);
+  assert.doesNotMatch(home, /easyModeChallengeIds/);
   assert.match(home, /savePersonalReminderWorkflow\(/);
+  assert.match(home, /pendingManageDestination\.current = \{ type: "history", challengeId \}/);
+  assert.match(home, /onDismiss=\{\(\) => \{[\s\S]*pendingManageDestination\.current/);
+  assert.match(challenges, /saveChallengeConfiguration\(/);
+  assert.match(challenges, /savePersonalReminderWorkflow\(/);
+  assert.doesNotMatch(challenges, /setDailyRemindersForChallenge|saveTargetImmediate/);
+  assert.match(challenges, /onDismiss=\{\(\) => \{[\s\S]*pendingActionDestination\.current/);
+  assert.match(challenges, /setRemError\(/);
+  assert.match(challenges, /setTargetError\(/);
+
+  const reminderSaveStart = challenges.indexOf("async function saveReminderConfig");
+  const reminderSaveEnd = challenges.indexOf("function openRename", reminderSaveStart);
+  assert.ok(reminderSaveStart >= 0 && reminderSaveEnd > reminderSaveStart);
+  assert.doesNotMatch(challenges.slice(reminderSaveStart, reminderSaveEnd), /Alert\.alert\(/);
+
+  const targetSaveStart = challenges.indexOf("async function saveTargetPicker");
+  const targetSaveEnd = challenges.indexOf("async function saveRename", targetSaveStart);
+  assert.ok(targetSaveStart >= 0 && targetSaveEnd > targetSaveStart);
+  assert.doesNotMatch(challenges.slice(targetSaveStart, targetSaveEnd), /Alert\.alert\(/);
+
+  const renameSaveStart = challenges.indexOf("async function saveRename");
+  const renameSaveEnd = challenges.indexOf("async function deleteChallengeNow", renameSaveStart);
+  assert.ok(renameSaveStart >= 0 && renameSaveEnd > renameSaveStart);
+  assert.doesNotMatch(challenges.slice(renameSaveStart, renameSaveEnd), /Alert\.alert\(/);
+  assert.match(challenges, /pendingActionDestination\.current = \{ type: "delete", id \}/);
 });

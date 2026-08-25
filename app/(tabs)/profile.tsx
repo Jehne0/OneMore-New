@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert as NativeAlert,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -2709,7 +2710,7 @@ const buyPremium = async () => {
           code: String(error?.code ?? "unknown"),
         });
       }
-      Alert.alert(p.friends, p.removeFriendFailed);
+      NativeAlert.alert(p.friends, p.removeFriendFailed);
     } finally {
       removeFriendBusyRef.current = false;
       setFriendsBusy(false);
@@ -2723,7 +2724,7 @@ const buyPremium = async () => {
       });
     }
 
-    Alert.alert(
+    NativeAlert.alert(
       p.remove,
       p.removeFriendConfirm.replace("{name}", getShownFriendName(friendUid)),
       [
@@ -2773,12 +2774,12 @@ const buyPremium = async () => {
     }
 
     if (!friendUid) {
-      Alert.alert(p.friends, p.friendActionUnavailable);
+      NativeAlert.alert(p.friends, p.friendActionUnavailable);
       return;
     }
 
     if (freeSharedLimitReached) {
-      Alert.alert(p.premium, p.freeSharedChallengeLimit);
+      NativeAlert.alert(p.premium, p.freeSharedChallengeLimit);
       return;
     }
 
@@ -2793,7 +2794,7 @@ const buyPremium = async () => {
     }
 
     if (!friendUid) {
-      Alert.alert(p.friends, p.friendActionUnavailable);
+      NativeAlert.alert(p.friends, p.friendActionUnavailable);
       return;
     }
 
@@ -2828,7 +2829,7 @@ const buyPremium = async () => {
           code: String(error?.code ?? "unknown"),
         });
       }
-      Alert.alert(p.friends, errorMessage);
+      NativeAlert.alert(p.friends, errorMessage);
     } finally {
       declineFriendBusyRef.current = false;
       setFriendsBusy(false);
@@ -2837,7 +2838,7 @@ const buyPremium = async () => {
 
 function openChallengeInvite(friendUid: string) {
     if (freeSharedLimitReached) {
-      Alert.alert(p.premium, p.freeSharedChallengeLimit);
+      NativeAlert.alert(p.premium, p.freeSharedChallengeLimit);
       return;
     }
 
@@ -2937,7 +2938,7 @@ function openChallengeInvite(friendUid: string) {
       return;
     }
 
-    const friendAlert = Alert;
+    const friendAlert = Platform.OS === "ios" ? NativeAlert : Alert;
     const me = auth.currentUser?.uid;
     const username = addUsername.trim();
 
@@ -5311,7 +5312,7 @@ const friendsBadgeCount = incomingCount + pendingInviteCount;
         <Pressable
           onPress={() => {
             if (lockedByFree) {
-              Alert.alert(p.premium, p.freeFriendsLimit);
+              NativeAlert.alert(p.premium, p.freeFriendsLimit);
               return;
             }
 

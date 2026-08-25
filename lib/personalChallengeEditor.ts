@@ -2,6 +2,7 @@ import {
   FLEXIBLE_WEEKLY_PERIOD,
   clampFlexibleWeeklyStartDay,
   clampFlexibleWeeklyTarget,
+  localDayMon0,
   scheduleFlexibleWeeklySettings,
 } from "./flexibleWeekly";
 import { transitionChallengeEnabled, type Challenge } from "./storage";
@@ -31,6 +32,33 @@ export function normalizePersonalChallengeCustomDays(value: unknown): number[] {
     .filter((day) => Number.isFinite(day) && day >= 0 && day <= 6)
     .map(Math.floor)))
     .sort((a, b) => a - b);
+}
+
+export function personalChallengeEditorDraftFromChallenge(
+  challenge: Challenge,
+  todayISO: string,
+): PersonalChallengeEditorDraft {
+  const period: PersonalChallengePeriod = challenge.period === "every2" ||
+    challenge.period === "custom" || challenge.period === FLEXIBLE_WEEKLY_PERIOD
+    ? challenge.period
+    : "daily";
+  const customDays = normalizePersonalChallengeCustomDays(challenge.customDays);
+  return {
+    text: String(challenge.text ?? ""),
+    enabled: challenge.enabled !== false,
+    easyMode: challenge.easyMode === true,
+    target: period === FLEXIBLE_WEEKLY_PERIOD
+      ? clampFlexibleWeeklyTarget(challenge.flexibleWeeklyPending?.target ?? challenge.flexibleWeeklyTarget)
+      : dailyTarget(challenge.targetPerDay),
+    period,
+    customDays: period === "custom"
+      ? (customDays.length > 0 ? customDays : [localDayMon0(todayISO)])
+      : [],
+    periodAnchor: period === "every2" ? (challenge.periodAnchor || todayISO) : null,
+    flexibleStartDay: clampFlexibleWeeklyStartDay(
+      challenge.flexibleWeeklyPending?.startDay ?? challenge.flexibleWeeklyStartDay ?? localDayMon0(todayISO),
+    ),
+  };
 }
 
 /**
@@ -67,8 +95,9 @@ export function applyPersonalChallengeEditorDraft(
     };
   }
 
+  const normalizedCustomDays = normalizePersonalChallengeCustomDays(draft.customDays);
   const customDays = draft.period === "custom"
-    ? normalizePersonalChallengeCustomDays(draft.customDays)
+    ? (normalizedCustomDays.length > 0 ? normalizedCustomDays : [localDayMon0(todayISO)])
     : [];
   return {
     ...enabledChallenge,

@@ -43,7 +43,7 @@ function loadInstalledExpoParseTrigger(): (trigger: unknown) => Record<string, u
 
   const source = readFileSync("node_modules/expo-notifications/src/scheduleNotificationAsync.ts", "utf8");
   const start = source.indexOf("export function parseTrigger");
-  assert.notEqual(start, -1, "installed Expo SDK 54 parseTrigger source must exist");
+  assert.notEqual(start, -1, "installed Expo SDK 57 parseTrigger source must exist");
   const output = ts.transpileModule(source.slice(start), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -64,6 +64,20 @@ function loadInstalledExpoParseTrigger(): (trigger: unknown) => Record<string, u
 
 const installedExpoParseTrigger = loadInstalledExpoParseTrigger();
 
+test("installed iOS notification records catch Objective-C trigger construction exceptions", () => {
+  const source = readFileSync(
+    "node_modules/expo-notifications/ios/ExpoNotifications/Notifications/TriggerRecords.swift",
+    "utf8",
+  );
+  for (const record of ["DateTriggerRecord", "DailyTriggerRecord", "WeeklyTriggerRecord"]) {
+    const start = source.indexOf(`public struct ${record}`);
+    const end = source.indexOf("public struct ", start + 20);
+    assert.ok(start >= 0, record);
+    const body = source.slice(start, end >= 0 ? end : undefined);
+    assert.match(body, /try EXUtilities\.catchException \{/u, record);
+  }
+});
+
 function strictRuntime(period: ReminderSchedule["period"], permission: "granted" | "denied" | "undetermined" = "granted") {
   const events: string[] = [];
   const requests: any[] = [];
@@ -71,7 +85,7 @@ function strictRuntime(period: ReminderSchedule["period"], permission: "granted"
   const challenge = { id: "challenge-1", text: "Run", enabled: true, period, targetPerDay: 2 };
   let state: any = { challenges: [challenge], history: [], challengeStats: {}, reminderNotifIds: {} };
   const Notifications = {
-    SchedulableTriggerInputTypes: { DAILY: "daily", DATE: "date" },
+    SchedulableTriggerInputTypes: { DAILY: "daily", DATE: "date", WEEKLY: "weekly" },
     AndroidNotificationPriority: { HIGH: "high" },
     getAllScheduledNotificationsAsync: async () => [],
     cancelScheduledNotificationAsync: async () => {},
@@ -122,14 +136,16 @@ function strictRuntime(period: ReminderSchedule["period"], permission: "granted"
   };
 }
 
-test("SDK 54 validator accepts exact Android daily and date shapes", () => {
+test("SDK 57 validator accepts exact Android daily, weekly and date shapes", () => {
   const daily = validateExpoNotificationTrigger({ type: "daily", hour: 8, minute: 5, channelId: "reminders_high_v1" }, "android");
+  const weekly = validateExpoNotificationTrigger({ type: "weekly", weekday: 2, hour: 9, minute: 15, channelId: "reminders_high_v1" }, "android");
   const date = validateExpoNotificationTrigger({ type: "date", date: new Date(Date.now() + 60_000), channelId: "reminders_high_v1" }, "android");
   assert.deepEqual(sanitizeNotificationTrigger(daily), { type: "daily", hour: 8, minute: 5, channelId: "reminders_high_v1" });
+  assert.deepEqual(sanitizeNotificationTrigger(weekly), { type: "weekly", weekday: 2, hour: 9, minute: 15, channelId: "reminders_high_v1" });
   assert.equal(sanitizeNotificationTrigger(date).type, "date");
 });
 
-test("installed Expo SDK 54 parser produces the native DATE and DAILY runtime objects", () => {
+test("installed Expo SDK 57 parser produces native DATE, DAILY and WEEKLY runtime objects", () => {
   const date = new Date(Date.now() + 60_000);
   assert.equal(
     JSON.stringify(installedExpoParseTrigger({ type: "date", date, channelId: "reminders_high_v1" })),
@@ -139,14 +155,19 @@ test("installed Expo SDK 54 parser produces the native DATE and DAILY runtime ob
     JSON.stringify(installedExpoParseTrigger({ type: "daily", hour: 8, minute: 5, channelId: "reminders_high_v1" })),
     JSON.stringify({ type: "daily", hour: 8, minute: 5, channelId: "reminders_high_v1" }),
   );
+  assert.equal(
+    JSON.stringify(installedExpoParseTrigger({ type: "weekly", weekday: 2, hour: 9, minute: 15, channelId: "reminders_high_v1" })),
+    JSON.stringify({ type: "weekly", weekday: 2, hour: 9, minute: 15, channelId: "reminders_high_v1" }),
+  );
 });
 
-test("SDK 54 validator rejects invalid native bridge inputs", () => {
+test("SDK 57 validator rejects invalid native bridge inputs", () => {
   const future = new Date(Date.now() + 60_000);
   assert.throws(() => validateExpoNotificationTrigger({ date: future }, "android"), /missing type/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "date", date: new Date("invalid"), channelId: "reminders_high_v1" }, "android"), /date must be valid/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "date", date: new Date(Date.now() - 1), channelId: "reminders_high_v1" }, "android"), /future/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "daily", hour: 8, minute: NaN, channelId: "reminders_high_v1" }, "android"), /minute/);
+  assert.throws(() => validateExpoNotificationTrigger({ type: "weekly", weekday: 0, hour: 8, minute: 0, channelId: "reminders_high_v1" }, "android"), /weekday/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "daily", hour: 8, minute: 0, channelId: undefined }, "android"), /undefined/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "date", date: future, channelId: "android-only" }, "ios"), /Android-only/);
   assert.throws(() => validateExpoNotificationTrigger({ type: "date", date: future, channelId: "x", repeats: false }, "android"), /unexpected/);

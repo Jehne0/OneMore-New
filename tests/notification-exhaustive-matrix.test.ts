@@ -15,7 +15,7 @@ import { isChallengeActiveOnDate } from "../lib/storage";
 
 process.env.TZ = "Europe/Prague";
 
-const TRIGGER_TYPES = { DAILY: "daily", DATE: "date" } as const;
+const TRIGGER_TYPES = { DAILY: "daily", DATE: "date", WEEKLY: "weekly" } as const;
 const CHANNEL_ID = "reminders_high_v1";
 
 function loadInstalledExpoParseTrigger(): (trigger: unknown) => Record<string, unknown> {
@@ -66,7 +66,10 @@ function containsInvalidValue(value: unknown): boolean {
 function assertExactTrigger(
   trigger: any,
   platform: "android" | "ios",
-  expected: { type: "daily"; hour: number; minute: number } | { type: "date"; date: Date },
+  expected:
+    | { type: "daily"; hour: number; minute: number }
+    | { type: "weekly"; weekday: number; hour: number; minute: number }
+    | { type: "date"; date: Date },
   context: string,
 ): void {
   assert.equal(containsInvalidValue(trigger), false, `${context}: undefined or NaN`);
@@ -74,17 +77,23 @@ function assertExactTrigger(
     Object.keys(trigger).sort(),
     (expected.type === "daily"
       ? ["type", "hour", "minute", ...(platform === "android" ? ["channelId"] : [])]
+      : expected.type === "weekly"
+        ? ["type", "weekday", "hour", "minute", ...(platform === "android" ? ["channelId"] : [])]
       : ["type", "date", ...(platform === "android" ? ["channelId"] : [])]).sort(),
     `${context}: unsupported trigger field`,
   );
   assert.equal(trigger.channelId, platform === "android" ? CHANNEL_ID : undefined, `${context}: channelId`);
   const native = parseExpoTrigger(trigger);
   assert.equal(native.type, expected.type, `${context}: native type`);
-  if (expected.type === "daily") {
+  if (expected.type === "daily" || expected.type === "weekly") {
     assert.equal(trigger.hour, expected.hour, `${context}: hour`);
     assert.equal(trigger.minute, expected.minute, `${context}: minute`);
     assert.equal(native.hour, expected.hour, `${context}: native hour`);
     assert.equal(native.minute, expected.minute, `${context}: native minute`);
+    if (expected.type === "weekly") {
+      assert.equal(trigger.weekday, expected.weekday, `${context}: weekday`);
+      assert.equal(native.weekday, expected.weekday, `${context}: native weekday`);
+    }
   } else {
     assert.ok(trigger.date instanceof Date, `${context}: DATE must carry Date`);
     assert.equal(trigger.date.getTime(), expected.date.getTime(), `${context}: date`);
@@ -112,6 +121,7 @@ function scheduleForMatrix(
     period,
     enabled: true,
     isNewChallenge,
+    activeWeekdays: period === "custom" ? [isoWeekday(target) - 1] : undefined,
     isActiveOnDate: period === "daily" ? () => true : (dateISO) => dateISO === targetISO,
   };
 }
@@ -145,7 +155,11 @@ test("exhaustive period × platform × new/existing × 7 days × 24 hours × 60 
                 assertExactTrigger(
                   triggers[0],
                   platform,
-                  period === "daily" ? { type: "daily", hour, minute } : { type: "date", date: target },
+                  period === "daily"
+                    ? { type: "daily", hour, minute }
+                    : period === "every2"
+                      ? { type: "date", date: target }
+                      : { type: "weekly", weekday: target.getDay() + 1, hour, minute },
                   context,
                 );
                 combinations += 1;
@@ -170,7 +184,7 @@ test("30-day plans have exact counts, bounds, local times and no duplicate DATE 
   const cases: { period: ReminderSchedule["period"]; schedule: ReminderSchedule; times: string[] }[] = [
     { period: "daily", schedule: { period: "daily", enabled: true, isActiveOnDate: () => true }, times: ["00:00", "00:01", "23:58", "23:59"] },
     { period: "every2", schedule: { period: "every2", enabled: true, isActiveOnDate: (iso) => Math.round((new Date(`${iso}T12:00:00`).getTime() - new Date(2028, 0, 3, 12).getTime()) / 86_400_000) % 2 === 0 }, times: ["08:00", "17:30"] },
-    { period: "custom", schedule: { period: "custom", enabled: true, isActiveOnDate: (iso) => [1, 3, 5].includes(new Date(`${iso}T12:00:00`).getDay()) }, times: ["08:00", "17:30"] },
+    { period: "custom", schedule: { period: "custom", enabled: true, activeWeekdays: [0, 2, 4], isActiveOnDate: (iso) => [1, 3, 5].includes(new Date(`${iso}T12:00:00`).getDay()) }, times: ["08:00", "17:30"] },
     { period: "flexibleWeekly", schedule: { period: "flexibleWeekly", enabled: true, reminderRows: [{ weekday: 1, hour: 8, minute: 0 }, { weekday: 5, hour: 17, minute: 30 }], isActiveOnDate: () => true }, times: [] },
   ];
 
@@ -186,6 +200,22 @@ test("30-day plans have exact counts, bounds, local times and no duplicate DATE 
         }, `${item.period}/${platform}/${index}`));
         continue;
       }
+      if (item.period === "custom" || item.period === "flexibleWeekly") {
+        const expected = item.period === "custom"
+          ? [
+              { weekday: 2, hour: 8, minute: 0 }, { weekday: 2, hour: 17, minute: 30 },
+              { weekday: 4, hour: 8, minute: 0 }, { weekday: 4, hour: 17, minute: 30 },
+              { weekday: 6, hour: 8, minute: 0 }, { weekday: 6, hour: 17, minute: 30 },
+            ]
+          : [{ weekday: 2, hour: 8, minute: 0 }, { weekday: 6, hour: 17, minute: 30 }];
+        assert.equal(triggers.length, expected.length, `${item.period}/${platform}: recurring count`);
+        triggers.forEach((trigger, index) => assertExactTrigger(trigger, platform, {
+          type: "weekly",
+          ...expected[index],
+        }, `${item.period}/${platform}/${index}`));
+        continue;
+      }
+
       const epochs = triggers.map((trigger: any) => trigger.date.getTime());
       assert.equal(new Set(epochs).size, epochs.length, `${item.period}/${platform}: duplicates`);
       assert.ok(triggers.every((trigger: any) => trigger.date > now), `${item.period}/${platform}: past`);
@@ -193,10 +223,7 @@ test("30-day plans have exact counts, bounds, local times and no duplicate DATE 
 
       let expectedCount = 0;
       for (let offset = 0; offset < 30; offset += 1) {
-        const date = new Date(2028, 0, 3 + offset, 12, 0, 0, 0);
         if (item.period === "every2" && offset % 2 === 0) expectedCount += 2;
-        if (item.period === "custom" && [1, 3, 5].includes(date.getDay())) expectedCount += 2;
-        if (item.period === "flexibleWeekly" && [1, 5].includes(isoWeekday(date))) expectedCount += 1;
       }
       assert.equal(triggers.length, expectedCount, `${item.period}/${platform}: exact count`);
       triggers.forEach((trigger: any, index) => assertExactTrigger(
@@ -204,6 +231,27 @@ test("30-day plans have exact counts, bounds, local times and no duplicate DATE 
       ));
     }
   }
+});
+
+test("iOS weekly planning is bounded while Android preserves every requested trigger", () => {
+  const weekdays = [0, 1, 2, 3, 4, 5, 6];
+  const times = Array.from({ length: 10 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
+  const schedule: ReminderSchedule = {
+    period: "custom",
+    enabled: true,
+    activeWeekdays: weekdays,
+    isActiveOnDate: () => true,
+  };
+  const ios = buildReminderTriggerInputs(schedule, times, "ios", TRIGGER_TYPES as any);
+  const android = buildReminderTriggerInputs(schedule, times, "android", TRIGGER_TYPES as any);
+  assert.equal(ios.length, 48);
+  assert.equal(android.length, 70);
+  ios.forEach((trigger, index) => assertExactTrigger(trigger, "ios", {
+    type: "weekly",
+    weekday: Math.floor(index / 10) + 2,
+    hour: index % 10,
+    minute: 0,
+  }, `ios-cap/${index}`));
 });
 
 test("past, current-minute and future-today rules are exact at all requested clock boundaries", () => {

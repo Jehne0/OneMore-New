@@ -7,7 +7,6 @@ import {
   createReminderOperationJournal,
   readReminderCleanupQueue,
   readReminderOperationJournals,
-  updateReminderOperationJournal,
   writeReminderOperationJournal,
   type NotificationJournalStore,
   type ReminderOperationPhase,
@@ -35,7 +34,7 @@ setRemindersPremiumEnabled(true);
 
 const PERIODS = ["daily", "every2", "custom", "flexibleWeekly"] as const;
 type Period = typeof PERIODS[number];
-const TRIGGER_TYPES = { DAILY: "daily", DATE: "date" } as const;
+const TRIGGER_TYPES = { DAILY: "daily", DATE: "date", WEEKLY: "weekly" } as const;
 
 function localISO(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -55,7 +54,11 @@ function periodConfiguration(period: Period, isNewChallenge: boolean): { schedul
         period,
         enabled: true,
         isNewChallenge,
-        reminderRows: [{ weekday: isoWeekday(tomorrow), hour: 8, minute: 0 }],
+        reminderRows: [
+          { weekday: isoWeekday(tomorrow), hour: 8, minute: 0 },
+          { weekday: isoWeekday(tomorrow) % 7 + 1, hour: 12, minute: 0 },
+          { weekday: (isoWeekday(tomorrow) + 1) % 7 + 1, hour: 18, minute: 0 },
+        ],
         isActiveOnDate: () => true,
       },
       times: [],
@@ -90,6 +93,7 @@ type HarnessOptions = {
   newChallengePersisted?: boolean;
   reminderEnabled?: boolean;
   challengeEnabled?: boolean;
+  otherActiveReminder?: boolean;
   oldIds?: string[];
   permission?: "granted" | "denied" | "undetermined";
   failScheduleAt?: number;
@@ -122,7 +126,14 @@ function workflowHarness(period: Period, options: HarnessOptions = {}) {
   };
   const oldIds = options.oldIds ?? [];
   let state: any = {
-    challenges: options.newChallenge && !options.newChallengePersisted ? [] : [challenge],
+    challenges: options.newChallenge && !options.newChallengePersisted
+      ? []
+      : [
+          challenge,
+          ...(options.otherActiveReminder
+            ? [{ id: "other-active", text: "Other", enabled: true, reminderEnabled: true, reminderTimes: ["09:00"] }]
+            : []),
+        ],
     history: [], challengeStats: {},
     reminderNotifIds: oldIds.length ? { [challengeId]: [...oldIds] } : {},
   };
@@ -294,6 +305,7 @@ test("an inactive challenge keeps its reminder configuration without scheduling 
         platform,
         challengeEnabled: false,
         reminderEnabled: true,
+        otherActiveReminder: true,
         oldIds: [oldId],
       });
       await run.save();

@@ -85,7 +85,7 @@ function productionRuntime(options: {
   let sequence = 0;
   const Notifications = {
     ...notifications.Notifications,
-    SchedulableTriggerInputTypes: { DAILY: "daily", DATE: "date" },
+    SchedulableTriggerInputTypes: { DAILY: "daily", DATE: "date", WEEKLY: "weekly" },
     AndroidNotificationPriority: { HIGH: "high" },
     scheduleNotificationAsync: async (request: any) => {
       const id = `new-${++sequence}`;

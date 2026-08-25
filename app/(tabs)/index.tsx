@@ -86,7 +86,6 @@ import {
   isChallengeEasyMode,
   loadState,
   purgeChallenge,
-  renameChallenge,
   saveState,
   subscribeState,
   updateStatsOnCompleted,
@@ -111,7 +110,7 @@ import { MAX_MEDAL_COUNT_PER_CHALLENGE } from "../../lib/medalCollectionFromHist
 import { medalDisplaySummaryFromHistory } from "../../lib/statisticsMedalSummary";
 import { updateAllOneMoreWidgets } from "../../widgets/widgetService";
 import { useCloudAccess } from "../../lib/cloudAccessGate";
-import { acquireNotificationSaveGuard, createEditorConfirmationController, createEditorDraft, runNotificationEditorSave } from "../../lib/notificationSaveFlow";
+import { acquireNotificationSaveGuard, createEditorConfirmationController, runNotificationEditorSave } from "../../lib/notificationSaveFlow";
 import { createQuickChallenge } from "../../lib/challengeIds";
 import { formatNotificationFailureDetails } from "../../lib/notificationRuntime";
 import {
@@ -1938,6 +1937,7 @@ notificationCount: "Počet notifikací",
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [manageOpen, setManageOpen] = useState(false);
+  const pendingManageDestination = useRef<{ type: "history"; challengeId: string } | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [medalsOverviewOpen, setMedalsOverviewOpen] = useState(false);
   const [addModalText, setAddModalText] = useState("");
@@ -2006,7 +2006,6 @@ async function openSharedNotificationSettings() {
     buttons: { text: string; style?: "default" | "cancel" | "destructive"; onPress?: () => void | Promise<void> }[];
   } | null>(null);
   const manageSaveLock = useRef(false);
-  const manageRenameDraft = useRef(createEditorDraft());
   const manageEditorSession = useRef(0);
   const manageConfirmation = useRef(createEditorConfirmationController());
   const manageScrollRef = useRef<ScrollView>(null);
@@ -2097,7 +2096,6 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         period === FLEXIBLE_WEEKLY_PERIOD ? 7 : Math.min(10, target),
       ));
       const currentName = String((c as any).text ?? "");
-      manageRenameDraft.current.set(currentName);
       setManageRename(currentName);
       setManageSaveConfirmation("");
       setManageDialog(null);
@@ -2226,27 +2224,12 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
     }
   }, [manageCustomDays, manageFlexibleStartDay, managePeriodAnchor, manageRemEnabled, manageRemTimes, manageReminderRows.length, manageTarget, todayISO]);
 
-  const enableEasyMode = useCallback(async () => {
-    if (!manageId) return;
-    const id = String(manageId);
-    setManageSaving(true);
-    try {
-      await persist((latest) => ({
-        ...(latest as any),
-        easyModeChallengeIds: Array.from(
-          new Set([...(latest.easyModeChallengeIds ?? []).map(String), id])
-        ),
-        challenges: (latest.challenges ?? []).map((c: any) =>
-          String(c.id) === id ? { ...c, easyMode: true } : c
-        ),
-      }) as any);
-      setManageEasyMode(true);
-    } catch {
-      showManageDialog(TXT.manageTitle, TXT.notificationsFailed);
-    } finally {
-      setManageSaving(false);
-    }
-  }, [manageId, persist, showManageDialog, TXT.manageTitle, TXT.notificationsFailed]);
+  const enableEasyMode = useCallback(() => {
+    // Easy mode joins the rest of the editor draft and becomes durable only in
+    // the single final save. Once persisted, applyPersonalChallengeEditorDraft
+    // still keeps it irreversible.
+    setManageEasyMode(true);
+  }, []);
 
   const confirmEnableEasyMode = useCallback(() => {
     if (manageEasyMode) return;
@@ -2259,32 +2242,6 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
       },
     ]);
   }, [enableEasyMode, manageEasyMode, showManageDialog, TXT.easyModeCancel, TXT.easyModeConfirm, TXT.easyModeConfirmMessage, TXT.easyModeConfirmTitle]);
-
-  const saveRenameImmediate = useCallback(async () => {
-    if (!manageId) return;
-    const v = manageRenameDraft.current.readTrimmed();
-    if (!v) return;
-    const next = await renameChallenge(String(manageId), v);
-    await saveState(next);
-  }, [manageId]);
-
-  const renameTimer = useRef<any>(null);
-  const renameInFlight = useRef<Promise<void>>(Promise.resolve());
-  useEffect(() => {
-    if (!manageOpen || manageSaving) return;
-    if (!manageId) return;
-    if ((managed?.text ?? "") === manageRename) return;
-
-    if (renameTimer.current) clearTimeout(renameTimer.current);
-    renameTimer.current = setTimeout(() => {
-      renameTimer.current = null;
-      renameInFlight.current = saveRenameImmediate().catch(() => undefined);
-    }, 600);
-
-    return () => {
-      if (renameTimer.current) clearTimeout(renameTimer.current);
-    };
-  }, [manageOpen, manageSaving, manageId, managed?.text, manageRename, saveRenameImmediate]);
 
  const applyManageReminders = useCallback(async () => {
   if (!manageId || !acquireNotificationSaveGuard(manageSaveLock)) return;
@@ -2302,11 +2259,11 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
 
   let times = Array.isArray(manageRemTimes)
     ? manageRemTimes
-        .filter((t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t))
+        .filter((t) => typeof t === "string" && /^([01]\d|2[0-3]):([0-5]\d)$/.test(t))
         .slice(0, wantedCount)
     : [];
 
-  if (wantsEnabled && managePeriod !== FLEXIBLE_WEEKLY_PERIOD && times.length === 0) {
+  if (wantsEnabled && manageEnabled && managePeriod !== FLEXIBLE_WEEKLY_PERIOD && times.length === 0) {
     times = [nowHM()];
   }
   if (managePeriod === FLEXIBLE_WEEKLY_PERIOD) {
@@ -2314,19 +2271,19 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   }
 
   try {
-    const name = manageRenameDraft.current.readTrimmed();
+    const name = manageRename.trim();
     if (!name) {
       showManageDialog(TXT.manageTitle, TXT.namePlaceholder);
       return;
     }
-    if (!isFlexibleReminderRowSelectionValid(managePeriod, wantsEnabled, reminderRows)) {
+    if (!isFlexibleReminderRowSelectionValid(managePeriod, wantsEnabled && manageEnabled, reminderRows)) {
       showManageDialog(
         t.flexibleWeekly.notificationDayRequiredTitle,
         t.flexibleWeekly.notificationDayRequired,
       );
       return;
     }
-    if (!premium && wantsEnabled) {
+    if (!premium && wantsEnabled && manageEnabled) {
       const activeId = getFreeActiveReminderChallengeId(appState as any);
       const anySharedActive = await hasAnyActiveSharedNotification();
       if ((activeId && String(activeId) !== id) || anySharedActive) {
@@ -2334,10 +2291,6 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
         return;
       }
     }
-
-    if (renameTimer.current) clearTimeout(renameTimer.current);
-    renameTimer.current = null;
-    await renameInFlight.current.catch(() => undefined);
 
     const draft: PersonalChallengeEditorDraft = {
       text: name,
@@ -2443,6 +2396,7 @@ const [sharedTimePickerValue, setSharedTimePickerValue] = useState(new Date());
   }
 }, [
   manageId,
+  manageRename,
   manageTarget,
   manageRemTimes,
   manageRemCount,
@@ -3882,7 +3836,20 @@ useEffect(() => {
    </KeyboardAvoidingView>
  </Modal>
 
-      <Modal visible={manageOpen} transparent animationType="fade" onRequestClose={manageSaving ? () => {} : closeManage}>
+      <Modal
+        visible={manageOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={manageSaving ? () => {} : closeManage}
+        onDismiss={() => {
+          const pending = pendingManageDestination.current;
+          pendingManageDestination.current = null;
+          if (pending?.type === "history") {
+            setSelectedId(pending.challengeId);
+            setHistoryOpen(true);
+          }
+        }}
+      >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior="height"
@@ -3910,7 +3877,6 @@ useEffect(() => {
               <TextInput
                 value={manageRename}
                 onChangeText={(value) => {
-                  manageRenameDraft.current.set(value);
                   setManageRename(value);
                 }}
                 editable={!manageSaving}
@@ -4298,8 +4264,14 @@ useEffect(() => {
                       return;
                     }
 
+                    const challengeId = String(manageId);
+                    if (Platform.OS === "ios") {
+                      pendingManageDestination.current = { type: "history", challengeId };
+                      closeManage();
+                      return;
+                    }
                     closeManage();
-                    setSelectedId(String(manageId));
+                    setSelectedId(challengeId);
                     setHistoryOpen(true);
                   }}
                   style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.88 }]}

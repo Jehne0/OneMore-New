@@ -13,7 +13,7 @@ function styleBody(name: string): string {
 
 function quickCreateMarkup(): string {
   const start = home.indexOf("visible={addModalOpen}");
-  const end = home.indexOf("<Modal visible={manageOpen}", start);
+  const end = home.indexOf("visible={manageOpen}", start);
   assert.ok(start >= 0 && end > start, "quick-create modal markup must be isolated from manager");
   return home.slice(start, end);
 }
@@ -78,7 +78,7 @@ test("keyboard-open quick-create remains compact, scrollable for large text and 
 });
 
 test("the large challenge manager keeps its independent full-height scroll layout", () => {
-  const managerStart = home.indexOf("<Modal visible={manageOpen}");
+  const managerStart = home.lastIndexOf("<Modal", home.indexOf("visible={manageOpen}"));
   const manager = home.slice(managerStart, home.indexOf("</Modal>", managerStart));
   assert.match(manager, /styles\.keyboardBackdrop/);
   assert.match(manager, /styles\.keyboardSheet/);
