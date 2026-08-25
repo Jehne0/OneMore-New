@@ -301,3 +301,19 @@ test("both personal editors avoid nested iOS presentations and eager native remi
   assert.doesNotMatch(challenges.slice(renameSaveStart, renameSaveEnd), /Alert\.alert\(/);
   assert.match(challenges, /pendingActionDestination\.current = \{ type: "delete", id \}/);
 });
+
+test("shared reminder actions use one guarded native transaction without stacked iOS modals", () => {
+  const home = readFileSync(join(process.cwd(), "app/(tabs)/index.tsx"), "utf8");
+  assert.match(home, /pendingSharedMenuAction\.current = action/);
+  assert.match(home, /onDismiss=\{handleSharedMenuDismiss\}/);
+  assert.doesNotMatch(home, /setTimeout\(\(\) => \{\s*openSharedNotificationSettings/);
+  assert.equal((home.match(/value=\{sharedTimePickerValue\}/g) ?? []).length, 1);
+  assert.match(home, /sharedNotificationSaveLock\.current/);
+  assert.match(home, /saveSharedReminderWorkflow\(/);
+  assert.doesNotMatch(home, /clearSharedRemindersForChallenge|setSharedRemindersForChallenge/);
+
+  const saveStart = home.indexOf("async function saveSharedNotificationConfiguration");
+  const saveEnd = home.indexOf("const openManage", saveStart);
+  assert.ok(saveStart >= 0 && saveEnd > saveStart);
+  assert.doesNotMatch(home.slice(saveStart, saveEnd), /Alert\.alert\(/);
+});

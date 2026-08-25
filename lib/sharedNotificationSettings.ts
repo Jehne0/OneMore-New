@@ -8,6 +8,8 @@ export type SharedNotificationSetting = {
 };
 
 const KEY = "onemore_shared_notification_settings";
+const MAX_SHARED_NOTIFICATION_TIMES = 10;
+const VALID_TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export const DEFAULT_SHARED_NOTIFICATION_SETTING: SharedNotificationSetting = {
   enabled: false,
@@ -16,13 +18,40 @@ export const DEFAULT_SHARED_NOTIFICATION_SETTING: SharedNotificationSetting = {
   friendCompletedSharedChallenge: true,
 };
 
+export function normalizeSharedNotificationSetting(value: unknown): SharedNotificationSetting {
+  const record = value && typeof value === "object"
+    ? value as Partial<SharedNotificationSetting>
+    : {};
+  const rawCount = Number(record.count);
+  const count = Number.isFinite(rawCount)
+    ? Math.min(MAX_SHARED_NOTIFICATION_TIMES, Math.max(1, Math.floor(rawCount)))
+    : 1;
+  const times = Array.isArray(record.times)
+    ? Array.from(new Set(record.times
+        .map((time) => String(time ?? "").trim())
+        .filter((time) => VALID_TIME.test(time))))
+        .slice(0, count)
+    : [];
+  return {
+    enabled: record.enabled === true,
+    count,
+    times,
+    friendCompletedSharedChallenge: record.friendCompletedSharedChallenge !== false,
+  };
+}
+
 export async function loadSharedNotificationSettings(): Promise<
   Record<string, SharedNotificationSetting>
 > {
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return {};
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).map(([id, setting]) => [
+      String(id),
+      normalizeSharedNotificationSetting(setting),
+    ]));
   } catch {
     return {};
   }
@@ -36,10 +65,7 @@ export async function saveSharedNotificationSetting(
 
   const next = {
     ...all,
-    [sharedChallengeId]: {
-      ...DEFAULT_SHARED_NOTIFICATION_SETTING,
-      ...setting,
-    },
+    [sharedChallengeId]: normalizeSharedNotificationSetting(setting),
   };
 
   await AsyncStorage.setItem(KEY, JSON.stringify(next));
@@ -50,10 +76,7 @@ export async function loadSharedNotificationSetting(
 ): Promise<SharedNotificationSetting> {
   const all = await loadSharedNotificationSettings();
 
-  return {
-    ...DEFAULT_SHARED_NOTIFICATION_SETTING,
-    ...(all[sharedChallengeId] ?? {}),
-  };
+  return normalizeSharedNotificationSetting(all[sharedChallengeId]);
 }
 export async function hasOtherActiveSharedNotification(
   currentSharedChallengeId: string

@@ -3,7 +3,8 @@
   "main": "index.ts",
   "version": "1.0.7",
   "scripts": {
-    "test": "tsx --test tests/android-compatibility.test.ts tests/challenge-editor-regression.test.ts tests/completion-outbox.test.ts tests/flexible-weekly-reminders.test.ts tests/flexible-weekly.test.ts tests/ios-startup-regression.test.ts tests/ios-widget-plugin.test.ts tests/ios-widget.test.ts tests/localization.test.ts tests/notification-exhaustive-matrix.test.ts tests/notification-runtime.test.ts tests/notification-transaction.test.ts tests/notification-workflow-exhaustive.test.ts tests/personal-challenge-pause-history.test.ts tests/premium-cold-start.test.ts tests/premium-offering-flow.test.ts tests/premium-offering-selection.test.ts tests/profile-routes.test.ts tests/quick-create-modal.test.ts tests/safe-modal-layout.test.ts tests/shared-challenge-permissions.test.ts tests/shared-widget-regression.test.ts tests/update-startup.test.ts tests/username-cloud-gate.test.ts tests/version-consistency.test.ts tests/whats-new.test.ts tests/widget.test.ts tests/widget-configuration.test.ts tests/widget-entry.test.ts tests/widget-premium.test.ts tests/widget-production.test.ts tests/widget-provider-metadata.test.ts tests/widget-row-layout.test.ts tests/widget-selection-regression.test.ts",
+    "postinstall": "node scripts/patch-expo-notifications-ios.cjs",
+    "test": "tsx --test tests/android-compatibility.test.ts tests/challenge-editor-regression.test.ts tests/completion-outbox.test.ts tests/expo-notifications-native-safety.test.ts tests/flexible-weekly-reminders.test.ts tests/flexible-weekly.test.ts tests/ios-startup-regression.test.ts tests/ios-widget-plugin.test.ts tests/ios-widget.test.ts tests/localization.test.ts tests/notification-exhaustive-matrix.test.ts tests/notification-runtime.test.ts tests/notification-transaction.test.ts tests/notification-workflow-exhaustive.test.ts tests/personal-challenge-pause-history.test.ts tests/premium-cold-start.test.ts tests/premium-offering-flow.test.ts tests/premium-offering-selection.test.ts tests/profile-routes.test.ts tests/quick-create-modal.test.ts tests/safe-modal-layout.test.ts tests/shared-challenge-permissions.test.ts tests/shared-notification-settings.test.ts tests/shared-widget-regression.test.ts tests/update-startup.test.ts tests/username-cloud-gate.test.ts tests/version-consistency.test.ts tests/whats-new.test.ts tests/widget.test.ts tests/widget-configuration.test.ts tests/widget-entry.test.ts tests/widget-premium.test.ts tests/widget-production.test.ts tests/widget-provider-metadata.test.ts tests/widget-row-layout.test.ts tests/widget-selection-regression.test.ts",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
@@ -34,7 +35,7 @@
     "expo-image": "~57.0.3",
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.7",
-    "expo-notifications": "~57.0.13",
+    "expo-notifications": "57.0.13",
     "expo-router": "~57.0.15",
     "expo-splash-screen": "~57.0.7",
     "expo-status-bar": "~57.0.1",

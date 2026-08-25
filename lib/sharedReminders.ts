@@ -6,7 +6,13 @@ import {
 import { getCachedState, loadState } from "./storage";
 import { isSharedChallengeActiveOnDate, type SharedChallenge } from "./sharedChallenges";
 import { loadNotificationSettings } from "./notificationSettings";
-import { loadSharedNotificationSettings } from "./sharedNotificationSettings";
+import {
+  loadSharedNotificationSetting,
+  loadSharedNotificationSettings,
+  normalizeSharedNotificationSetting,
+  saveSharedNotificationSetting,
+  type SharedNotificationSetting,
+} from "./sharedNotificationSettings";
 
 const SHARED_PREFIX = "shared_";
 
@@ -42,6 +48,60 @@ export async function clearSharedRemindersForChallenge(
   const id = sharedReminderId(sharedChallengeId);
 
   await clearDailyRemindersForChallenge(id);
+}
+
+export type SharedReminderWorkflowRuntime = {
+  loadSetting: typeof loadSharedNotificationSetting;
+  persistSetting: typeof saveSharedNotificationSetting;
+  setReminders: typeof setSharedRemindersForChallenge;
+  clearReminders: typeof clearSharedRemindersForChallenge;
+};
+
+/**
+ * Saves the shared reminder preference before touching native iOS scheduling.
+ * If native scheduling fails, the previous preference is restored. Only one
+ * native reminder mutation is used, so rapid editor actions cannot create a
+ * clear-then-schedule gap.
+ */
+export async function saveSharedReminderWorkflow(options: {
+  challenge: SharedChallenge;
+  setting: SharedNotificationSetting;
+  previousSetting?: SharedNotificationSetting;
+  runtime?: SharedReminderWorkflowRuntime;
+}): Promise<SharedNotificationSetting> {
+  const challengeId = String(options.challenge?.id ?? "").trim();
+  if (!challengeId) throw new Error("SHARED_NOTIFICATION_CHALLENGE_REQUIRED");
+  const runtime = options.runtime ?? {
+    loadSetting: loadSharedNotificationSetting,
+    persistSetting: saveSharedNotificationSetting,
+    setReminders: setSharedRemindersForChallenge,
+    clearReminders: clearSharedRemindersForChallenge,
+  };
+  const next = normalizeSharedNotificationSetting(options.setting);
+  if (next.enabled && next.times.length === 0) {
+    throw new Error("NOTIFICATIONS_TIME_REQUIRED");
+  }
+  const previous = normalizeSharedNotificationSetting(
+    options.previousSetting ?? await runtime.loadSetting(challengeId),
+  );
+
+  await runtime.persistSetting(challengeId, next);
+  try {
+    if (next.enabled) {
+      await runtime.setReminders(
+        challengeId,
+        options.challenge.title ?? "Shared challenge",
+        next.times,
+        options.challenge,
+      );
+    } else {
+      await runtime.clearReminders(challengeId);
+    }
+  } catch (error) {
+    await runtime.persistSetting(challengeId, previous).catch(() => undefined);
+    throw error;
+  }
+  return next;
 }
 
 export async function refreshScheduledSharedReminders(challenges: SharedChallenge[]): Promise<void> {

@@ -18,12 +18,13 @@ test("SDK 57 uses its supported Hermes-only runtime on both platforms", () => {
   assert.equal(config.expo.android.edgeToEdgeEnabled, undefined);
 });
 
-test("startup no longer patches React Native, Expo Modules Core, or JSC", () => {
+test("startup never patches React Native, Expo Modules Core, or JSC", () => {
   const config = JSON.parse(read("app.json"));
   const packageJson = JSON.parse(read("package.json"));
   const plugins = config.expo.plugins as unknown[];
 
-  assert.equal(packageJson.scripts.postinstall, undefined);
+  assert.equal(packageJson.scripts.postinstall, "node scripts/patch-expo-notifications-ios.cjs");
+  assert.doesNotMatch(packageJson.scripts.postinstall, /react-native|expo-modules-core|javascriptcore|\bjsc\b/i);
   assert.ok(!plugins.includes("./plugins/withOneMoreIosJsc"));
   assert.ok(!plugins.includes("./plugins/withOneMoreIosReactNativeSource"));
   assert.equal(packageJson.dependencies?.["@react-native-community/javascriptcore"], undefined);

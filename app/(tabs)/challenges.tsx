@@ -401,6 +401,9 @@ export default function ChallengesScreen() {
 
   const [state, setState] = useState<AppState | null>(null);
   const [text, setText] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
+  const [addError, setAddError] = useState("");
+  const addSaveLock = useRef(false);
 
   // rename modal state
   const [renameOpen, setRenameOpen] = useState(false);
@@ -464,11 +467,11 @@ export default function ChallengesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
+      void refresh().catch(() => undefined);
       isPremiumActive().then((p) => {
         setPremium(p);
         setRemindersPremiumEnabled(p);
-      });
+      }).catch(() => undefined);
     }, [refresh])
   );
 
@@ -615,7 +618,7 @@ export default function ChallengesScreen() {
       return true;
     } finally {
       challengeSaveLocks.current.delete(id);
-      await refresh();
+      await refresh().catch(() => undefined);
     }
   }
 
@@ -631,30 +634,40 @@ export default function ChallengesScreen() {
   }
 
   async function addChallenge(): Promise<void> {
+    if (addSaveLock.current) return;
     const trimmed = text.trim();
     if (!trimmed) return;
-
-    // ✅ limit 2 ve FREE – kontrola proti real storage (ne jen UI)
-    // Premium limit NEPLATÍ
-    if (!premium) {
-      const latest = await loadState();
-      const n = countFreeChallenges(latest);
-      if (n >= FREE_MAX) {
-        Alert.alert(tx.freeLimitTitle, formatChallengeText(tx.freeLimit, { count: FREE_MAX }));
-        return;
+    addSaveLock.current = true;
+    setAddSaving(true);
+    setAddError("");
+    try {
+      // ✅ limit 2 ve FREE – kontrola proti real storage (ne jen UI)
+      // Premium limit NEPLATÍ
+      if (!premium) {
+        const latest = await loadState();
+        const n = countFreeChallenges(latest);
+        if (n >= FREE_MAX) {
+          setAddError(formatChallengeText(tx.freeLimit, { count: FREE_MAX }));
+          return;
+        }
       }
+
+      Keyboard.dismiss();
+
+      const newId = createChallengeId();
+      await persist((latest2) => {
+        return {
+          ...latest2,
+          challenges: [{ id: newId, text: trimmed, enabled: true, createdDate: getTodayISO() }, ...(latest2.challenges ?? [])],
+        };
+      });
+      setText("");
+    } catch (error: any) {
+      setAddError(error?.message ?? tx.notificationsFailed);
+    } finally {
+      addSaveLock.current = false;
+      setAddSaving(false);
     }
-
-    Keyboard.dismiss();
-    setText("");
-
-    const newId = createChallengeId();
-    await persist((latest2) => {
-      return {
-        ...latest2,
-        challenges: [{ id: newId, text: trimmed, enabled: true, createdDate: getTodayISO() }, ...(latest2.challenges ?? [])],
-      };
-    });
   }
 
   function openReminderConfig(id: string) {
@@ -970,7 +983,7 @@ export default function ChallengesScreen() {
   }
 
   const atLimit = !premium && (state ? countFreeChallenges(state) >= FREE_MAX : false);
-  const canAdd = canAddText && !atLimit;
+  const canAdd = canAddText && !atLimit && !addSaving;
 
   const freeActiveReminderId = state && !premium ? getFreeActiveReminderChallengeId(state) : null;
 
@@ -1392,7 +1405,7 @@ export default function ChallengesScreen() {
                           </Pressable>
                         )}
                         {remError.canOpenSettings && (
-                          <Pressable style={styles.modalBtn} onPress={() => void Linking.openSettings()}>
+                          <Pressable style={styles.modalBtn} onPress={() => void Linking.openSettings().catch(() => undefined)}>
                             <Text style={styles.modalBtnText}>
                               {lang === "cs" ? "Otevřít nastavení" : lang === "de" ? "Einstellungen öffnen" : lang === "pl" ? "Otwórz ustawienia" : "Open settings"}
                             </Text>
@@ -1433,12 +1446,15 @@ export default function ChallengesScreen() {
         <View style={styles.addRow}>
           <TextInput
             value={text}
-            onChangeText={setText}
+            onChangeText={(value) => {
+              setText(value);
+              setAddError("");
+            }}
             placeholder={atLimit ? formatChallengeText(tx.freeMaxPlaceholder, { count: FREE_MAX }) : tx.newChallenge}
             placeholderTextColor={UI.sub}
             style={styles.input}
             returnKeyType="done"
-            editable={!atLimit}
+            editable={!atLimit && !addSaving}
             onSubmitEditing={() => void addChallenge()}
           />
 
@@ -1451,9 +1467,10 @@ export default function ChallengesScreen() {
               pressed && canAdd && styles.addButtonPressed,
             ]}
           >
-            <Text style={styles.addButtonText}>{atLimit ? formatChallengeText(tx.limit, { count: FREE_MAX }) : tx.add}</Text>
+            <Text style={styles.addButtonText}>{addSaving ? "…" : atLimit ? formatChallengeText(tx.limit, { count: FREE_MAX }) : tx.add}</Text>
           </Pressable>
         </View>
+        {!!addError && <Text style={[styles.modalHint, { color: "#D64545" }]}>{addError}</Text>}
 
         {/* LIST (drag & drop) */}
         <View style={styles.list}>
@@ -1467,7 +1484,9 @@ export default function ChallengesScreen() {
             contentContainerStyle={{ paddingBottom: 24 }}
             onDragEnd={({ data }) => {
               // ✅ dlouhý stisk = přesun pořadí (bez akcí)
-              void persist((latest) => ({ ...latest, challenges: data as any }));
+              void persist((latest) => ({ ...latest, challenges: data as any })).catch((error: any) => {
+                Alert.alert(tx.notifications, error?.message ?? tx.notificationsFailed);
+              });
             }}
             ListFooterComponent={() => (
               <View style={{ paddingBottom: 24 }}>
@@ -1543,6 +1562,8 @@ export default function ChallengesScreen() {
                                         !(String(x.id) === String(a.id) && String(x.deletedAtISO) === String(a.deletedAtISO))
                                     ),
                                   };
+                                }).catch((error: any) => {
+                                  Alert.alert(tx.notifications, error?.message ?? tx.notificationsFailed);
                                 });
                               }}
                             >
@@ -1573,6 +1594,8 @@ export default function ChallengesScreen() {
                                                 !(String(x.id) === String(a.id) && String(x.deletedAtISO) === String(a.deletedAtISO))
                                             ),
                                           };
+                                        }).catch((error: any) => {
+                                          Alert.alert(tx.notifications, error?.message ?? tx.notificationsFailed);
                                         });
                                       },
                                     },

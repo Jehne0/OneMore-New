@@ -54,6 +54,8 @@ test("quick-create persists a stable production challenge before registering it 
   assert.match(createFlow, /await persist\([\s\S]*?challenges: \[newChallenge,/);
   assert.ok(createFlow.indexOf("await persist") < createFlow.indexOf("newlyCreatedChallengeIds.current.add"));
   assert.match(createFlow, /newlyCreatedChallengeIds\.current\.add\(newChallenge\.id\)/);
+  assert.doesNotMatch(createFlow, /Alert\.alert\(/);
+  assert.match(createFlow, /setAddError\(/);
 });
 
 test("real keyboard show and hide events alone enable and reset quick-create avoidance", () => {
