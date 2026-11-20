@@ -1,9 +1,7 @@
 name: Legacy iOS crash symbolication
 
 on:
-  push:
-    branches:
-      - codex/legacy-ios-crash-symbolication
+  workflow_dispatch:
 
 permissions:
   contents: read
