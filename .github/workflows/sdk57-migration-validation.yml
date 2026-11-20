@@ -1,9 +1,7 @@
 name: SDK 57 Hermes migration validation
 
 on:
-  push:
-    branches:
-      - codex/sdk57-hermes-validation
+  workflow_dispatch:
 
 permissions:
   contents: read
